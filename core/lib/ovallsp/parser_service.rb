@@ -247,6 +247,7 @@ module Ovallsp
       def initialize(lines)
         super()
         @lines = lines
+        @pattern_depth = 0
         @declarations = []
         @ancestor_facts = []
         @alias_facts = []
@@ -1199,8 +1200,54 @@ module Ovallsp
       # read: no inlay hint, and `Read` where documentHighlight should
       # say `Write`.
       def visit_local_variable_target_node(node)
-        record_local_variable(node.name, node.location, write: true) unless node.name.start_with?("_")
+        record_local_variable(node.name, node.location, write: true) unless declined_underscore?(node.name)
         super
+      end
+
+      # **Only inside a pattern.** A pattern may bind one name twice when it
+      # begins with an underscore, and each of those two ranges really is
+      # the name -- so nothing asked *at a range* can see that it is the
+      # pair that would be illegal, and `Rename::Planner` builds one
+      # `newText` per range. Ruby:
+      #
+      #   $ ruby -e '
+      #   ["_a, _a = 1, 2; [_a]",
+      #    "case [1, 2]; in [_a, _a] then :ok; end",
+      #    "case [1, 2]; in [zz, zz] then :ok; end"].each do |src|
+      #     begin
+      #       eval(src)
+      #       puts "legal"
+      #     rescue SyntaxError
+      #       puts "SyntaxError"
+      #     rescue StandardError
+      #       puts "legal"
+      #     end
+      #   end
+      #   '
+      #   # => legal
+      #   # => legal
+      #   # => SyntaxError
+      #   # ruby 3.4.10
+      #
+      # A multiple assignment, a `for` variable and a `rescue => _e` cannot
+      # produce that pair, and 0.2.17 declined all of them alike -- which
+      # cost documentHighlight and Find References an occurrence apiece for
+      # a rule that does not reach them. `024.274`.
+      def declined_underscore?(name)
+        @pattern_depth.positive? && name.to_s.start_with?("_")
+      end
+
+      # The whole `in` clause rather than its pattern alone: every
+      # underscore binding in here was declined before, so covering the body
+      # as well takes nothing away, and reaching only the pattern means
+      # knowing every child a guard can hide behind.
+      %i[in_node match_required_node match_predicate_node].each do |suffix|
+        define_method(:"visit_#{suffix}") do |node|
+          @pattern_depth += 1
+          super(node)
+        ensure
+          @pattern_depth -= 1
+        end
       end
 
       # **A regexp named capture binds a local, and Prism points at the

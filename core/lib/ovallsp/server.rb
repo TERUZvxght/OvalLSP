@@ -2743,6 +2743,21 @@ module Ovallsp
       summary = @file_summaries[uri]
       return nil unless document && summary
 
+      # **The index the planner reads, warmed before it is read.**
+      # `#references_result` and `#rename_result` both do this and this
+      # did not, so with the index cold -- its state until the user has
+      # run Find All References or an actual rename, and again after
+      # every edit that bumps the generation -- `#locations_for` saw
+      # declarations only. A local variable has none, so the editor
+      # refused the rename box at a position where `textDocument/rename`
+      # would have worked. `024.245`.
+      #
+      # Not the trade `documentHighlight` makes. That is asked on every
+      # cursor move and the rebuild is O(workspace), which is why it
+      # answers from the open file's own summary instead; this is asked
+      # once, when the user presses F2.
+      ensure_reference_index_current
+
       symbol_id, range = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
       return nil unless symbol_id
 
@@ -2945,7 +2960,19 @@ module Ovallsp
       receiver_type = receiver_type_before_dot(document, position)
       return [] unless receiver_type
 
-      @query_service.members_of(receiver_type, prefix: prefix).map do |member|
+      # **The one enumeration with a receiver in front of it.** Ruby
+      # refuses a private method called that way, and RBS says which
+      # they are -- `fork`, `exec`, `abort`, `exit!`, `eval`,
+      # `initialize` and `puts` are all `:private` on `Object`.
+      # Offering them put 69 of 121 labels on a plain Ruby class that
+      # raise when picked (`024.99`).
+      #
+      # Asked for here rather than defaulted on in `#members_of`:
+      # every other caller is a bare prefix, which is the one place
+      # Ruby *does* let those be called, and making the filter the
+      # default dropped `puts` from the top level of every file.
+      @query_service.members_of(receiver_type, prefix: prefix,
+                                context: { explicit_receiver: true }).map do |member|
         item = { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s,
                  sortText: Semantic::PrefixCompletion.sort_text(
                    member.conditional ? MEMBER_ON_ONE_BRANCH : MEMBER_ON_EVERY_BRANCH, member.name

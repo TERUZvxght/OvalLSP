@@ -554,12 +554,15 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
         .to eq([["pair", 0, 6], ["pair", 1, 7]])
     end
 
-    # The reach of that rule, pinned rather than left to be inferred from
-    # the sentence above: it is written about targets, so it also
-    # declines the underscore-prefixed ones no pattern produced, and
-    # records the plain write beside them.
-    it "declines an underscore-prefixed multiple-assignment target" do
-      expect(positions("def m\n  _a, b = 1, 2\n  _a = 3\nend\n")).to eq([["_a", 2, 2], ["b", 1, 6]])
+    # **The reach of that rule is the pattern, and it used to be every
+    # target.** Ruby forbids the repeat inside a pattern and nowhere
+    # else, so a multiple assignment, a `for` variable and a
+    # `rescue => _e` cannot produce the illegal pair -- and declining
+    # them cost documentHighlight and Find References an occurrence
+    # apiece for a rule that does not reach them. `024.274`.
+    it "records an underscore-prefixed multiple-assignment target" do
+      expect(positions("def m\n  _a, b = 1, 2\n  _a = 3\nend\n"))
+        .to eq([["_a", 1, 2], ["_a", 2, 2], ["b", 1, 6]])
     end
 
     it "still records a target a pattern may not repeat" do

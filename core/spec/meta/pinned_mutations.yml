@@ -608,14 +608,14 @@
   example: "separates a name that only the block binds from a same-named local written after it"
 - why: "Recording LocalVariableTargetNode -- `a, b = 1, 2`, a `for` variable and `rescue => e` are bindings Rename has to rewrite with the rest."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        record_local_variable(node.name, node.location, write: true) unless node.name.start_with?(\"_\")\n"
+  from: "        record_local_variable(node.name, node.location, write: true) unless declined_underscore?(node.name)\n"
   to: "        super\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "records a multiple-assignment target"
-- why: "Declining an underscore-prefixed target -- Ruby lets one pattern bind such a name twice, so two edits that are each the name exactly make the file stop parsing."
+- why: "Declining an underscore target inside a pattern -- Ruby lets one pattern bind such a name twice, so two edits that are each the name exactly make the file stop parsing."
   file: core/lib/ovallsp/parser_service.rb
-  from: " unless node.name.start_with?(\"_\")\n"
-  to: "\n"
+  from: "        @pattern_depth.positive? && name.to_s.start_with?(\"_\")\n"
+  to: "        false\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "declines an underscore-prefixed target, which a pattern may repeat"
 - why: "Declining a value-omitted shorthand's pattern binding -- the range Prism reports for it is the hash key's and is spelled without the colon, so the range comparison passes it and Rename rewrites a pattern's key."
@@ -931,3 +931,21 @@
   to: "      return [] if false\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "Q3: offers nothing where the surplus argument is a heredoc"
+- why: "An alias recorded on one ancestor whose target lives on another; without it `alias` to an included module's method is reported as unknown."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "        target = chain_alias_target(entries, method_name, singleton)\n"
+  to: "        target = nil\n"
+  spec: spec/ovallsp/semantic/alias_through_module_spec.rb
+  example: "does not report an alias whose target an included module declares"
+- why: "prepareRename warming the index it reads; without it a local is refused until Find References has been run once."
+  file: core/lib/ovallsp/server.rb
+  from: "    def ensure_reference_index_current\n"
+  to: "      nil\n"
+  spec: spec/ovallsp/server_rename_spec.rb
+  example: "warms the reference index, so a local can be renamed without a rehearsal"
+- why: "The private-member filter on a receiver-dot completion; without it 69 of 121 labels on a plain Ruby class raise when picked."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "                                   public_only: context[:explicit_receiver] == true)\n"
+  to: "                                   public_only: false)\n"
+  spec: spec/ovallsp/semantic/explicit_receiver_visibility_spec.rb
+  example: "offers none of Ruby's private methods after a dot"

@@ -196,10 +196,10 @@ module Ovallsp
       # `prefix`, for completion against a receiver whose type has no
       # source declaration to complete against (Task 013's "RBS/Gem
       # methods" completion source) — [] if the type isn't known.
-      def member_names(type_name, prefix: "", singleton: false)
+      def member_names(type_name, prefix: "", singleton: false, public_only: false)
         @mutex.synchronize do
-          key = [type_name, singleton]
-          names = (@member_name_cache[key] ||= compute_member_names(type_name, singleton))
+          key = [type_name, singleton, public_only]
+          names = (@member_name_cache[key] ||= compute_member_names(type_name, singleton, public_only))
           # `select` would build a new Array and lose the sentinel's
           # identity, turning "could not look" back into "no members".
           next names if Environment.unavailable?(names)
@@ -452,7 +452,17 @@ module Ovallsp
         nil
       end
 
-      def compute_member_names(type_name_string, singleton)
+      # `public_only` is asked by the completion that has a receiver in
+      # front of it. A private method is exactly the one you may not call
+      # that way, and RBS says which: `accessibility` is `:private` for
+      # `fork`, `exec`, `abort`, `exit!`, `eval`, `initialize` and `puts`
+      # on `Object`. Dropping it offered 69 of 121 labels on a plain Ruby
+      # class that raise when picked (`024.99`).
+      #
+      # Part of the cache key, because the same type answers two
+      # different questions and one of them is not a subset anybody can
+      # filter down to afterwards without knowing which names were cut.
+      def compute_member_names(type_name_string, singleton, public_only = false)
         type_name = rbs_type_name(type_name_string)
         return [] unless type_name
 
@@ -463,7 +473,8 @@ module Ovallsp
         # same door as a type RBS does not carry.
         return unavailable_or(rbi_member_names(type_name_string, singleton), type_name) unless definition
 
-        rbs_names = definition.methods.keys.map(&:to_s)
+        rbs_names = definition.methods.reject { |_, method| public_only && method.accessibility == :private }
+                              .keys.map(&:to_s)
         rbi_names = rbi_member_names(type_name_string, singleton)
         (rbs_names + rbi_names).uniq.sort
       rescue StandardError => e

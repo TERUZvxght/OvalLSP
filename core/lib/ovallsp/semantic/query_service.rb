@@ -456,7 +456,8 @@ module Ovallsp
         # what the chain offers, which is the opposite of the
         # nearest-wins question a single call asks.
         names = rbs_owner_chains(receiver_type, context).flatten(1).flat_map do |owner, owner_singleton|
-          @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton)
+          @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton,
+                                   public_only: context[:explicit_receiver] == true)
         end
         names.each do |name|
           candidates[name] ||= Member.new(

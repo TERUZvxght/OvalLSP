@@ -434,7 +434,25 @@ module Ovallsp
         singleton = context[:singleton] == true
         entries = @hierarchy_index.ancestors(nominal.name, singleton: singleton)
 
-        entries.each_with_index.filter_map { |entry, rank| build_candidate(entry, method_name, singleton, rank) }
+        found = entries.each_with_index.filter_map do |entry, rank|
+          build_candidate(entry, method_name, singleton, rank)
+        end
+        return found unless found.empty?
+
+        # **An alias is recorded on one ancestor and its target lives on
+        # another.** `#resolve_alias` is asked of a single entry, so an
+        # `alias safe_escape escape` on `Page` resolved to `escape` and
+        # then looked for `Page#escape`, which does not exist when
+        # `escape` comes from an included module. Nothing carried the
+        # resolved name back to the rest of the chain (`024.238`).
+        #
+        # Only when the ordinary pass found nothing, so this can add an
+        # answer where there was none and cannot change one that was
+        # already given.
+        target = chain_alias_target(entries, method_name, singleton)
+        return [] unless target
+
+        entries.each_with_index.filter_map { |entry, rank| build_candidate(entry, target, singleton, rank) }
       end
 
 
@@ -499,6 +517,24 @@ module Ovallsp
       # file and Diagnostics::Engine cannot disagree about it; they did,
       # and both copies were wrong for the tail.
       def symbol_kind_for(entry, singleton) = entry.declaration_kind(singleton: singleton)
+
+      # The name the nearest ancestor's alias points at, or nil where no
+      # ancestor aliases this name. Nearest wins because Ruby binds an
+      # alias at the point it is written, so a subclass's alias shadows
+      # one further up.
+      #
+      # A self-alias is refused rather than followed: it would make the
+      # second pass identical to the first.
+      def chain_alias_target(entries, method_name, singleton)
+        entries.each do |entry|
+          next unless entry.identified?
+
+          fact = @hierarchy_index.aliases(entry.name)
+                                 .find { |f| f.new_name == method_name && f.singleton == singleton }
+          return fact.old_name if fact && fact.old_name != method_name
+        end
+        nil
+      end
 
       # A single level of `alias`/`alias_method` indirection: if `owner`
       # doesn't declare `method_name` directly but *does* record an alias

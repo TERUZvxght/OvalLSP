@@ -182,63 +182,30 @@ RSpec.describe "Ovallsp::Server textDocument/prepareRename and textDocument/rena
                                            "rewriting the body alone leaves a method that raises NameError"
   end
 
-  # **prepareRename does not rebuild the reference index, and that is a
-  # decision.** `024.245` reported the asymmetry: Find References and
-  # rename rebuild it first and this does not, a local variable has no
-  # declaration in the workspace index at all, so cold F2 on one is
-  # refused while `textDocument/rename` at the identical caret produces
-  # edits. Adding the rebuild here closes the asymmetry and makes rename
-  # reachable from F2 alone -- which is the whole of what it does, and is
-  # why it is not here: driven with the edits applied back and re-parsed,
-  # eight local-variable shapes come out as code that no longer means
-  # what it meant, six of them as a file that stops running. The entry
-  # carries the eight.
+  # **prepareRename warms the reference index, and did not.**
+  # `#references_result` and `#rename_result` both call
+  # `#ensure_reference_index_current`; this did not, so with the index
+  # cold -- its state until the user has run Find All References or an
+  # actual rename, and again after every edit that bumps the generation
+  # -- `Rename::Planner#locations_for` saw declarations only. A local
+  # has none, so the editor refused the rename box at a position where
+  # `textDocument/rename` would have worked. `024.245`.
   #
-  # The three requests are one example because each is the other two's
-  # control. Refusal alone proves nothing -- a server answering nothing
-  # at all would satisfy it -- so the enclosing method's name is asked at
-  # the same cold moment and has to be offered, and the *same* local is
-  # asked again after a Find All References, which is what warms the
-  # index, and has to be offered then. That last one is not decoration:
-  # it says the refusal is the cold index and nothing else, so this
-  # example goes red both if the rebuild is added here and if the
-  # deferral is turned into a refusal of local variables generally --
-  # a different decision, which would need its own record.
-  it "leaves prepareRename cold, so a local is refused until something else warms the index" do
-    source = "def a\n  x = 1\n  x\nend\n"
+  # Not the same trade as `documentHighlight`, which deliberately leaves
+  # it cold: highlights are asked on every cursor move, and this is
+  # asked once, when the user presses F2.
+  it "warms the reference index, so a local can be renamed without a rehearsal" do
     input =
-      did_open("file:///a.rb", source) +
+      did_open("file:///cold.rb", "def m\n  value = 1\n  value\nend\n") +
       frame(
         jsonrpc: "2.0", id: 1, method: "textDocument/prepareRename",
-        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 1, character: 2 } }
-      ) +
-      frame(
-        jsonrpc: "2.0", id: 2, method: "textDocument/prepareRename",
-        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 0, character: 4 } }
-      ) +
-      frame(
-        jsonrpc: "2.0", id: 3, method: "textDocument/references",
-        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 1, character: 2 },
-                  context: { includeDeclaration: true } }
-      ) +
-      frame(
-        jsonrpc: "2.0", id: 4, method: "textDocument/prepareRename",
-        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 1, character: 2 } }
+        params: { textDocument: { uri: "file:///cold.rb" }, position: { line: 1, character: 2 } }
       ) +
       frame(jsonrpc: "2.0", method: "exit", params: nil)
 
     build_server(input).run
 
-    results = sent_messages.sort_by { |m| m[:id] }.to_h { |m| [m[:id], m[:result]] }
-    # The keys first: `results[1]` is nil both when the answer was null
-    # and when no answer came back at all, and only one of those is what
-    # this example is about.
-    expect(results.keys).to contain_exactly(1, 2, 3, 4)
-    expect(results[1]).to be_nil
-    expect(results[2][:placeholder]).to eq("a")
-    expect(results[4]).to eq(
-      range: { start: { line: 1, character: 2 }, end: { line: 1, character: 3 } }, placeholder: "x"
-    )
+    expect(sent_messages.first[:result]).to include(placeholder: "value")
   end
 
   # The same cold F2, on a class written inside a `module` body, driven

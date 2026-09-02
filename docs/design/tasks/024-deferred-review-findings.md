@@ -403,21 +403,21 @@ nobody can search is the recording habit without the benefit.
 | [`024.226`](024-deferred-review-findings-resolved.md#024226-an-argument-written-as-a-paren-less-call-is-judged-by-its-own-last-argument) | fixed | 0.2.15 | An argument written as a paren-less call is judged by its own last a… |
 | [`024.227`](024-deferred-review-findings-resolved.md#024227-every-outline-symbol-s-selectionrange-was-its-whole-declaration) | fixed | 0.2.15 | Every outline symbol's `selectionRange` was its whole declaration |
 | [`024.228`](024-deferred-review-findings-resolved.md#024228-every-stdlib-klass-method-answered-nothing-in-three-features-at-once) | fixed | 0.2.15 | Every stdlib `Klass.method(` answered nothing, in three features at … |
-| [`024.229`](#024229-signature-help-says-nothing-at-the-top-level-of-a-file-and-cannot-be-fixed-the-way-the-register-says) | open | 0.3.0 | Signature help says nothing at the top level of a file, and cannot b… |
+| [`024.229`](024-deferred-review-findings-resolved.md#024229-signature-help-says-nothing-at-the-top-level-of-a-file-and-cannot-be-fixed-the-way-the-register-says) | fixed | 0.3.0 | Signature help says nothing at the top level of a file, and cannot b… |
 | [`024.230`](024-deferred-review-findings-resolved.md#024230-a-top-level-def-is-indexed-with-no-owner-so-nothing-can-look-it-up) | fixed | 0.2.18 | A top-level `def` is indexed with no owner, so nothing can look it up |
 | [`024.231`](024-deferred-review-findings-resolved.md#024231-a-permission-written-down-once-was-still-missed-and-the-script-that-hid-it-said-the-opposite) | fixed | 0.2.15 | A permission written down once was still missed, and the script that… |
 | [`024.232`](024-deferred-review-findings-resolved.md#024232-the-fixture-proving-a-check-has-teeth-lost-its-own-teeth-when-a-version-shipped) | fixed | 0.2.15 | The fixture proving a check has teeth lost its own teeth when a vers… |
 | [`024.233`](024-deferred-review-findings-resolved.md#024233-the-guard-against-naming-a-shipped-release-could-not-fire-until-the-release-had-shipped) | fixed | 0.2.16 | The guard against naming a shipped release could not fire until the … |
 | [`024.234`](024-deferred-review-findings-resolved.md#024234-the-plugin-subsystem-was-unreachable-from-the-shipped-product-and-eight-documents-said-otherwise) | fixed | 0.2.16 | The plugin subsystem was unreachable from the shipped product, and e… |
 | [`024.237`](#024237-four-shapes-stopped-reporting-by-declining-on-the-body-not-by-reading-it) | open | 0.3.0 | Four shapes stopped reporting by declining on the body, not by readi… |
-| [`024.238`](#024238-alias-to-a-method-an-included-module-declares-is-reported-as-unknown) | open | 0.3.0 | `alias` to a method an included module declares is reported as unkno… |
+| [`024.238`](024-deferred-review-findings-resolved.md#024238-alias-to-a-method-an-included-module-declares-is-reported-as-unknown) | fixed | 0.3.0 | `alias` to a method an included module declares is reported as unkno… |
 | [`024.239`](024-deferred-review-findings-resolved.md#024239-a-name-ruby-gives-every-object-reported-missing-because-rbs-omits-it) | fixed | 0.2.16 | A name Ruby gives every object, reported missing because RBS omits it |
 | [`024.240`](024-deferred-review-findings-resolved.md#024240-hover-answers-nothing-in-a-view-where-completion-and-go-to-definition-both-answer) | fixed | 0.2.16 | Hover answers nothing in a view where completion and go-to-definitio… |
 | [`024.241`](024-deferred-review-findings-resolved.md#024241-find-references-answers-from-a-comment-a-bare-literal-and-end) | fixed | 0.2.16 | Find References answers from a comment, a bare literal, and `end` |
 | [`024.242`](024-deferred-review-findings-resolved.md#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | fixed | 0.2.16 | A class held in a local variable loses an RBS overload |
 | [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.3.0 | Signature help says nothing for a receiverless call inside a module … |
 | [`024.244`](024-deferred-review-findings-resolved.md#024244-preparerename-is-refused-on-any-class-or-module-written-inside-a-module-class-body-while-th) | fixed | 0.2.17 | prepareRename is refused on any class or module written inside a `mo… |
-| [`024.245`](#024245-server-prepare-rename-result-does-not-call-ensure-reference-index-current-while-referenc) | open | 0.3.0 | `Server#prepare_rename_result` does not call `#ensure_reference_inde… |
+| [`024.245`](024-deferred-review-findings-resolved.md#024245-server-prepare-rename-result-does-not-call-ensure-reference-index-current-while-referenc) | fixed | 0.3.0 | `Server#prepare_rename_result` does not call `#ensure_reference_inde… |
 | [`024.246`](024-deferred-review-findings-resolved.md#024246-one-unresolvable-include-in-a-project-s-own-rbs-makes-the-engine-report-a-method-the-same-file) | fixed | 0.2.17 | One unresolvable `include` in a project's own RBS makes the engine r… |
 | [`024.247`](024-deferred-review-findings-resolved.md#024247-a-constant-declared-only-in-a-signature-file-is-reported-cannot-resolve-constant-when-that-fil) | fixed | 0.2.17 | A constant declared only in a signature file is reported `cannot res… |
 | [`024.248`](024-deferred-review-findings-resolved.md#024248-diagnostics-engine-ancestor-names-calls-ancestorentry-name-with-no-identified-guard-so) | fixed | 0.2.17 | `Diagnostics::Engine#ancestor_names` calls `AncestorEntry#name` with… |
@@ -446,9 +446,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.271`](024-deferred-review-findings-resolved.md#024271-renaming-a-local-leaves-def-local-method-behind-so-the-file-stops-running) | fixed | 0.2.17 | Renaming a local leaves `def <local>.method` behind, so the file sto… |
 | [`024.272`](024-deferred-review-findings-resolved.md#024272-renaming-a-local-leaves-every-value-omitted-shorthand-behind-so-the-rename-is-still-partial) | fixed | 0.2.17 | Renaming a local leaves every value-omitted shorthand behind, so the… |
 | [`024.273`](024-deferred-review-findings-resolved.md#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | fixed | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
-| [`024.274`](#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | open | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
+| [`024.274`](024-deferred-review-findings-resolved.md#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | fixed | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
 | [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | unscheduled | A workspace-identity example fails only in a full-suite run, and not… |
-| [`024.276`](#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | open | 0.3.0 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
+| [`024.276`](024-deferred-review-findings-resolved.md#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | fixed | 0.2.17 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
 | [`024.277`](024-deferred-review-findings-resolved.md#024277-a-local-variable-s-identity-follows-the-cref-so-a-block-that-changes-self-splits-it) | fixed | 0.2.17 | A local variable's identity follows the cref, so a block that change… |
 | [`024.278`](024-deferred-review-findings-resolved.md#024278-a-local-variable-s-identity-has-no-file-in-it-so-renaming-one-edits-another-file) | fixed | 0.2.17 | A local variable's identity has no file in it, so renaming one edits… |
 | [`024.279`](024-deferred-review-findings-resolved.md#024279-the-rename-oracle-put-the-caret-in-the-wrong-place-so-its-first-numbers-were-part-measurement) | fixed | 0.2.17 | The rename oracle put the caret in the wrong place, so its first num… |
@@ -632,6 +632,17 @@ argument on it: that entry ships 39 new reports of exactly this shape
 and had written "when `024.13` is fixed the 39 go with it" on the
 strength of a `target:` this entry's own body had already invalidated.
 
+
+**Driven at 0.3.0: the false report is gone, the silence is not.**
+With a Runtime Agent connected -- which is what the entry predicted
+would close the wrong-answer half -- a reopened `Array` no longer
+produces `a.second`. Neither does it produce `a.totally_bogus_method`,
+which the entry expected to be correctly reported.
+
+So what is left is a decline rather than a wrong answer, and a
+smaller finding than the entry describes. Re-triage on that basis
+rather than on the entry's own wording, which was written when both
+halves were live.
 ## 024.18 The unassigned-`@ivar` check cannot enumerate what it needs to
 
 ```yaml
@@ -2138,6 +2149,19 @@ changing what every component reads is not.
 others about a literal, which no user has reported and which the
 published limitation covers.
 
+
+**Driven at 0.3.0 in one shape and it did not reproduce there.** A
+`Billing::Range` with a `Range` core class shadowed by it:
+
+    Billing::Range has no method named `definitely_absent_on_billing_range`
+
+is reported, with a class in the same fixture as the control. The
+entry says the engine declines about *any* receiver the shadowing
+test matches, and this receiver matches it. Left open rather than
+closed: this entry is about two populations and a rolled-back
+placement, and one fixture is not the whole of it. What it does
+establish is that the headline -- a namespaced class named after a
+core class loses its diagnostics -- is not true of the plain shape.
 ## 024.62 Two per-file stores are separated by nothing but their payload
 
 ```yaml
@@ -2798,6 +2822,27 @@ which is still the worse half.
 
 **Re-triaged in 0.2.17** (`024.276`). Declining on modules costs a third of the arity mistakes in a codebase shaped like this one, which its body measures — but the alternative 0.2.10 tried reported `Rails.application`, `Rails.env` and `Rails.logger` as missing, and section 0.4 ranks that worse. Answering here needs the witness `024.R7` supplies, and `045` records this as one of D2's four.
 
+
+**Split by measurement at 0.3.0: the completion half is gone, the
+diagnostic half is not.**
+
+`MF.`, `Selfish.` and `PlainSingleton.` each offer **192** items and
+each offers its own method -- `mf_a` under a bare `module_function`,
+`es_a` under `extend self`, `ps_a` under a plain `def self.`. The
+entry's "190 items, none of them `mf_a`" does not reproduce. At the
+parser, `mf_a` is declared `[:instance_method, :singleton_method]`;
+`es_a` is declared instance-only and reaches the singleton side
+through the chain instead, which is why it completes.
+
+The second half reproduces, with a control in the same fixture:
+`PlainClass.nope_y` is reported and `PlainMod.nope_x` is not.
+`MethodResolver#availability` answers `absent? = false` for a
+module's singleton receiver where it answers `true` for a class.
+
+**Not taken in 0.3.0.** It is the same code `024.243` failed at four
+times in this release, and it is a silence rather than a wrong
+answer -- so it waits for the ancestor-reading change that entry
+asks for, rather than being pushed at from a third direction.
 ## 024.121 Nothing measures how much of this tree no test would notice changing
 
 ```yaml
@@ -2942,6 +2987,10 @@ because another editor flags the same typo.
 
 **Was one of nine bullets under `024.90` until 0.2.14.**
 
+
+**See `024.290`** for the measurement that `024.R7`, as shipped in
+0.3.0, carries no core classes at all -- which is the direction this
+entry names.
 ## 024.132 A scope defined in a concern's `included do` has no type
 
 ```yaml
@@ -3566,67 +3615,6 @@ signature and index sides together. Until then the entry stays open and
 `KNOWN_LIMITATIONS` keeps its paragraph in both languages: the product
 does have this defect, and 0.2.16 shipped without fixing it.
 
-## 024.229 Signature help says nothing at the top level of a file, and cannot be fixed the way the register says
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.0
-```
-
-**Area:** `core/lib/ovallsp/server.rb` (`#method_signature_help`),
-`core/lib/ovallsp/semantic/query_service.rb` (`#scope_at`),
-`core/lib/ovallsp/local_inferencer.rb` (`#capture_scope`)
-
-At the top level of a file, `puts(` and `format(` answer nothing.
-`#scope_at` gives `self_type = nil` outside any class body, and
-`#method_signature_help` returns `{signatures: []}` before consulting
-anything. RBS already has the answer:
-`signatures_of(Nominal("Object"), "puts")` is `["puts(...) -> nil"]`.
-
-**Both obvious fixes are wrong, and that is the finding.**
-
-*Shape 2 — the entry's own stated Direction*, making the shared scope
-fall back to `Object`, fails two examples, and one is a real regression:
-every `Kernel` method jumps from band 3 to band 1 in bare-prefix
-completion, above every workspace constant, at the top level of every
-file. Worse, the spec that carries the *deliberate* decision —
-`prefix_completion_spec.rb:23-34`, "does not ask for the members of a
-receiver it does not have" — stays **green**, because it builds
-`Scope.new(self_type: nil)` by hand and stubs the query service. It
-would go on asserting about a state that no longer occurs while the
-per-keystroke cost it exists to prevent came back unpinned. A green
-suite is not a blast radius, exactly as `CLAUDE.md` says.
-
-*Shape 1 — a fallback confined to `#method_signature_help`* — passes the
-whole suite, and **turns silence into a wrong answer on a file in this
-repository**. `core/spec/ovallsp/server_documentation_spec.rb:19`
-declares `def open(uri, text, language_id: "ruby")` at the top level and
-calls `open(...)` thirty lines below; with the fallback, signature help
-answers with `Kernel#open`'s *file-opening* signature. Measured
-collisions between top-level `def`s and `::Object`'s 120 instance
-methods: 8 in `core/spec` (`open` ×5, `initialize` ×3), 2 in the stdlib,
-2 in installed gems. Section 0 ranks that below the silence it replaces.
-
-**And a guard on "is there an enclosing class" cannot stop it** — at
-that position there genuinely is none, so the guard is satisfied and the
-fallback fires. It is aimed at the wrong mechanism.
-
-**What actually blocks this is `024.230`**: a top-level `def` is indexed
-with `owner: nil`, so the workspace half is unreachable and an `Object`
-fallback supplies Kernel's signature wherever the name collides. Fix
-that first and the fallback has something correct to prefer.
-
-**Also worth keeping**: fixing this would *not* fix the entry's headline
-example. An in-class `puts(` answers as of 0.2.16 — that was `024.43` —
-but a *module* body still does not, which is `024.240`, and the top
-level is this entry. So a changelog line saying "signature help now
-answers for Kernel calls" would be false either way. It must name the
-position it means.
-
-**Re-triaged in 0.2.17** (`024.276`). Blocked on `024.230`, which is the index side of the same position — not on the enumeration question. Its own body says the fix would not even close its headline example, because an in-class call answers, a module body is `024.240` and the top level is this entry. Turning a silence into an answer is capability, so the target stands for that reason. Not re-driven since `024.240` was split out.
-
 ## 024.237 Four shapes stopped reporting by declining on the body, not by reading it
 
 ```yaml
@@ -3660,41 +3648,6 @@ So the check answers nothing about those bodies rather than answering
 correctly about them. Reading them properly means knowing what
 `Struct.new` and `define_method` produce, which is the enumeration
 question again, and `024.R7` is the release that takes it on.
-
-## 024.238 `alias` to a method an included module declares is reported as unknown
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.0
-```
-
-**Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
-`core/lib/ovallsp/index/*`
-
-`024.91` shape C, which does still reproduce, with its control alive:
-
-    module Escaping
-      def escape(s) = s
-    end
-    class Page
-      include Escaping
-      alias safe_escape escape
-    end
-    Page.new.safe_escape("x")            # Page has no method named `safe_escape`
-    Page.new.definitely_not_a_member     # reported, so the check keeps its edge here
-
-Taken from Ruby, `ruby 3.4.10`:
-
-    Page.new.respond_to?(:safe_escape)   # => true
-    Page.new.safe_escape("x")            # => "x"
-
-`alias` to a `def` in the same class body is fine; it is the hop through
-the included module that is not followed. Left for 0.3.0 rather than
-patched here: it is a shared path with `024.91`'s other shapes and with
-the alias handling `024.R7` will have to revisit anyway, and 0.2.16 is
-not the release to start that.
 
 ## 024.243 Signature help says nothing for a receiverless call inside a module body
 
@@ -3802,287 +3755,52 @@ languages, rather than deleted with `024.43`.
 **Retargeted to 0.3.0 in 0.2.16's closing pass**, as the half of
 `024.43` that release did not fix.
 
-## 024.245 `Server#prepare_rename_result` does not call `#ensure_reference_index_current`, while `#referenc
 
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.0
-```
+**Four shapes tried in 0.3.0, all measured, none shipped.** The finding
+reproduces exactly as written — `lookup_owners(Nominal("Helpers"),
+singleton: false)` stops at `["::Helpers", false]` while `Report`
+reaches `Kernel`, and `members_of(Helpers, prefix: "put")` is empty
+where `Report`'s is `["putc", "puts"]`. What is not available is a fix
+that does not cost more than it buys.
 
-**Area:** `core/lib/ovallsp/semantic/reference_resolver.rb`, `core/lib/ovallsp/server.rb`
+Every number below is `scripts/corpus_diagnostics.rb` over
+activesupport 8.1.3.1 and i18n 1.15.2 — **335 files**, the same
+`--rails-root` on both sides, control `unresolved-constant` identical
+at **916** throughout, baseline **19** `unknown-method`:
 
-`Server#prepare_rename_result` does not call
-`#ensure_reference_index_current`, while `#references_result` and
-`#rename_result` both do. With the reference index cold — which is its
-state until the user has run Find All References or an actual rename,
-and again after every edit that bumps the generation —
-`Rename::Planner#locations_for` sees declarations only. For a local
-variable and for an instance variable the workspace index holds no
-declaration, so prepareRename answers null and the editor refuses the
-rename box, while `textDocument/rename` at the identical position goes
-ahead and produces the correct edits. NOT FIXED BY THIS PATCH: it is
-`Server`'s dispatch rather than the identity, and folding a second
-behavioural change into a measured substitution would leave neither
-attributable. The fix looks like one line — the same
-`ensure_reference_index_current` call the other two handlers make — but
-it is O(workspace) and the method's own comment weighs that cost, so it
-wants its own measurement.
+1. **Append `DEFAULT_OBJECT_CHAIN` to a module's instance chain.**
+   Suite green. Corpus: **+151 reports, −0**, every one false —
+   `ActiveSupport::Benchmarkable has no method named `logger``. The
+   chain makes the module *closed*, and a concern's methods come from
+   its includer, which is the one thing the check cannot enumerate.
+2. **Chain, plus the includer recorded as a nameless ancestor.**
+   Corpus: **−4, +0**, the best result of the four. Rejected on a
+   different cost: a nameless entry is a value every reader of the
+   chain has to remember to skip, and **five specs that map `#name`
+   over ancestors raised on it**. That is the sentinel shape
+   `CLAUDE.md` names, and paying it here buys one entry.
+3. **Chain for the receiver only, plus `Engine#closed_nominal?`
+   asking `WorkspaceIndex#type_kind`.** The guard never fired:
+   `nominal.name` is not the spelling the index is keyed by, and
+   `ActiveSupport::XmlMini` answered `nil`. Corpus **+3, −0**.
+4. **The same, asking a new `HierarchyIndex#module?` that
+   canonicalises first.** Suite green, 612 examples. Corpus **+3, −0**
+   — the same three, all module receivers reached through `extend
+   self`, so they arrive on the *singleton* side that shapes 3 and 4
+   deliberately leave alone.
 
+**Rolled back**, per `CLAUDE.md`'s rule about the same place found
+again after a countermeasure. Shape 1 also cost a lesson worth keeping
+separately: the suite was green while the product got 151 reports
+worse, and only the corpus saw it.
 
-*Found by the follow-up measurement `051` records.*
-
-```
-Driven through the real server. For each position: prepareRename with nothing asked first (cold); prepareRename after a references request at the same position (warm); and rename at that position.
-
-AFTER (patched worktree — the same four rows hold at 7bce3c4 except the first, which this patch fixes):
-
-  class in a module body      prepare(cold)=true  prepare(warm)=true  rename=nil edit(s)
-  class, compact spelling     prepare(cold)=true  prepare(warm)=true  rename=nil edit(s)
-  instance method             prepare(cold)=true  prepare(warm)=true  rename=2 edit(s)
-  local variable              prepare(cold)=false prepare(warm)=true  rename=2 edit(s)
-  instance variable           prepare(cold)=false prepare(warm)=true  rename=nil edit(s)
-
-BEFORE (7bce3c4), first row only differs:
-
-  class in a module body      prepare(cold)=false prepare(warm)=true  rename=nil edit(s)
-
-The local-variable row is the clean one: source `def a\n  x = 1\n  x\nend\n`, caret at line 1 character 2. prepareRename answers null, so VS Code shows "The element can't be renamed" — and textDocument/rename at that exact position returns a WorkspaceEdit with 2 correct edits. The engine can rename it; the editor is told it cannot.
-
-(The `rename=nil` cells on the three class/ivar rows are an artefact of the probe's `newName: "zzz"`, which `Planner#valid_identifier?` rejects for `:class` and `:ivar`. They are not part of the finding; the prepare columns are.)
-```
-
-**Not fixed in 0.2.17. Deferred deliberately, and this section is the
-record of the decision rather than a note that nobody got to it.**
-
-The one-line change was made, measured, and taken back out. It does
-exactly what the paragraphs above ask — `#prepare_rename_result` calls
-`#ensure_reference_index_current`, and cold F2 stops refusing. **The
-only other thing it does is put `textDocument/rename` within reach of
-F2 alone**, and rename is not correct for local variables.
-
-Driven both ways: the emitted edits applied back to the source, the
-result re-parsed, and where it parses, run. Eight shapes, each a `def`
-holding one local, renamed at its assignment (at its use for the rescue
-row). Both sides were handed the identical eight fixtures
-(`corpus-sha256 c3ce1d89` on each). The run below is `98fc14e` itself,
-with a Find All References at the same caret ahead of the F2 so that
-every row gets an answer — which is also, exactly, what the one-line
-change makes the *first* F2 do: measured separately against the patched
-tree, cold, and identical row for row.
-
-```
-shape                    prepare  edits  parses  ruby before -> ruby after
-hash shorthand           offers   2      NO      {name: "n"}  ->  SyntaxError
-keyword shorthand        offers   2      yes     "n"  ->  ArgumentError (given 1, expected 0; required keyword: name)
-arrow lambda parameter   offers   3      yes     [50, 1]  ->  [10, 1]
-multiple assignment      offers   2      yes     [2, 3]  ->  [1, 3]
-rescue binding           offers   1      yes     "boom"  ->  NameError: undefined local variable or method 'err'
-def on a local receiver  offers   2      yes     :x  ->  NameError: undefined local variable or method 'ty'
-use inside a block       offers   2      yes     4  ->  NoMethodError: undefined method '+' for nil
-op-assign binding        offers   2      yes     1  ->  NoMethodError: undefined method '+' for nil
-```
-
-Eight for eight the file stops meaning what it meant; six of them stop
-running, and the first does not parse. `KNOWN_LIMITATIONS` already
-describes six of these eight, in both languages, as making the file
-stop running — so this is not a discovery, it is the same list arriving
-one keystroke closer to the user.
-
-**Without the change, at the same revision, every one of the eight is
-refused**, because prepareRename is the first request of the session and
-the reference index is cold:
-
-```
-shape                    prepare
-hash shorthand           refuses
-keyword shorthand        refuses
-arrow lambda parameter   refuses
-multiple assignment      refuses
-rescue binding           refuses
-def on a local receiver  refuses
-use inside a block       refuses
-op-assign binding        refuses
-```
-
-**So the refusal is load-bearing, and it is load-bearing by accident.**
-Nothing in `#prepare_rename_result` decided it; it is what a missing
-call happens to do. A protection nobody designed is still a protection,
-and removing it is still removing it.
-
-**It is one gesture's worth of protection, not a guard**, and that half
-of the measurement is why this entry stays open rather than being closed
-as working-as-intended. At `98fc14e`, unchanged, one Find All References
-at the caret is enough:
-
-```
-                                       prepareRename on `n` in
-                                       `def go; n = 1; [1,2].each { |i| n += i }; n; end`
-cold (F2 first)                        null
-warm (Find All References, then F2)    {range: …1:2–1:3, placeholder: "n"}
-```
-
-So a user who has used Find References once is already exposed to all
-eight. What the deferral buys is the first gesture of a session, and
-the difference between a wrong edit being one keystroke away and two.
-Worth having; not worth calling safe.
-
-**The obvious middle course does not exist.** "Warm the index, and have
-`#prepare_rename_result` decline for the shapes known to be wrong" needs
-those shapes to be *nameable*, and six of the eight are not. They are
-not a wrong *edit* the planner emits; they are a mention the engine does
-not hold against this symbol, and there is nothing to decline on:
-
-- `+=`, `||=`, `&&=`, a multiple-assignment target, a `for` variable and
-  a rescue's `=> e` are not recorded as local-variable sites at all
-  (`024.260`).
-- A closed-over local's uses inside a block are not recorded
-  (`024.262`).
-- An arrow lambda's parameter is recorded as the *enclosing* local
-  rather than as a binding of its own (`024.261`, `024.263`), so the
-  engine believes it has every mention.
-- The `ty` in `def ty.outer` is recorded under the method's own scope
-  (`024.271`) — a different symbol rather than a missing one, so this
-  one is nameable in principle, and only by fixing it.
-
-The two that *were* nameable are the two this change set fixed: the
-shorthand rows, where the site is recorded and the edit over it was
-wrong (`024.274`).
-
-The general form — decline when the local's own scope contains an
-identifier we did not record — is a larger change than this entry, and
-every version of it refuses renames that are fine: the same word appears
-as a method call, a symbol, a string and a comment inside the body it
-would scan.
-
-**What the cost measurement said, since the paragraphs above asked for
-one and it is the reason the change looked cheap.** Driven through the
-real server, both sides, with the rebuild timed inside the one method
-the change touches; the gesture is F2 on a local then rename at the same
-caret, over a real gem's `lib` opened file by file, each pair given the
-identical file list:
-
-```
-activemodel 8.1.3.1                without    with
-workspace files                        73       73
-ensure_reference_index_current          1        2   calls
-  call 1                            1.095s   1.089s
-  call 2                                 -   0.000s
-prepareRename answered               null    {…, placeholder: "x"}
-rename edits                            2        2   (control, unchanged)
-
-activerecord 8.1.3.1               without    with
-workspace files                       397      397
-ensure_reference_index_current          1        2   calls
-  call 1                           56.698s  51.566s
-  call 2                                 -   0.000s
-prepareRename answered               null    {…, placeholder: "x"}
-rename edits                            2        2   (control, unchanged)
-```
-
-One real rebuild per gesture either way, because the rebuild is a no-op
-when the index is current — so the gesture as a whole costs what it
-always did, and the second call is free. **The 56.698 against 51.566 is
-not a speed-up**: nothing here touches the rebuild and another agent's
-corpus pass was running across both pairs. Read them as one number with
-several seconds of noise. What is new is where the wait falls: somebody
-who starts a rename and abandons it would pay a rebuild they used to get
-out of. That is a real cost and it is *not* what stopped this — an
-instant refusal to rename something the engine can rename correctly is
-still the wrong answer. What stopped it is the eight rows above.
-
-**What was done instead.** The call is not there; the comment on
-`#prepare_rename_result` says the absence is a decision and names what
-it is sequenced behind; and
-`core/spec/ovallsp/server_rename_spec.rb` holds that decision with the
-warm ask beside it as a control, so re-adding the line goes red rather
-than waiting for a reviewer. The example fails in the other direction
-too — if the deferral were turned into a blanket refusal of local
-variables, which is a different decision and would need its own record
-and its own `KNOWN_LIMITATIONS` paragraph.
-
-This closes when the shapes close, which is why it keeps `target:
-0.2.17` beside them rather than moving out on its own.
-
-**Two of the eight were closed on the way past**, because that defect
-was this change set's own to fix rather than the scope-frame work's: the
-two shorthand rows, where the recorded range covered the colon.
-`024.274`. The six that remain are what this is waiting on.
-
-**Retargeted in 0.2.17 to the release its blockers are in.** The refusal is the guard, and it stays until the shapes behind it are fixed: six of the eight remain, and the two largest — `024.273` and `024.274` — are at 0.3.0. Warming the index here before they are done converts "the editor refuses" into "the editor rewrites your file wrongly", which section 0.4 ranks the other way round. Nothing about this waits on 0.2.17; it waits on them.
-
-## 024.274 An underscore-prefixed target is not recorded, because Ruby lets one pattern bind it twice
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.0
-```
-
-**Area:** `core/lib/ovallsp/parser_service.rb`
-
-A pattern may bind the same name twice only when the name begins with
-an underscore:
-
-```
-$ ruby -e '
-["case [1, 2]; in [_a, _a] then :ok; end",
- "case [1, 2]; in [zz, zz] then :ok; end"].each { |src|
-  begin
-    p eval(src)
-  rescue SyntaxError => e
-    p e.message.include?("duplicated variable name")
-  end
-}
-'
-# => :ok
-# => true
-# ruby 3.4.10
-```
-
-Each of those two ranges really is the name and nothing else, so no
-question asked *at a range* can see the problem: it is the pair that
-is illegal. `Rename::Planner` builds one `newText` per range and has
-no way to know that two of its ranges share a pattern, so renaming
-`_a` to anything without the underscore produces a file that does not
-parse.
-
-`024.260` recorded `LocalVariableTargetNode` for the first time in
-0.2.17, which is what made those two ranges reachable. 0.2.17 declines
-an underscore-prefixed target rather than emitting the pair — the
-state before `024.260` for exactly those names, so no user loses an
-answer they had — and what that leaves is a partial rename: the
-binding is not rewritten and the reads are.
-
-```
-Driven, rbs-4.2.0/lib/rbs/prototype/helpers.rb, caret on `_rest` at line 50:
-
-  BASE 98fc14e            1 edit  (line 50)              — partial
-  without this decline    2 edits (lines 34 and 50)      — complete
-  shipped                 1 edit  (line 50)              — partial, as BASE
-
-Over the Ruby 3.4.10 stdlib, 976 files, the decline costs 202 positions and
-every one of them is an underscore-prefixed target; nothing else changes.
-```
-
-**The rule is blunter than Ruby's**, which keys on the name *and* on
-the name being bound twice by one pattern. Writing it precisely means
-a per-pattern set of repeated names, carried across
-`InNode`/`MatchRequiredNode`/`MatchPredicateNode` — three visits that
-must agree and one more piece of state. Measured against what that
-buys: over 23,091 corpus renames the blunt rule costs **one** local
-the precise one would have kept. So the blunt one is written, and this
-entry is where the precise one is recorded for whoever finds the cost
-higher than that.
-
-Pinned as `parser_scope_frames_spec.rb`'s "declines an
-underscore-prefixed target, which a pattern may repeat", "declines an
-underscore-prefixed multiple-assignment target" — the reach of the
-rule, so it is not inferred from prose — and "still records a target a
-pattern may not repeat" as the control.
-
+**The direction actually needed** is shape 2 with its readers fixed —
+the chain is the right place for "Object is reachable" and a nameless
+link is the right way to say "and the surface is not enumerable" — or
+a receiver-side answer that also covers `extend self`, whose calls
+arrive singleton-side. Either is a change to how ancestors are read
+rather than a hunk in a review round, so this stays open and moves off
+0.3.0.
 ## 024.275 A workspace-identity example fails only in a full-suite run, and not reproducibly
 
 ```yaml
@@ -4233,156 +3951,6 @@ When it fires, the message arrives with it, and the entry becomes
 ordinary work in whatever release that is.
 
 
-## 024.276 A closing pass retargeted 54 entries at 0.3.0, and 53 of them give one of two pasted reasons
-
-```yaml
-status: open
-target: 0.3.0
-kind: defect
-user-visible: no
-user-visible-note: >
-  Nothing a user meets directly. It is filed because it is the record
-  defect that decides which user-visible defects get worked on: 35 open
-  user-visible entries name a release that two scope documents say is
-  not taking them, so nothing schedules them at all.
-```
-
-**Fixed in 0.2.17**, both halves of the Direction.
-
-**All 54 re-triaged**, each with a reason of its own taken from its own body rather than from a template. The triage rule is `docs/PUBLISHING.md`'s own table: a wrong answer is a repair and belongs on the patch line, a silence turned into an answer is capability and belongs in a minor, and something about this repository's own checks or record is neither and belongs on the patch line. 25 moved to 0.2.18; 27 kept 0.3.0 on an argument of their own -- for `024.76`, `024.83` and `024.106` that argument really is the enumeration question, which is what `045` records as D2.
-
-Driving them found what the pasted paragraphs had hidden. **`024.163` had been fixed before 0.2.15 shipped** and was carried open through two releases under a sentence saying it still reproduced. **`024.20` carries its own Direction one paragraph above** the sentence claiming it needs to know what gems define. **`024.267`, re-driven while closing it, turned out to be wrong when written** -- the check it says nothing does has existed since 0.2.3 and fired during this release.
-
-**The countermeasure** is `DeferredFindings.repeated_paragraphs`, read by `deferred_findings_spec`. It groups open entries by verbatim paragraph and fails on any shared by three or more. The threshold is read off the distribution rather than picked: at the revision it was written, 570 paragraphs of 120 characters or more appeared in exactly one open entry and four appeared in two, then nothing until 6, 13, 21 and 40. Three sits in the gap.
-
-It cannot tell a true reason from a false one and does not try. What it can see is that forty entries gave the same one, which was available and unread. Five examples distinguish it -- a shared paragraph in three entries is reported, in two is not, the metadata block is not read (twenty-one entries share a `user-visible-note` legitimately), a resolved entry does not count, and a repeated line under the length floor does not.
-
-The sixth group it found was honest shared provenance: six entries repeating the same sentence about the measurement that surfaced them. That is what the Direction says to do with one -- write it once and cite it -- so they now carry a one-line pointer to `051` instead.
-
-What this does not do is make a reason true. A release that moves 25 entries to 0.2.19 can still give each a distinct sentence that says nothing. What it removes is the cheapest way to do it, and the one that happened.
-
-**Area:** `docs/design/tasks/024-deferred-review-findings.md` (the
-`target:` field and the closing paragraph on the entries counted below),
-`docs/design/tasks/051-0.2.16-shipped.md` ("What is left of 0.2.x"),
-`docs/design/tasks/045-0.3.0-scope.md` (the 0.2.14 amendment)
-
-**54 open entries say they were retargeted to 0.3.0 in 0.2.16's closing
-pass, and 53 of them justify it with one of exactly two paragraphs,
-byte-identical within each group.** Counted by grouping every open
-entry's closing paragraph and reading off the group sizes; the two
-groups are 40 and 13, and the remaining one is `024.243`.
-
-Each paragraph asserts something about how the entry was verified, and
-each is pasted onto entries the assertion cannot be true of.
-
-**The group of 40** says the entry was driven during the backlog sweep
-*with a control in its own fixture* and still reproduces. Among the 40:
-`024.150` (one operating document paraphrases another and the paraphrase
-drifts), `024.154` (findings truncated mid-sentence in `046`), `024.163`
-(a header in `046` asserts something about how its reviewers worked),
-`024.190` (annotated tag messages are a channel no scan reads),
-`024.196` (a measurement that justifies reading per-example status).
-None of those has a fixture, and none can have a control. Seven of the
-40 have an Area entirely under `docs/`, where a fixture is not a thing
-that exists; the others above are in `AGENTS.md`, in this register, and
-in `scripts/`.
-
-**The group of 13** says the fix needs the enumeration question answered
-— what the gems define, or what a running application responds to —
-which is `024.R7`'s work. Three of the 13, checked one at a time:
-
-- **`024.20`** — `contains?` treats an exclusive end offset as
-  inclusive. Its own **Direction**, written in 0.2.15 one paragraph
-  above, is "make `contains?` exclusive, then fix each caller that
-  passes a range end", and the reason it gives for deferring is blast
-  radius plus section 0's ranking: what remains "is a decline, not a
-  wrong answer". Offset arithmetic on the user's own buffer. The entry
-  now carries two contradictory reasons for its target and the false one
-  is the one a reader reaches last.
-- **`024.121`** — Area `scripts/check_pinned_mutations.rb`,
-  `scripts/hunk_sweep.rb`. How much of *this tree* no test would notice
-  changing.
-- **`024.151`** — Area `core/spec/meta/pinned_mutations.yml`,
-  `scripts/check_pinned_mutations.rb`. A check can be disabled and no
-  check notices.
-
-Three were enough to establish the class; the other ten are part of the
-re-triage below rather than a separate claim.
-
-### What it cost
-
-`045`'s 0.2.14 amendment says 0.3.0 "is now **capability-only**" and
-that the open defects aimed at it "are the accuracy line's". `051`'s
-closing section says "What is left of 0.2.x: **Nothing.**" Both are read
-off a register that says the opposite: **64 open entries name 0.3.0, 35
-of them user-visible.** `ruby scripts/deferred_findings.rb --targeting
-0.3.0` prints them.
-
-So the accuracy backlog was not cleared by the patch line and was not
-absorbed by a release either. It was relabelled, and both scope
-documents then reported the label. A release `045` requires to add
-capability only is on the hook for 35 user-visible defects — the state
-`docs/PUBLISHING.md`'s minor-release condition exists to make
-unreachable, reached from the other side: by moving the target rather
-than by leaving it blank.
-
-### The class
-
-**A mass retarget is a mass promotion.** `CLAUDE.md` already says
-promoting a finding is making a claim and requires the reproduction be
-re-run against the tree being promoted into; applied to nine entries in
-0.2.14 that rule caught two errors in nine — one that did not reproduce
-at all and one stated backwards. Applied to fifty-four here, it was
-replaced by two paragraphs pasted forty and thirteen times.
-
-Nothing in the tree can tell a reason written for an entry from a reason
-pasted onto it. That is what makes this cheap to do and invisible
-afterwards, and it is the same shape as `024.151`: the rule is correct,
-its reachability is not defended.
-
-**Direction:** two halves, and the second is the countermeasure.
-
-1. Re-triage all 54 against this tree — drive the reproduction, write
-   one reason per entry, and let the target follow the reason rather
-   than the reverse. An entry whose real blocker is `024.R7` keeps
-   0.3.0 and says so in its own words.
-2. A check that fails when open entries repeat a closing paragraph
-   verbatim. It cannot judge whether a reason is true, but "forty
-   entries give the same one" is one grouping, and it was the signal
-   available and unread here. It has to count an entry that *describes*
-   the duplication as one entry, not as another instance — which is why
-   this one describes the two paragraphs rather than quoting them.
-### 0.2.18: marked fixed with one of its own three files untouched
-
-**This entry's Area names three files. Two were edited in 0.2.17 and
-`051` was not**, so the sentence this entry disproved — that every
-entry naming 0.2.16 was "retargeted with a reason each, from the
-release's own measurements" — stood in `051` for two more releases, in
-a summary table row and again in its "What is left of 0.2.x" section.
-
-Confirmed rather than assumed: `git log` shows `051` last touched by
-`7bce3c4`, the commit that created it, while the register and `045`
-both moved afterwards.
-
-Corrected in both places, with what was actually counted, and pinned by
-`core/spec/meta/record_corrections_spec.rb` — the file this entry's own
-re-triage created, for exactly this ("a record defect fixed by editing
-a document leaves nothing behind that would fail if it came back").
-
-**The shape worth keeping.** A `status: fixed` is a claim about every
-place the entry's Area names, and nothing checked that the Area had
-been walked. This is the same defect as the one the entry records,
-one level up: the 0.2.17 pass verified the *entries* and not its own
-*file list*. Found in 0.2.18 by asking whether the 0.2.x line was
-genuinely closed, which is the only reason it was looked for at all.
-
-**Reopened rather than left fixed**, because what is unpaid is not the
-correction — that is done — but the check: nothing today reads an
-entry's Area and asks whether those files changed when it was closed.
-`024.190` already records annotated tag messages as a channel no scan
-reads; this is the same class in the register itself.
-
-
 ## 024.283 The packaged Core is driven only on Linux, so the macOS build is still smoke-tested
 
 ```yaml
@@ -4510,6 +4078,10 @@ Asserted rather than described: `unread_include_spec.rb`'s "also says
 nothing about a genuine typo there, which is what the rule costs" fails
 if the decline ever narrows by accident.
 
+
+**See `024.290`** for the measurement that `024.R7`, as shipped in
+0.3.0, carries no core classes at all -- which is the direction this
+entry names.
 ## 024.290 Nothing is reported about a call whose receiver is `Object`
 
 ```yaml
@@ -4551,6 +4123,35 @@ Asserted rather than described: `object_receiver_decline_spec.rb`'s
 "also says nothing about a genuine typo at the top level, which is what
 it costs".
 
+
+**`024.R7` shipped in 0.3.0 and does not answer this entry's question.**
+That is worth stating plainly, because this entry and `024.129` and
+`024.289` all say they resolve once the engine knows what is really on
+the receiver, and name `024.R7` as where that knowledge comes from.
+
+Measured against the release's own Rails fixture, agent booted, index
+built:
+
+    gem-index size: 2078
+      Object   instanceMethods=0
+      Kernel   instanceMethods=0
+      String   instanceMethods=0
+      Array    instanceMethods=0
+      Integer  instanceMethods=0
+
+The reason is in `RuntimeAgent::Agent#gem_index_result`, which walks
+every named module and then `gem_for(mod, name) or next`: a module is
+reported only when `Object.const_source_location` puts it under
+`…/gems/<name>-<version>/`. A core class is not there, so it is skipped
+before anything is asked of it. The index is 2,078 gem classes and no
+core ones.
+
+So the direction these three share needs the Agent to report the core
+classes as well -- a scope change to `024.R7`'s walk, not a change to
+the check that reads it. Whether that is affordable is its own
+question: `Object`'s own list is large, it is what `024.230`'s 25 false
+reports and 0.3.0's own 151 were both about, and the walk currently
+earns its cheapness from that filter.
 ## 024.294 Diagnostics do not act on an `@ivar` receiver, even where hover and completion know its type
 
 ```yaml
