@@ -722,11 +722,12 @@ does resolve. This is the commonest shape in a scaffolded app's views
 Four, and only the first is about the *label* rather than about which
 method was found:
 
-- **A return type RBS writes as `self`, `void` or `untyped` reads
-  `Unknown`**, and a method's own type variable leaks (`map() ->
-  Array[U]`). The engine has one word for "nothing can be concluded from
-  this" and uses it in a place meant to be read by a person, where the
-  word RBS actually wrote would be better (024.42). <!-- documents: 024.42 -->
+- **A method's own type variable leaks into the label**: `map()`
+  reads `-> Array[U]`, and `U` means nothing to a reader. Answering it
+  well means working out what the block returns, which is inference
+  rather than wording — unlike the `Unknown` half of this, fixed in
+  0.3.2, where the source had a better word to fall back
+  to (024.42). <!-- documents: 024.42 -->
 - **Inside a `module`, a call to a method only a stdlib ancestor
   declares gets no popup** — `puts(` written in a concern or a helper
   module, in an instance method rather than a `def self.`. A module's

@@ -37,6 +37,34 @@ RSpec.describe "Ovallsp::Signatures return labels" do
   # act on `Types::UNKNOWN` and cannot act on the string "self", so
   # bending the model to serve the label would be the trade this entry
   # says was made the wrong way round.
+# **The conversion can lose something below the top level, and the
+# first version of this only looked at the top.**
+#
+# `Array#each` is declared `() -> ::Enumerator[Elem, self]`. The outer
+# type converts to a `Nominal`, so `return_type == Types::UNKNOWN` is
+# false and the fallback never fired -- while *inside* the brackets
+# `self` had become `Unknown` and `Elem` had been dropped altogether.
+# A reader saw `Enumerator[Unknown]` for a method RBS describes
+# exactly. `024.42`.
+it "keeps the declared words when the conversion lost something inside the brackets" do
+  overloads = overloads_for("::Array", :each)
+
+  expect(overloads).not_to be_nil, "no RBS signature for Array#each -- the fixture, not the fix"
+  expect(overloads.first.return_label).to eq("Enumerator[Elem, self]")
+end
+
+# And the `::` goes, because every other reader in this tree renders a
+# class without it. Keeping RBS's spelling verbatim is what the three
+# examples below already refused.
+it "renders the declared words the way the rest of the tree renders a name" do
+  overloads = overloads_for("::Array", :map)
+  enumerator = overloads.find { |o| o.return_type.to_s.include?("Unknown") }
+
+  expect(enumerator).not_to be_nil, "no Array#map overload whose conversion lost anything"
+  expect(enumerator.return_label).not_to include("::")
+  expect(enumerator.return_label).to eq("Enumerator[Elem, Array[untyped]]")
+end
+
   it "leaves the model's type alone" do
     overloads = overloads_for("::Array", :push)
 

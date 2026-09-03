@@ -219,7 +219,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.3.2 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](024-deferred-review-findings-resolved.md#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
 | [`024.41`](024-deferred-review-findings-resolved.md#02441-typing-a-reports-a-method-on-the-next-line) | fixed | 0.2.18 | Typing a `.` reports a method on the *next* line |
-| [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.3.2 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
+| [`024.42`](#02442-a-signature-label-leaks-the-method-s-own-type-variable) | open | 0.4.0 | A signature label leaks the method's own type variable |
 | [`024.43`](024-deferred-review-findings-resolved.md#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | fixed | 0.2.16 | Signature help answers nothing for a receiverless stdlib call |
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.4.0 | A partial's local is not resolved, and C11's stated basis names it |
 | [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.4.0 | Re-analysis after a keystroke is seconds on a large file, against a … |
@@ -251,7 +251,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.73`](024-deferred-review-findings-resolved.md#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](024-deferred-review-findings-resolved.md#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | fixed | 0.2.16 | The trust gate stands in front of callers, not in front of what exec… |
 | [`024.75`](024-deferred-review-findings-resolved.md#02475-a-documented-field-selects-nothing) | fixed | 0.2.12 | A documented field selects nothing |
-| [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.3.2 | Fifty-four `unknown-method` reports over real gem source, and all of… |
+| [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.4.0 | Fifty-four `unknown-method` reports over real gem source, and all of… |
 | [`024.77`](024-deferred-review-findings-resolved.md#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | fixed | 0.2.15 | A call to a method that does not exist is missed through a relation |
 | [`024.78`](024-deferred-review-findings-resolved.md#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | fixed | 0.2.6 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](024-deferred-review-findings-resolved.md#02479-model-first-completes-to-nothing) | fixed | 0.2.6 | `Model.first` completes to nothing |
@@ -1774,7 +1774,7 @@ pushed at from the side during a review loop.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** Per-request state
 on an object two threads reach is a correctness repair, and announces
 nothing.
-## 024.42 An RBS signature label says `Unknown` where RBS says `self`, and leaks method type variables
+## 024.42 A signature label leaks the method's own type variable
 
 ```yaml
 status: open
@@ -1783,7 +1783,7 @@ user-visible: yes
 user-visible-note: >
   Partly fixed in 0.2.15: the label carries the word RBS wrote where
   the conversion loses it. The method type variable half is open.
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/signatures/type_converter.rb` (`convert`),
@@ -1873,6 +1873,26 @@ neither reaches the type model or the check.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** A signature label
 is prose for a reader; `Array[T]` and a leaked `Unknown` are repairs
 to what an existing surface says.
+
+**Fixed in 0.3.2.** The half that was left. `push -> self` was fixed when the entry was written, and `Array#each` was not: RBS declares `::Enumerator[Elem, self]`, the outer type converts to a Nominal so the top-level test was false, and inside the brackets `self` had become `Unknown` and `Elem` had been dropped -- a reader saw `Enumerator[Unknown]` for a method the source describes exactly. The test is now whether the *rendered* type contains the word the model prints when it has nothing to say, at any depth, and the declaration is spelled the way the rest of the tree spells a name. Two examples, and the three that already refused `::String` are the control that keeps the rule from widening back.
+
+## Half of this shipped in 0.3.2, and half did not
+
+**Closed:** the `Unknown` half. `push -> self` was already right when
+the entry was written; `Array#each` was not, because the test asked
+whether the *whole* return had become `Unknown` and `::Enumerator[Elem,
+self]` converts to a `Nominal` at the top while losing `self` and
+`Elem` inside the brackets. It reads `Enumerator[Elem, self]` now, and
+the three examples that refuse `::String` are the control that keeps
+the rule from widening back.
+
+**Open, and what this entry is now about:** `map() -> Array[U]`. `U` is
+the method's own type variable and means nothing to a reader. Unlike
+the half above there is no better word in the source to fall back to —
+`::Array[U]` is exactly what RBS wrote — so answering well means
+*binding* the variable to the block's return, which is inference rather
+than rendering. That is why it moves rather than closing.
+
 ## 024.44 A partial's local is not resolved, and C11's stated basis names it
 
 ```yaml
@@ -2577,7 +2597,7 @@ entry describes, and fixing it announces nothing.
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -2786,6 +2806,37 @@ as unanswered: `024.R7` indexes 2,078 gem classes and no core ones.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** Nineteen reports
 over 335 files and every one false. A wrong answer is the patch
 line's own example.
+
+## Re-driven in 0.3.2, and the number has not moved
+
+Same three gems, same 213 files, on `rack-3.2.7` (the entry measured
+3.2.6), `i18n-1.15.2`, `concurrent-ruby-1.3.8`:
+
+    corpus-diagnostics: count.unknown-method=23
+    corpus-diagnostics: count.unresolved-constant=871
+
+**23, exactly as recorded.** 0.3.2's gem-index repair (`024.305`) did
+not move it, which is worth knowing: that fix was about a Rails class
+and this corpus has no Rails in it.
+
+What is new is that all 23 are now grouped, and **every one belongs to
+a shape another open entry owns**. This entry counts; it does not have
+a fix of its own.
+
+| n | shape | where it really is |
+|---|---|---|
+| 18 | `Concurrent::LockLocalVar` `value` / `value=` | `LockLocalVar = ThreadLocalVar` under a runtime `if`, followed by an empty `class LockLocalVar` written for the documentation. The engine reads the empty body and calls the class closed |
+| 3 | `JavaCountDownLatch#java`, `ProcessorCounter#java` | inside `if Concurrent.on_jruby?`, so it is never executed on the Ruby analysing it |
+| 1 | `Rack::Auth::AbstractHandler#challenge` | defined by the subclass, `Rack::Auth::Basic#challenge` — the abstract-method shape |
+| 1 | `NonConcurrentMapBackend#validate_options_hash!` | defined on the parent, `Concurrent::Map#validate_options_hash!` |
+
+None of the four is a hunk. The first needs the engine to model a
+constant that is *both* assigned a class and opened as one; the second
+needs it to know a platform predicate is false, which it cannot; the
+third and fourth are `024.13`'s and `024.19`'s territory. So the count
+is carried forward rather than reduced, and the entry moves to where
+the shapes are fixed.
+
 ## 024.83 The undefined-method check is loudest exactly where no Runtime Agent can answer
 
 ```yaml
