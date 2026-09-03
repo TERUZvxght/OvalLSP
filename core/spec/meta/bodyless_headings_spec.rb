@@ -63,10 +63,30 @@ RSpec.describe "scripts/check_bodyless_headings.rb" do
       expect(BodylessHeadings.offenders(text)).to be_empty
     end
 
-    it "reports the last heading in a file when the one before it has no body" do
-      text = "## Penultimate\n\n## Last\n"
+    it "reports a heading whose body is missing because the one after it is" do
+      text = "## Penultimate\n\n## Last\n\nbody\n"
 
       expect(BodylessHeadings.offenders(text).map(&:last)).to eq(["## Penultimate"])
+    end
+
+    # **The case the example above was named for and did not test.** It
+    # asserted the *penultimate* heading and called itself the last one, so
+    # the trailing shape -- a heading with nothing after it at all -- was
+    # never exercised, and the rule did not catch it: "followed by a
+    # heading of the same level" has nothing following it to match.
+    #
+    # That is the same defect as the thing this file exists to catch, one
+    # level up: a limitation section deleted from the *end* of
+    # `KNOWN_LIMITATIONS` would leave a heading this check reads as fine.
+    # Found by an assessment agent reading the spec against the rule, one
+    # release after the rule was written.
+    it "reports a heading that ends the file with nothing under it" do
+      expect(BodylessHeadings.offenders("## Only\n").map(&:last)).to eq(["## Only"])
+      expect(BodylessHeadings.offenders("## Only\n\n\n").map(&:last)).to eq(["## Only"])
+    end
+
+    it "accepts a heading that ends the file with a body under it" do
+      expect(BodylessHeadings.offenders("## Only\n\nbody\n")).to be_empty
     end
 
     # A line of hashes with no text is not a heading in any dialect this
