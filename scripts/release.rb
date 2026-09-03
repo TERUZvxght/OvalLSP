@@ -275,6 +275,11 @@ module Release
   end
 
   def moved_capability_rows(version, previous)
+    unless tagged?(previous)
+      raise Refused, "v#{previous} is not in this clone, so what #{version} would be compared against " \
+                     "is not here.\n  Run: git fetch --tags"
+    end
+
     was = capability_rows(show("v#{previous}", CAPABILITY_DOC))
     now = capability_rows(File.read(File.join(ROOT, CAPABILITY_DOC), encoding: "UTF-8"))
 

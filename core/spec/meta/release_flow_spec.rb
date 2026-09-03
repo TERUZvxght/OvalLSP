@@ -80,11 +80,36 @@ RSpec.describe "scripts/release.rb" do
     # A release branch starts from what has shipped, which is `open`'s own
     # refusal text about the tree. It said nothing about the branch, so
     # `open` on a feature branch cut the release from that.
+    #
+    # **The rule is about the commit, not the name.** With no
+    # `origin/main` to compare against there is one fewer way to say yes,
+    # so this refuses.
     it "refuses to branch from anything but main" do
       branch("feature-x")
 
       expect(run("open", prepared)).to eq(2)
       expect(RepoFiles.capture(root, %w[branch --show-current]).strip).to eq("feature-x")
+    end
+
+    # And it refuses a branch that has *moved*, which is the case the
+    # name test would miss in the other direction.
+    it "refuses a branch that has commits main does not" do
+      RepoFiles.run(root, "update-ref", "refs/remotes/origin/main", "HEAD", out: File::NULL)
+      branch("feature-x")
+      write("some-work.txt", "not shipped\n")
+      commit_all("work that has not shipped")
+
+      expect(run("open", prepared)).to eq(2)
+    end
+
+    # **The control**, and the reason the rule is not "the branch is
+    # called main": a branch sitting on exactly what has shipped *is*
+    # what has shipped, whatever it is called.
+    it "allows a branch sitting exactly where origin/main is" do
+      RepoFiles.run(root, "update-ref", "refs/remotes/origin/main", "HEAD", out: File::NULL)
+      branch("feature-x")
+
+      expect(run("open", prepared)).to eq(0)
     end
 
     it "refuses a tree that is not clean before it branches" do
@@ -311,6 +336,16 @@ RSpec.describe "scripts/release.rb" do
       published_artifacts
 
       expect { Release.refuse_unshaped_release("9.9.9") }.to raise_error(Release::Refused, /B1/)
+    end
+
+    # A clone without the previous tag cannot answer the question, and
+    # saying nothing would be the answer a working comparison gives when
+    # the table did not move. It refuses, and names the fetch.
+    it "refuses when the tag it would compare against is not in this clone" do
+      RepoFiles.run(root, "tag", "-d", "v9.9.8", out: File::NULL, err: File::NULL)
+
+      expect { Release.moved_capability_rows("9.9.9", "9.9.8") }
+        .to raise_error(Release::Refused, /fetch --tags/)
     end
 
     # **The control.** Every example above asserts something is
