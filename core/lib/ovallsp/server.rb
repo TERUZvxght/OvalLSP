@@ -2986,7 +2986,13 @@ module Ovallsp
     # that row existed. Used for generated Rails methods and positions
     # with nothing renameable under the cursor.
     #
-    # **It does not call `#ensure_reference_index_current`, and that is a
+    # **Superseded in 0.3.0: it calls `#ensure_reference_index_current`
+    # now, and the second comment block below states the arrangement
+    # that ships.** What follows to the end of this block is the argument
+    # for the deferral 0.3.0 ended, kept because it is why the call was
+    # absent and what the refusal was measured to cost.
+    #
+    # **It did not call `#ensure_reference_index_current`, and that was a
     # decision rather than the omission `024.245` reported it as.**
     # `Rename::Planner#prepare` refuses a symbol it can find no location
     # for, and a local variable and an instance variable have no
@@ -3017,12 +3023,16 @@ module Ovallsp
     # the difference between a wrong edit being one keystroke away and
     # two. What it costs is one refusal, on the first rename gesture of a
     # session, of something the engine could have renamed correctly, and
-    # `docs/KNOWN_LIMITATIONS.md` tells the user about it in both
-    # languages rather than leaving it to be discovered.
+    # `docs/KNOWN_LIMITATIONS.md` told the user about it in both
+    # languages rather than leaving it to be discovered. That paragraph
+    # was removed from both language files when 0.3.0 ended the refusal.
     #
-    # `core/spec/ovallsp/server_rename_spec.rb` holds the decision, with
+    # `core/spec/ovallsp/server_rename_spec.rb` held the decision, with
     # the warm ask beside it as the control, so re-adding the line here
-    # goes red rather than waiting for a reviewer.
+    # went red rather than waiting for a reviewer. It now holds the
+    # opposite and the control is gone: its "warms the reference index,
+    # so a local can be renamed without a rehearsal" example goes red if
+    # the call below is removed.
     def prepare_rename_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = analyzable_document(@document_store.fetch(uri: uri))
@@ -3100,11 +3110,13 @@ module Ovallsp
     # the fallback exists at all, and why it has to be the *name* it
     # matches on rather than the enclosing range.
     #
-    # `textDocument/documentHighlight` is deferred to 0.3.0 with the
-    # capability row that named it. Note when it returns: References and
-    # Rename call `ensure_reference_index_current` after this, and that
-    # rebuild is O(workspace) while the editor asks for highlights on
-    # every cursor move.
+    # `textDocument/documentHighlight` was deferred to 0.3.0 with the
+    # capability row that named it. It answers here now, through
+    # `#document_highlight_result`. The caution this comment was left to
+    # carry is what the shipped design settled: References and Rename
+    # call `ensure_reference_index_current` after this and
+    # documentHighlight does not, because that rebuild is O(workspace)
+    # while the editor asks for highlights on every cursor move.
     def symbol_id_and_range_at(document, summary, uri, position)
       candidate = summary.reference_candidates.find { |c| position_within?(c.location, position) }
       if candidate

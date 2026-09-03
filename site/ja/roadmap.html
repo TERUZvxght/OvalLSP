@@ -80,7 +80,10 @@
       <h1>各リリースで何ができるようになるか</h1>
       <p class="lede">
         ユーザーが気づく順に並べています。ここでのバージョン番号は
-        <em>何が同時に届くか</em> の約束であって、日付ではありません。パッチリリースは設計上ここに現れません — 新しく告知するものがないからです。すでにした約束が実際に果たされるのはパッチです。
+        <em>何が同時に届くか</em> の約束であって、日付ではありません。下の<em>予定</em>に並ぶのは
+        マイナーとメジャーだけです — パッチは新しく何かを約束するものではなく、すでにした約束が
+        実際に果たされる場だからです。出荷済みのパネルにはパッチリリースも含めてあります。何を直した
+        のかを後から引けることに意味があるからです。
       </p>
     </div>
   </section>
@@ -90,7 +93,7 @@
       <div class="grid grid--3">
         <div class="card card--flat">
           <h3 class="mono" style="font-size:1rem">patch — 0.1.<em>x</em></h3>
-          <p>ユーザーから見える変更なし。修正、堅牢化、テスト。機能の行が増えることはありません。</p>
+          <p>新しく告知するものはありません。すでにどこかのリリースが主張していたことを、実際にできるようにします。ユーザーから見える挙動は変わり得ますし（バグ修正とはそういうものです）、すでにできると理解されていた事柄を指す行であれば、機能の行が追加されたり ✅ になったりすることもあります。</p>
         </div>
         <div class="card card--flat">
           <h3 class="mono" style="font-size:1rem">minor — 0.<em>x</em>.0</h3>
@@ -246,6 +249,53 @@
                       <span><strong>テストスイートが起動のたびにキャッシュの権限を付け直すのをやめ、</strong>誰にも気づかれずに古くなっていた3つの文書は、代わりに検査が落ちるようになりました &mdash; 2つのプロセス間のプロトコル、リリースのブランチを名指す記録、そして2リリース前に廃止されたブランチ名の綴りをまだ探していた番人です。</span>
                     </li>
           </ul>
+        </article>
+
+        <article class="tl-item" id="v030">
+          <div class="tl-version">
+            <span class="v">0.3.0</span>
+            <span class="mark mark--yes">公開済み</span>
+          </div>
+          <h3>エディタでできることが 8 つ増え、gem が定義しているものを知るようになりました</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>Article.all.</code> で補完が出ます。</strong><code>Relation</code> が自分の持つもの——<code>where</code>・<code>order</code>・<code>limit</code>、およびそれらが作るチェーン——を答えます。以前は2つ目のリンクで型を失っていました。何も出なかったところに<strong>228 項目</strong>です。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>gem を継承したクラスでも未知メソッドが報告されます</strong> — <code>ApplicationController</code>、つまり大半のコントローラやジョブです。Runtime Agent が動作中のアプリケーションのロード済みモジュールを走査し、継承の連鎖がすべて判明していて、そのどこにも <code>method_missing</code> が定義されていない場合にのみ発火します。受け手が呼び出し時に答えられる場合は黙ります。モデルが決して報告されないのはそのためです。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>インレイヒント。</strong> ローカル変数への代入のあとに推論した型を、各引数の前にそれが渡される仮引数名を表示します。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>クイックフィックス。</strong> 未知と報告されたメソッドの <code>def</code> を、呼び出したクラスの中に挿入します。未知のルートヘルパーを、アプリが実際に持つ最も近いものに置き換えます。引数が多すぎる呼び出しから余剰分を削除します。すべての診断に 1 つずつではなく、この 3 つです。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>型定義へのジャンプ</strong> — 値を作ったメソッドではなく、式が評価される先のクラスへ飛びます。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>コール階層</strong> — このメソッドを誰が呼んでいるか（ファイルをまたいで）、そしてこのメソッドが何を呼んでいるか。それぞれ呼び出し側メソッド内での呼び出し範囲付きです。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>ドキュメント内ハイライト。</strong> カーソル下のローカル変数の出現箇所だけが光ります。別スコープの同名変数は光りません。各箇所は読み取りか書き込みかで区別されます。メソッド名の上なら、その宣言とファイル内の呼び出し箇所です。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>@</code> を打った時点でのインスタンス変数名の補完。</strong> いま書いているメソッドが代入したものだけでなく、クラスがどこかで代入しているインスタンス変数から提示します。</span>
+            </li>
+          </ul>
+          <p class="text-mute">
+            全項目は
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>
+            にあります。すべてのリリースはそこに完全な形で記録されています。
+          </p>
         </article>
 
         <article class="tl-item" id="v0218">
@@ -718,56 +768,6 @@
           </p>
         </article>
 
-        <article class="tl-item tl-item--future" id="v0215">
-          <div class="tl-version"><span class="v">0.2.15</span></div>
-          <h3>精度の系列</h3>
-          <ul class="feature-list">
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>未解決のエンジン欠陥。新しい告知はありません。</strong> パッチリリースは、拡張が既に主張していたことと実際の挙動との差を埋めます。0.2.14 からは、直前のリリースに限らず過去のいずれかの主張との差を埋めてよくなりました。ここでケイパビリティは追加しません。それがパッチである所以です。</span>
-            </li>
-          </ul>
-        </article>
-
-        <article class="tl-item tl-item--future" id="v030">
-          <div class="tl-version"><span class="v">0.3.0</span></div>
-          <h3>gem が定義しているものを知る</h3>
-          <ul class="feature-list">
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong><code>Article.all.</code> で補完が出ます。</strong><code>Relation</code> が自分の持つもの——<code>where</code>・<code>order</code>・<code>limit</code>、およびそれらが作るチェーン——を答えます。hover は既に型名を答えますが、Relation 自身の API が何であるかを教えるものが無く、それを供給するのが上の gem 索引です。</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>gem を継承したクラスでも未知メソッドが報告される</strong> — <code>ApplicationController</code>、つまり大半のコントローラやジョブです。現在は、報告すれば推測になってしまうため、意図的に黙っています。</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>インレイヒント。</strong> 推論された型と引数名が、ホバーしたときだけでなくコード中に表示されます。</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>各診断に対するクイックフィックス。</strong> 足りないメソッドを定義する、ルートヘルパ名を直す、引数の個数を合わせる。</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>型定義へのジャンプ</strong> — 呼び出しているメソッドではなく、式が評価されるクラスへ飛びます。</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>コール階層</strong> — 参照の平坦なリストではなく、呼び出し元と呼び出し先をたどれる形で。</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>カーソル下のシンボルの他の出現箇所をハイライトします。</strong> ファイル内が対象です。</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong><code>@ivar</code> の名前を、記号を打った瞬間に補完します。</strong></span>
-            </li>
-          </ul>
-        </article>
-
         <article class="tl-item tl-item--future" id="v040">
           <div class="tl-version"><span class="v">0.4.0</span></div>
           <h3>細部の調整</h3>
@@ -819,7 +819,7 @@
       <h2>この一覧はどう決めたか</h2>
       <p>
         各項目は<a href="capabilities.html">機能マトリクス</a>の行に対応しています。マトリクスの行を持たないロードマップ項目はなく、届くリリースが明示されていないマトリクスの行もありません。
-        0.2.0 の最初の 3 項目は Pylance を基準にしています。動的型付け言語の言語サーバーとして、最もよく知られた参照点だからです。プロジェクト全体の診断（今は、見ていないファイルの間違いは見えません）、ホバーでのドキュメント表示（ホバーはそれが何であるかは言うが、何のためかは言いません）、セマンティックハイライト（Ruby の <code>foo</code> はローカル変数かメソッド呼び出しか曖昧で、エンジンはすでに知っていて、エディタは知りません）の 3 つです。
+        0.2.0 の項目のうち 3 つは Pylance を基準にしています。動的型付け言語の言語サーバーとして、最もよく知られた参照点だからです。数えるのではなく名指しします。この一覧の最初の 3 項目ではないからです。プロジェクト全体の診断（0.2.0 より前は、見ていないファイルの間違いは見えませんでした）、ホバーでのドキュメント表示（ホバーはそれが何であるかは言うが、何のためかは言いませんでした）、セマンティックハイライト（Ruby の <code>foo</code> はローカル変数かメソッド呼び出しか曖昧で、エンジンはすでに知っていて、エディタは知りません）の 3 つです。
       </p>
       <p>
         あえて<em>予定しない</em>ことにした Pylance 相当の機能も、その理由とともに
@@ -829,7 +829,7 @@
 
       <h2>リリース済みのバージョンはどこに記録されているか</h2>
       <p>
-        このページが扱うのは、まだ出荷されていないものです。出荷済みの内容は
+        上の「公開済み」の各パネルは、そのリリースで何が増えたかの記録です。まだ出荷されていないものは、年表の末尾に置いています。出荷済みの内容は
         — なぜその変更を行ったか、何を測ったか、どの案が否定されたかも含めて —
         リリースごとに<a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>にあります。
       </p>
@@ -839,7 +839,7 @@
   <section class="section">
     <div class="wrap">
       <div class="cta">
-        <h2>上のすべては未実装です。では、実装済みは？</h2>
+        <h2>上の大半はすでに出荷済みです。では、どこで検証されているのか？</h2>
         <p>機能マトリクスは、出荷済みの各機能について、そのテストが実際に動いている環境を示しています。</p>
         <div class="btn-row">
           <a class="btn btn--primary" href="capabilities.html">今動くものを見る</a>

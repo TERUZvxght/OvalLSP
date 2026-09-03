@@ -81,7 +81,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion: Active Record `Relation` API (`where`, `order`, `limit`) | ✅ | — (no Runtime Agent) | — |
 | Inlay hints (inferred types, parameter names) | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Code actions / quick fixes for each diagnostic | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Code actions / quick fixes (three of them) | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Go to type definition | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Call hierarchy (callers and callees) | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Document highlight (occurrences within a file) | ✅ | ⚠️ | ⚠️ 1.0.0 |
@@ -163,13 +163,16 @@ Anyone changing this project should also read
 documents — including the pages under `site/` — a given kind of change
 makes stale, and which of those pairs a test already checks.
 
-The two unknown-method rows above fire only on a receiver whose whole
-ancestry is known — a workspace class, or an Active Record model, whose
-methods the Runtime Agent reports. A class inheriting from a gem
-(`ApplicationController`, and so most controllers and jobs) is silent
-instead, deliberately: reporting there would mean guessing. Indexing what
-the gems actually define is what lifts that, and is why the row above
-carries 0.3.0.
+The unknown-method rows above fire only on a receiver whose whole
+ancestry is known — a workspace class, an Active Record model, or, since
+0.3.0, a class inheriting from a gem, because the Runtime Agent reports
+what the running application's own classes define. That third case
+(`ApplicationController`, and so most controllers and jobs) was silent
+through 0.2.18, deliberately: reporting there would have meant
+guessing. Indexing what the gems actually define is what lifted that, and
+it shipped in 0.3.0: the running application's own class list is what
+makes such a receiver knowable, so the call *is* reported now, and the
+row above no longer carries 0.3.0.
 
 The inverse case — a workspace file that *reopens* a gem class, which
 looks identical to one that defines it — was a false positive through

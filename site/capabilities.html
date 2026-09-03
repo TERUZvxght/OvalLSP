@@ -99,7 +99,7 @@
           <p class="mt-2">May well work — much of the engine is environment-independent — but nothing verifies it, so nothing is promised.</p>
         </div>
         <div class="card card--flat">
-          <span class="mark mark--plan">0.3.0</span>
+          <span class="mark mark--plan">0.4.0</span>
           <p class="mt-2">Not built yet; the release it is planned for. Alongside “unverified” it means planned for that release but still unverified there.</p>
         </div>
         <div class="card card--flat">
@@ -178,7 +178,7 @@
             <tr data-status="verified"><td>Semantic highlighting (local variable vs. method call), in <code>.rb</code> and in an ERB template's Ruby regions</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="verified"><td>Completion: Active Record <code>Relation</code> API (<code>where</code>, <code>order</code>, <code>limit</code>)</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--none">no Runtime Agent</span></td><td class="col-status"><span class="mark mark--none">n/a</span></td></tr>
             <tr data-status="verified"><td>Inlay hints (inferred types, parameter names)</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
-            <tr data-status="verified"><td>Code actions / quick fixes for each diagnostic</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
+            <tr data-status="verified"><td>Code actions / quick fixes (three of them)</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="verified"><td>Go to type definition</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="verified"><td>Call hierarchy (callers and callees)</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="verified"><td>Document highlight (occurrences within a file)</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
@@ -203,9 +203,12 @@
         The two unknown-method rows fire only on a receiver whose whole ancestry is known —
         a workspace class, or an Active Record model whose methods the Runtime Agent
         reports. A class inheriting from a gem — <code>ApplicationController</code>, and so
-        most controllers and jobs — is silent instead, deliberately: reporting there would
-        mean guessing. Indexing what the gems actually define is what lifts that, and is why
-        the row carries <a href="roadmap.html#v030">0.3.0</a>.
+        most controllers and jobs — used to be silent instead, deliberately: reporting there
+        would have meant guessing. Indexing what the gems actually define is what lifts that,
+        and <a href="roadmap.html#v030">0.3.0</a> shipped it — which is why the row above now
+        reads Verified. The check still declines where a class's body carries a macro this
+        extension does not model — <code>before_action</code>, <code>helper_method</code>,
+        <code>rescue_from</code> — which in a Rails application is nearly every controller.
       </p>
 
       <h3>The inverse case: a file that reopens a gem class</h3>

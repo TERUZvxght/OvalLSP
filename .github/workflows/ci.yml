@@ -173,8 +173,8 @@ jobs:
     # effort". The decision that a 4.0-specific failure gets recorded
     # rather than fixed was scoped to the 0.2.x line and that line is
     # closed; what replaces it is that such a failure gets a register
-    # entry with a release on it. `024.288` is the one open instance and
-    # it is owed by 0.3.2. The job still never gates: naming a release
+    # entry with a release on it. `024.288` was the one instance, and it
+    # was fixed in 0.3.2. The job still never gates: naming a release
     # commits to fixing one report, not to making 4.0 required, and a
     # required job would still turn the first failure into work nobody
     # agreed to do. What

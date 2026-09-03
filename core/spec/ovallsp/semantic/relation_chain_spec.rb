@@ -80,7 +80,12 @@ RSpec.describe "a relation chain" do
   # diagnostic consumes: a chain that used to end in `Unknown` now ends
   # in `Relation[Post]`, and a check that declines on `Unknown` no
   # longer has cause to. Confirming the report itself needs the e2e
-  # path with a real Agent, and that is `024.87`'s remaining half.
+  # path with a real Agent, which `024.87` called its remaining half.
+  # 0.3.0 added it: `G19` in `core/spec/e2e/capabilities_spec.rb`
+  # measures the same chain through the real server, and the answer is
+  # that silence is correct there -- a relation reaches
+  # `ActiveRecord::AttributeMethods`, which answers at call time, so a
+  # report would be a wrong answer. The entry closed with it.
 
   # The distinguishing half. A method that does *not* return a relation
   # must not become one, or "everything on a Relation is a Relation"
