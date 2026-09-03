@@ -222,7 +222,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.3.2 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
 | [`024.43`](024-deferred-review-findings-resolved.md#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | fixed | 0.2.16 | Signature help answers nothing for a receiverless stdlib call |
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.4.0 | A partial's local is not resolved, and C11's stated basis names it |
-| [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.3.2 | Re-analysis after a keystroke is seconds on a large file, against a … |
+| [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.4.0 | Re-analysis after a keystroke is seconds on a large file, against a … |
 | [`024.46`](024-deferred-review-findings-resolved.md#02446-typing-self-cost-55-false-diagnostics-and-was-rolled-back) | fixed | 0.2.1 | Typing `self` cost 55 false diagnostics and was rolled back |
 | [`024.47`](#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | open | 0.3.2 | A namespaced class named after a core class loses its diagnostics, a… |
 | [`024.48`](024-deferred-review-findings-resolved.md#02448-the-measurement-tool-ran-an-engine-the-server-never-runs) | fixed | 0.2.1 | The measurement tool ran an engine the server never runs |
@@ -326,7 +326,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.148`](024-deferred-review-findings-resolved.md#024148-the-check-for-did-the-suite-actually-run-could-not-fail-in-the-case-it-existed-for) | fixed | 0.2.14 | The check for "did the suite actually run" could not fail in the cas… |
 | [`024.149`](024-deferred-review-findings-resolved.md#024149-a-review-harness-that-reports-nothing-found-when-its-own-post-processing-crashed) | fixed | 0.2.14 | A review harness that reports "nothing found" when its own post-proc… |
 | [`024.150`](024-deferred-review-findings-resolved.md#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | fixed | 0.2.18 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
-| [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.3.2 | A check can be disabled, and no check notices |
+| [`024.151`](024-deferred-review-findings-resolved.md#024151-a-check-can-be-disabled-and-no-check-notices) | fixed | 0.3.2 | A check can be disabled, and no check notices |
 | [`024.152`](024-deferred-review-findings-resolved.md#024152-a-leak-check-counted-every-descriptor-in-the-process-and-flaked-under-load) | fixed | 0.2.14 | A leak check counted every descriptor in the process, and flaked und… |
 | [`024.153`](024-deferred-review-findings-resolved.md#024153-a-quarter-of-the-open-work-is-in-no-release-and-0-3-0-has-become-where-the-rest-goes) | fixed | 0.2.15 | A quarter of the open work is in no release, and 0.3.0 has become wh… |
 | [`024.154`](024-deferred-review-findings-resolved.md#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | fixed | 0.2.18 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
@@ -1920,7 +1920,7 @@ gaining a type is an answer where there is none.
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#publish_diagnostics`,
@@ -2115,6 +2115,8 @@ queried. Nothing in 0.3.0 moved that.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** Re-analysis cost
 against a stated budget. 0.2.18 moved the same measurement 5% and
 shipped as a patch.
+
+**Retargeted to 0.4.0.** Re-measured twice on a quiet machine, and the number is far worse than the entry carried: 10 keystrokes into a 4,662-line file take 525.9s to go quiet (521.6s on the first run, with a stray process pinning a core -- so that was not the cause), 51 publishes for 10 edits, hover median 0.124s and max 16.1s. The entry's own profile says why a patch cannot hold it: roughly half the time is constructing and hashing Index::SymbolId across the two indexes, with no single hotspot to remove, and the direction it names -- an identity computed once rather than per query -- is 024.230's neighbourhood and a release of its own. docs/PUBLISHING.md puts a change of that size outside the patch line. Moved with the measurement rather than with an estimate.
 ## 024.47 A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal
 
 ```yaml
@@ -3481,180 +3483,6 @@ not measured one.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** Measured at 0.16 ms
 per search over 2,000 classes -- cost, and small, so the patch line
 and not urgently.
-## 024.151 A check can be disabled, and no check notices
-
-```yaml
-status: open
-kind: defect
-user-visible: no
-user-visible-note: >
-  Internal, and it is the largest single class this project has
-  recorded: 55 confirmed instances from one review round. Nothing a
-  user meets; everything this project uses to decide whether a change
-  is sound.
-target: 0.3.2
-```
-
-### 0.2.18: the two checks that had no reachability assertion at all
-
-Surveyed rather than assumed. Of the seven `scripts/check_*.rb`, five
-have a spec that asserts how much they read — `doc_links` and
-`site_links` six ways, `home_paths` and `suites_ran` two,
-`interpreter_sessions` its `sessions=` count, which this session added
-for exactly this reason. **Two had none: `check_pinned_mutations` and
-`check_swallowed_failures`.**
-
-Both now do, and the two gaps are not the same size, which took driving
-to find out:
-
-- **`check_swallowed_failures` has no emptiness guard at all.** Its
-  `Dir.glob` returning nothing leaves `problems` empty, and empty is
-  what it reports as success. The spec now asserts it found at least 100
-  rescue sites in `core/lib` — a floor, because the exact number changes
-  every release and a scan that has stopped seeing the directory does
-  not return 140-something.
-- **`check_pinned_mutations` already refuses an empty manifest** — exit
-  1, with a message. *The first draft of this note said it did not, and
-  driving it said otherwise.* What nothing caught is a manifest cut to a
-  handful: not empty, consistent with itself, and it passed both
-  examples. The floor is 50.
-
-**This does not close the class.** 55 instances were confirmed and these
-are two; what it closes is the two checks whose own reachability nothing
-defended, which is the shape at its most embarrassing — a checker that
-guards other people's guarantees and not its own.
-
-**Retargeted to 0.3.0.** The remaining instances are spread across the
-tree and each needs its own assertion; the countermeasure is a habit
-(every check asserts what it read) rather than a change, and
-`pinned_mutations.yml` at 100 entries is that habit already working. It
-is not a defect one release closes.
-
-**Area:** `core/spec/meta/pinned_mutations.yml`,
-`scripts/check_pinned_mutations.rb`
-
-0.2.14's round 2 took twelve guarantees and tried to make each false
-while every check stayed green. **It succeeded against all twelve.** The
-individual breaks are recorded in
-`docs/design/tasks/046-0.2.14-making-the-record-true.md`; the class is
-one sentence:
-
-> The checks are correct. Their **reachability** is not defended.
-
-The sharpest instance, and the one that shows the shape: `SKIP` in
-`check_doc_links.rb` was an ordinary constant. Widening it dropped
-inspection from 537 files to 117, left a dangling citation in a
-`core/lib` source comment unreported, and all four examples passed —
-because the examples asserted *outcomes on fixtures*, and none asserted
-*how much of the tree was read*. The file's headline claim, "source
-comments are in scope, deliberately", was one edit away from false and
-nothing in the tree could tell.
-
-**This is `CLAUDE.md`'s oldest rule, applied one level up.** *Behaviour
-that no test fails on when it is reverted counts as a defect* — the
-checks are behaviour, and almost none of them was pinned.
-
-### What was built in 0.2.14, and why it is not enough
-
-- **Coverage floors.** A scanner reports what it read, per root, and a
-  spec asserts each is non-zero. Structural, so not a number to
-  maintain, and not a second copy of the exclusion. Applied to
-  `check_doc_links`.
-- **The mutation manifest reaches `scripts/`.** `042`'s D7 exists to ask
-  *does this example fail when the decision it names is inverted*, and
-  until now it could only ask that of `core/lib` — so no decision inside
-  a check could be pinned by the one mechanism built for pinning
-  decisions. Seven entries added: `SKIP`, the relative-link pass,
-  `--others`, the pending test, the `NOT YET` exemption, the
-  re-derivation refusal, the SBOM comparison.
-- Not the specs. The applier writes to the real file and restores it,
-  which is safe for a script a spec shells out to and is **not** safe
-  for a spec file, where the mutation could remove the example being
-  run. A decision inside a spec needs a second example instead.
-
-**What remains open is most of it.** 55 confirmed findings, and the
-honest statement is that they were fixed at the rate of one mechanism
-per class, not one patch per finding. In particular:
-
-- Several checks prove wiring by **substring search** — an error
-  message, an exemption comment, or a script's own usage string
-  satisfies them. `release_gate_spec` and `script_encoding_spec` are
-  both this shape.
-- `preflight.rb` is 178 lines of gate that no spec reads: the whole
-  thing can be reduced to a no-op with every check green.
-- Several scanners' scopes are hand-written glob or extension lists —
-  the exact defect the citation scanner was fixed for, in the scanners
-  that check the citation scanner.
-
-**Direction.** Not 55 patches. Two mechanisms, in this order:
-
-1. **Every check states its own coverage, and a spec asserts a floor on
-   it.** `check_doc_links` is the worked example. This kills the whole
-   "narrow the input" family at once.
-2. **Wiring is proved by execution, not by text.** A check that claims
-   something is invoked should invoke it, or read a manifest that does,
-   rather than grepping for its name. Every substring-based instance
-   collapses into this one.
-
-*Recorded rather than done, deliberately. `CLAUDE.md` bounds a review
-loop at three rounds finding defects and then says to ship with what is
-open written down — a 55-finding sweep started at round 2 is exactly the
-unbounded loop that rule exists to prevent, and the countermeasures
-above are worth more than the patches would be.*
-
-### The ten instances round 2 and round 3 confirmed, listed
-
-Recorded here rather than as ten entries: each is this class in a
-different check, and the register's rule is one entry per defect. The
-Direction below is what closes all ten; a patch that fixes one of them
-and not the shape has not closed anything.
-
-- **An Area line C3 cannot parse counts as naming no paths, so the path-existence guarantee is opt-out, and it never looks at a resolved entry at all**  
-  ``scripts/deferred_findings.rb` (`AREA_PATH`, `#area_paths`), `core/spec/meta/deferred_findings_spec.rb` ("names only paths that exist, in every open entry's Area"), `docs/design/tasks/024-deferred-review-findings.md` (024.25's Area line)` — 046's RC-3 is "pointers with no resolver", and C3 answers it for `**Area:**` lines. `AREA_PATH` matches only a backticked path rooted at `core|vscode|scripts|docs|site|.github`, and `area_paths` returns `[]` for anything else with no signal at all, so an entry the matcher cannot read is silently treated as making no claim rather than as an entry the check could not verify. Two of the 57 open defects are already outsi
-
-- **check_doc_links' unreadable-file and shallow-clone refusals are unpinned — append to 024.151 rather than opening separately**  
-  ``scripts/check_doc_links.rb` (lines 128-129 and 295-301), `core/spec/meta/pinned_mutations.yml`, `core/spec/meta/doc_links_spec.rb`` — The `unless unreadable.empty? … exit 1` block is 0.2.14's repair for a swallowed failure — its own comment says "until 0.2.14 this comment claimed and nothing did" and cites CLAUDE.md's rule — and it shipped with no test. Deleting the seven lines leaves the spec green while a tracked file that is not valid UTF-8 is dropped from `inspected` with no output at all, so a citation of a document that has never existed pass
-
-- **The SYNTHETIC allowlist can be widened to switch the detector off, and three documents cite it as the model of a guarded edit**  
-  `scripts/check_home_paths.rb, core/spec/meta/home_path_guard_spec.rb, core/spec/meta/measured_claims_spec.rb, core/spec/meta/no_wall_clock_thresholds_spec.rb, CLAUDE.md` — Adding one word to SYNTHETIC turns the detector off completely, and every check stays green: the list's contents are pinned nowhere, `pinned_mutations.yml` has no entry for this file, and the only names an addition cannot be are the four the examples plant (alice, tkato, bob, carol). The mechanism is 024.151's class — widening an allowlist constant is its sharpest recorded instance — but the second half is its own de
-
-- **release_gate_spec proves wiring by substring, so a mention, an error message or an echo counts as an invocation**  
-  `core/spec/meta/release_gate_spec.rb (`haystack_excluding`, the `include?(base)` test at line 117)` — The check's stated guarantee is that an executable cited in RELEASE_CHECKLIST's evidence column 'is invoked by something that runs'. It is implemented as: does this basename appear on a non-comment line anywhere under core/spec, scripts/, or the five named callers. Nothing distinguishes a call from a mention. Round 1's fix — excluding the candidate's own file — closed only the self-naming case; the same string in a d
-
-- **A row can be exempted invisibly and without limit, and the example guarding against the check going inert measures the unfiltered table**  
-  `core/spec/meta/release_gate_spec.rb (the `[unwired marker]` skip at line 107, the cell join at line 65, the floors at lines 135-136), docs/RELEASE_CHECKLIST.md` — Any row containing `[unwired marker]` is skipped. The marker renders as nothing, nothing bounds how many rows may carry it, and nothing enforces the prose requirement that an unwired row 'must still say what does enforce the item now'. Because line 65 joins the 状態 column with the evidence column, the marker also works from the status cell. The example written to stop the check going inert — 'finds evidence to check i
-
-- **release.sh's payload-hash, semantic-smoke and SBOM refusals are refusals only because of `set -euo pipefail`, and nothing pins that line**  
-  ``vscode/scripts/release.sh` (lines 23, 195-206), `core/spec/meta/release_script_guard_spec.rb`` — Three of the script's named guarantees — the packaged payload-hash check (line 196), the semantic smoke (line 199) and the SBOM-vs-artifact check (line 206) — are bare commands with no `||`, no `if` and no status test. That they refuse rather than log is entirely a property of `set -euo pipefail` on line 23, and nothing in the repository asserts that line exists: `release_script_guard_spec.rb` asserts only that the t
-
-- **No workflow guard pins that a gating CI step actually gates, so any of them can be switched off with every check green**  
-  `.github/workflows/ci.yml, core/spec/meta/ci_skip_guard_spec.rb, core/spec/meta/site_version_guard_spec.rb` — Every spec that guards a CI-only check locates its step in parsed YAML and then asserts the step's `run` text. None of them reads the two parsed-YAML keys GitHub Actions actually uses to decide whether a step runs and whether its failure fails the job -- `if` and `continue-on-error` -- and none rejects a `run` line whose exit status has been neutralised with `|| true`, `; true` or `set +e`, because the assertion is `
-
-- **The locale guarantee is proved by reading the scripts' text over a hand-written glob, and no script is ever executed under a bare locale**  
-  `core/spec/meta/script_encoding_spec.rb` — This is 024.151's own named instance ("`release_gate_spec` and `script_encoding_spec` are both this shape") given an exact reproduction and a one-line direction; record it under 024.151 if the maintainer prefers. The guarantee — every script in `scripts/` survives `LC_ALL=C` — is enforced entirely by reading source text, and every part of that reading is narrower than the claim. (a) Line 47 tests `File.read(...).incl
-
-- **The enumeration guard asserts no coverage, so narrowing its pathspecs to nothing leaves it green**  
-  `core/spec/meta/untracked_visibility_spec.rb` — Another instance of 024.151's class, in the file 024.147's countermeasure lives in. The third example builds `offenders` from `RepoFiles.list(UNTRACKED_ROOT, "scripts/*.rb", "core/spec/meta/*.rb")` and asserts it is empty. Nothing asserts the enumeration produced any files, and nothing asserts the needle logic would flag a planted offender, so an input of zero files is indistinguishable from a clean tree. The tree al
-
-- **design_doc_drift_spec's non-empty floor covers three of the six extractions the file reads, so §5 can pass comparing two empty lists**  
-  ``core/spec/meta/design_doc_drift_spec.rb` (the `extracts a non-empty list from each place it reads` example)` — The example exists because "[e]ach example above compares two lists, and would pass on two empty ones", and its name says it checks "each place it reads". It asserts three floors — §6's documented block, `contributes.commands`, `contributes.configuration.properties` — out of six extractions in the file. Nothing floors §5's documented block, nothing floors the status strings scanned out of clientPresentation.ts, and n
-
-**Re-triaged in 0.2.17** (`024.276`). Nothing about gems: the subject is whether this repository's own checks are *reachable*, and twelve of them were made false with every check green. It adds no capability, so it belongs on the patch line.
-
-0.2.17 paid several instalments of it — coverage floors on the measured-claim scanner and the home-path scanner, a reader for `released-in:` which had none, and a check that open entries do not repeat a justification word for word. Each is the shape this entry's Direction asks for: an answer where the value is produced, rather than an assertion at each reader.
-
-
-**Not taken in 0.3.0.** Defending the checks' reachability is a
-change to every checker, and this release instead spent its
-measurement on the entries the release owed. Worth noting from the
-sweep: two of 0.3.0's own checks *did* catch a disabled guard --
-`check_pinned_mutations` refused a `from:` that matched zero lines
-twice, and once that matched five -- so the class this entry names
-is real and the instances it names are not all still open.
-
-**Retargeted to 0.3.2 in 0.3.0's closing sweep.** The checks'
-reachability is this repository's own machinery, which the table puts
-on the patch line.
 ## 024.221 A block whose receiver cannot be vouched for contains a `private` that Ruby would let through
 
 ```yaml
