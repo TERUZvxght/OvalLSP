@@ -106,4 +106,331 @@ RSpec.describe "scripts/issues.rb" do
       expect(DeferredFindings.retired_numbers(markdown)).not_to include(allocated)
     end
   end
+
+  # **The two ends of an entry's life, as commands rather than as prose.**
+  #
+  # Opening one means allocating a number that has never been used,
+  # writing four enforced fields in the legend's shape, and taking the
+  # item back out of intake; closing one means moving it across two files
+  # *and* dealing with the paragraph each language publishes about it.
+  # `docs/ISSUES.md`'s "The rule" is the order those decisions are made
+  # in, and until this it was the only thing holding them together.
+  #
+  # These examples run the whole command, delegated scripts included, by
+  # giving the throwaway root a copy of `scripts/` — so what is asserted
+  # is that the register still passes its own guards afterwards, not that
+  # one substitution landed.
+  describe "opening and closing an entry" do
+    let(:issues_doc) { File.join(root, "docs", "ISSUES.md") }
+    let(:english) { File.join(root, "docs", "KNOWN_LIMITATIONS.md") }
+    let(:japanese) { File.join(root, "docs", "KNOWN_LIMITATIONS.ja.md") }
+
+    before do
+      %w[docs/ISSUES.md docs/KNOWN_LIMITATIONS.md docs/KNOWN_LIMITATIONS.ja.md].each do |relative|
+        FileUtils.cp(File.join(repo, relative), File.join(root, relative))
+      end
+      plant_intake_list
+      # The delegated guards resolve their own root from `__dir__`, so a
+      # copy of them here is a copy that reads *this* register. Without
+      # it they would read the real one, report it current, and say
+      # nothing about the file under test.
+      FileUtils.cp_r(File.join(repo, "scripts"), root)
+    end
+
+    # **The list these examples read is planted, not inherited.**
+    #
+    # They used the copied document's own items, which held both bullet
+    # shapes on the day they were written — and `promote` exists to
+    # empty that list. On a tree where it has done its job the four
+    # examples about the list fail for a reason unrelated to what they
+    # test, and the one that promotes every item runs its loop zero
+    # times and asserts a sentence nothing wrote. So the shapes are
+    # planted here: one as `intake add` writes it, one as a person
+    # writes it with the bold title wrapped, and the sentence that
+    # counts them.
+    # Methods rather than constants: a constant written inside a
+    # `describe` block lands on `Object`, which `spec_constants_spec`
+    # refuses.
+    def hand_written_title = "A hand-written item whose bold title wraps across two lines"
+
+    def added_title = "An item in the shape `intake add` writes"
+
+    def plant_intake_list
+      source = File.read(issues_doc, encoding: "UTF-8")
+      policy, index = source.split(/^(?=## Index$)/, 2)
+      head = policy.split(/^(?=## Intake$)/, 2).first
+
+      File.write(issues_doc, "#{head}## Intake\n\n#{planted_items}\n" \
+                             "**Two items above; the rest was emptied deliberately.** What follows is\n" \
+                             "the table of what left without a number.\n\n#{index}")
+    end
+
+    # Two literal bullets rather than two `intake add` calls, because the
+    # second shape is precisely the one that command does not produce:
+    # the bold title runs past the end of its own line and the prose
+    # carries on from where it closes.
+    def planted_items
+      "- **#{added_title}**\n" \
+        "  - found by: a spec\n" \
+        "  - what was seen\n" \
+        "  - #{Issues::INTAKE_UNVERIFIED}\n" \
+        "\n" \
+        "- **A hand-written item whose bold title wraps\n" \
+        "  across two lines** Seen while reading the list: the title runs past\n" \
+        "  the end of its own line, and the prose carries on from where the\n" \
+        "  bold closes.\n"
+    end
+
+    def promote(position, *extra)
+      Issues.run(["promote", position.to_s, "--kind=friction", "--target=0.4.0",
+                  "--area=`scripts/issues.rb`", "--direction=Give it a command.", *extra])
+    end
+
+    # `docs/ISSUES.md` is copied whole, items and all, so a planted one
+    # goes to the end of a list that already has entries — and its
+    # position is what `promote` is given.
+    def plant_intake(title)
+      Issues.run(["intake", "add", title, "--where=a spec", "--detail=what was seen"])
+      intake_titles.length
+    end
+
+    # The intake list itself, not the document: a promoted entry's title
+    # reappears in `docs/ISSUES.md` a moment later, in the generated index
+    # of open entries, so reading the whole file cannot tell "still in
+    # intake" from "promoted".
+    def intake_titles
+      Issues.intake_items(File.readlines(issues_doc, encoding: "UTF-8")).map { |(_, title, _)| title }
+    end
+
+    # A limitation section shaped the way the real pages shape one: a
+    # heading, prose, and the marker at the end of the line that
+    # documents the finding.
+    def publish(number, heading)
+      [english, japanese].each do |path|
+        File.write(path, "#{File.read(path, encoding: 'UTF-8')}\n\n## #{heading}\n\n" \
+                         "What a reader would meet. <!-- documents: #{number} -->\n")
+      end
+    end
+
+    describe "the intake list" do
+      # **Two shapes are in the list today.** `intake add` writes the
+      # title on one line and the detail as sub-bullets; an item written
+      # by hand wraps the bold title across lines and continues in prose
+      # on the line that closes it. A reader that only understood the
+      # first saw none of the second, and reported an intake list with
+      # items in it as empty — which is what `promote <n>` counts
+      # positions in.
+      it "reads an item whose bold title wraps across lines" do
+        expect(intake_titles).to include(hand_written_title)
+      end
+
+      it "counts what `intake add` writes and what is written by hand as one list" do
+        plant_intake("A thing that was noticed")
+
+        expect(intake_titles).to eq([added_title, hand_written_title, "A thing that was noticed"])
+      end
+
+      # **And the real document is still read**, because everything above
+      # reads a planted one. Not its contents — those are what `promote`
+      # exists to change — but that the list this tool is aimed at parses
+      # at all, and that no title comes back spanning lines.
+      it "reads the intake list of the document it is actually aimed at" do
+        titles = Issues.intake_items(File.readlines(File.join(repo, "docs", "ISSUES.md"), encoding: "UTF-8"))
+                       .map { |(_, title, _, _)| title }
+
+        expect(titles).to all(satisfy { |title| !title.include?("\n") && !title.strip.empty? })
+      end
+
+      # The words are written out rather than asked of `count_word`: an
+      # expectation the subject computes cannot fail when the subject is
+      # wrong. Two planted items, so one added makes three.
+      it "keeps the count sentence current when an item arrives" do
+        plant_intake("A thing that was noticed")
+
+        lines = File.readlines(issues_doc, encoding: "UTF-8")
+        sentence = lines.index { |line| line.match?(Issues::INTAKE_COUNT) }
+        expect(lines.join).to include("**Three items above;")
+        expect(Issues.intake_items(lines).map(&:first)).to all(be < sentence),
+                                                          "an item was written below the sentence counting it"
+
+        # **Above the sentence is not enough**, and the mutation manifest
+        # said so: inserting at the sentence is also above it, and lands
+        # the bullet across the blank line from the list and hard against
+        # the paragraph — one list broken into two, with the sentence
+        # swallowed. The item joins the run, and the blank that separates
+        # the run from the sentence stays where it is.
+        planted = Issues.intake_items(lines).find { |(_, title, _, _)| title == "A thing that was noticed" }
+        expect(lines[planted.first - 1].strip).not_to be_empty,
+                                                      "the new bullet was written across a blank from the list"
+        expect(lines[sentence - 1].strip).to be_empty,
+                                             "the sentence lost the blank line separating it from the list"
+      end
+
+      # **Zero keeps the same sentence.** The list read "Empty, and
+      # emptied deliberately" before it had items, and going back to that
+      # wording at zero would take the sentence out of `INTAKE_COUNT`'s
+      # reach — so the next item to arrive would restore a list under a
+      # sentence nothing could restate, and the count would go stale
+      # silently. One shape, always findable, is the property worth more
+      # than the nicer wording.
+      #
+      # **Asserted as the words.** Matching `INTAKE_COUNT` alone proves
+      # nothing about them: its first group is `\S+`, so a count rendered
+      # as a digit satisfies it, and so does anything else non-blank. The
+      # mutation manifest reported this example as pinning nothing, and
+      # was right twice over — on an emptied list the loop below also ran
+      # zero times, asserting a sentence no promote had written.
+      it "says 'No items above' once the list empties, in a sentence still findable" do
+        expect(intake_titles.length).to be > 1, "the loop below would assert a sentence nothing wrote"
+        intake_titles.length.times do
+          expect(promote(1, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
+        end
+
+        body = File.read(issues_doc, encoding: "UTF-8")
+        expect(intake_titles).to be_empty
+        expect(body).to include("**No items above;")
+        expect(body).to match(Issues::INTAKE_COUNT)
+      end
+
+      # The list's own sentence says how many items stand above it, and a
+      # count nobody updates is the class of claim this repository
+      # re-derives rather than types.
+      # Two planted items, so one promoted leaves one — and the singular
+      # is part of the claim: "One items above" is what a count rendered
+      # without it would say.
+      it "keeps the count sentence current when an item leaves" do
+        expect(File.read(issues_doc, encoding: "UTF-8")).to include("**Two items above;")
+
+        expect(promote(1, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
+
+        expect(intake_titles.length).to eq(1)
+        expect(File.read(issues_doc, encoding: "UTF-8")).to include("**One item above;")
+      end
+    end
+
+    describe "promote" do
+      it "moves an intake item into the register under a number never used before" do
+        at = plant_intake("A thing that was noticed")
+        allocated = Issues.next_number
+
+        expect(promote(at, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
+
+        entry = Issues.find(allocated)
+        expect(entry).not_to be_nil, "no entry #{allocated} after promote"
+        expect(entry.title).to eq("A thing that was noticed")
+        expect(entry.meta).to include("status" => "open", "kind" => "friction", "target" => "0.4.0")
+        expect(entry.body).to include("what was seen")
+        expect(entry.body).not_to include(Issues::INTAKE_UNVERIFIED),
+                                  "promoting an item is the claim that it was driven"
+        expect(intake_titles).not_to include("A thing that was noticed")
+      end
+
+      it "refuses a defect that does not say whether a user meets it" do
+        at = plant_intake("A wrong answer")
+        before_refusal = Issues.next_number
+
+        expect(Issues.run(["promote", at.to_s, "--kind=defect", "--target=0.4.0",
+                           "--area=`scripts/issues.rb`", "--direction=Fix it."])).to eq(2)
+        expect(Issues.next_number).to eq(before_refusal), "a refused promote still spent a number"
+        expect(intake_titles).to include("A wrong answer")
+      end
+
+      it "refuses `user-visible: no` with no reason, which the register's own guard demands" do
+        at = plant_intake("A thing nobody meets")
+
+        expect(promote(at, "--user-visible=no")).to eq(2)
+        expect(intake_titles).to include("A thing nobody meets")
+      end
+
+      # Everything else about this invocation is valid, so the only thing
+      # left to refuse on is the position. Without that the example
+      # passes on whichever refusal happens to come first, which is a
+      # test of the option parser wearing this one's name.
+      it "refuses a position the intake list does not have" do
+        past_the_end = intake_titles.length + 1
+
+        expect(promote(past_the_end, "--user-visible=no", "--note=Internal to this repository.")).to eq(2)
+      end
+
+      # **The control.** Every example above asserts a refusal, and a
+      # command that refused everything would satisfy all of them. This
+      # one says the register is still a register afterwards: its own
+      # three guards, run against the file the command wrote.
+      it "leaves the register passing the guards it delegates to" do
+        at = plant_intake("A thing that was noticed")
+
+        expect(promote(at, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
+      end
+
+      # **A delegated script's refusal is its message, not its status.**
+      # Running them with the output discarded meant the reason was
+      # thrown away and only "FAILED" survived — the shape this
+      # repository calls a checker that cannot say what it saw. Planted
+      # by replacing the copy in this root, which is the seam the whole
+      # describe block already turns on.
+      it "prints the delegated script's own message when one refuses" do
+        File.write(File.join(root, "scripts", "reindex_findings.rb"),
+                   "warn 'reindex-findings: the register is out of order'\nexit 1\n")
+        at = plant_intake("A thing that was noticed")
+
+        expect { expect(promote(at, "--user-visible=no", "--note=Internal.")).to eq(2) }
+          .to output(/the register is out of order/).to_stderr
+      end
+    end
+
+    describe "close" do
+      def open_a_published_entry
+        at = plant_intake("A thing a user meets")
+        number = Issues.next_number
+        promote(at, "--user-visible=yes")
+        publish(number, "Something a user meets")
+        number
+      end
+
+      it "refuses while either language still publishes a paragraph for it" do
+        number = open_a_published_entry
+
+        expect(Issues.run(["close", number, "--released-in=0.4.0"])).to eq(2)
+        expect(Issues.find(number).status).to eq("open")
+      end
+
+      it "closes it, and drops the section both languages published, when told to" do
+        number = open_a_published_entry
+
+        expect(Issues.run(["close", number, "--released-in=0.4.0", "--drop-paragraphs"])).to eq(0)
+
+        entry = Issues.find(number)
+        expect(entry.status).to eq("fixed")
+        expect(entry.meta["released-in"]).to eq("0.4.0")
+        expect(entry.archived).to be(true), "a resolved entry left in the live file breaks the split"
+        expect(Issues.published_in(number)).to be_empty
+        expect(File.read(english, encoding: "UTF-8")).not_to include("Something a user meets")
+        expect(File.read(japanese, encoding: "UTF-8")).not_to include("Something a user meets")
+      end
+
+      it "refuses an entry that is already resolved" do
+        number = open_a_published_entry
+        Issues.run(["close", number, "--released-in=0.4.0", "--drop-paragraphs"])
+
+        expect(Issues.run(["close", number, "--released-in=0.4.0"])).to eq(2)
+      end
+
+      it "refuses a number no entry carries" do
+        expect(Issues.run(["close", unspellable_number(997), "--released-in=0.4.0"])).to eq(2)
+      end
+
+      # **The control for the paragraph half.** Without it, a `close`
+      # that never looked at either document would pass every example
+      # above: the refusal ones by refusing, and the closing one by
+      # closing.
+      it "closes an entry no language publishes without being told to drop anything" do
+        at = plant_intake("A thing nobody meets")
+        number = Issues.next_number
+        promote(at, "--user-visible=no", "--note=Internal to this repository.")
+
+        expect(Issues.run(["close", number, "--released-in=0.4.0"])).to eq(0)
+        expect(Issues.find(number).status).to eq("fixed")
+      end
+    end
+  end
 end

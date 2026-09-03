@@ -1,0 +1,120 @@
+# The rows of `docs/DOCUMENTATION_MAP.md`'s trigger table that a machine
+# can read, as data. `scripts/doc_triggers.rb` reads this;
+# `core/spec/meta/doc_triggers_spec.rb` drives that against a planted
+# rule and holds this file to its own shape.
+#
+# A rule is: when any of `when` changed on this branch and none of `then`
+# did, print `note` and fail.
+#
+# **Two things decide whether a row belongs here.**
+#
+# - Its left column has to be a *set of files*. "A change reverted
+#   mid-release" and "a review round finding the same place the previous
+#   round did" are judgements no scanner makes, and they stay prose.
+# - Nothing else may already check the pair. A rule restating
+#   `scripts/check_protocol_doc.rb`, `design_doc_drift_spec` or
+#   `swallowed_failures_spec` would be a second and weaker implementation
+#   of a check that exists, which is the arrangement `024.216` counted
+#   six of. Each rule below says what it adds that nothing else has.
+#
+# `id` is what the trigger table's row cites, so a reader who has been
+# sent to the document can find the rule that fired.
+
+- id: version-files
+  when:
+    - core/lib/ovallsp/version.rb
+    - vscode/package.json
+  then:
+    - core/Gemfile.lock
+    - vscode/package-lock.json
+    - site/index.html
+    - site/ja/index.html
+    - vscode/CHANGELOG.md
+    - vscode/CHANGELOG.ja.md
+  note: >-
+    A version moves in six other places. check_site_links.rb compares the
+    badge against package.json and versionPairing.test.ts compares the
+    pair, but nothing notices a lock file left behind — and 0.2.2 shipped
+    a stale badge because the check that would have seen it only ran when
+    a site file changed.
+
+- id: capability
+  when:
+    - docs/EXTENSION_CAPABILITIES.md
+    - docs/EXTENSION_CAPABILITIES.ja.md
+  then:
+    - README.md
+    - README.ja.md
+    - site/capabilities.html
+    - site/ja/capabilities.html
+    - vscode/CHANGELOG.md
+    - vscode/CHANGELOG.ja.md
+  note: >-
+    A capability is described for three audiences. capability_coverage_spec
+    pairs a row with its E2E example and the parity specs pair the two
+    languages; nothing pairs the document with the README matrix and the
+    site, which is how 0.2.0 shipped six capabilities without a row.
+
+- id: privacy
+  when:
+    - vscode/PRIVACY.md
+    - vscode/PRIVACY.ja.md
+  then:
+    - site/security.html
+    - site/ja/security.html
+    - docs/SECURITY_CHECKLIST.md
+    - vscode/CHANGELOG.md
+    - vscode/CHANGELOG.ja.md
+  note: >-
+    PRIVACY is the single source of truth for what the extension records
+    and writes to disk, and several documents restate it.
+    privacy_parity_spec compares the two languages only, so a restatement
+    left behind is invisible — both changelogs went stale against it for a
+    whole round.
+
+- id: security-surface
+  when:
+    - SECURITY.md
+    - SECURITY.ja.md
+  then:
+    - site/security.html
+    - site/ja/security.html
+    - docs/EXTENSION_CAPABILITIES.md
+  note: >-
+    What the extension executes, and workspace trust, are stated for a
+    reader on the site as well as in the repository.
+    security_parity_spec compares the two languages and reaches neither
+    page.
+
+- id: support-surface
+  when:
+    - vscode/src/platformCompatibility.ts
+    - vscode/src/versionInfo.ts
+    - vscode/src/rubyResolver.ts
+  then:
+    - docs/SUPPORT_MATRIX.md
+    - docs/SUPPORT_MATRIX.ja.md
+    - vscode/README.md
+    - vscode/README.ja.md
+    - docs/KNOWN_LIMITATIONS.md
+  note: >-
+    These three files decide which Ruby, Rails and platform the product
+    accepts, and four documents state it — one of them the Marketplace
+    description. supported_versions_spec compares the Ruby patch releases
+    those documents name against each other and against ci.yml; it says
+    nothing about the code that does the accepting.
+
+- id: release-procedure
+  when:
+    - vscode/scripts/release.sh
+    - scripts/preflight.rb
+    - scripts/release.rb
+  then:
+    - docs/PUBLISHING.md
+    - docs/RELEASE_CHECKLIST.md
+    - docs/DEVELOPMENT.md
+  note: >-
+    A person is told what to run in three documents, and the procedure
+    runs somewhere else. release_script_guard_spec drives release.sh's own
+    refusals and reaches none of the three — `024.171` is a fix applied
+    where the procedure runs and not where a person is told what to run.

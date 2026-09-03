@@ -8,24 +8,39 @@
 # document quietly starts describing a different product -- and this pair
 # is worse than most, because both are shipped inside the VSIX and one of
 # them is what a Japanese-reading user sees on the Marketplace page.
+require_relative "../../../scripts/changelog"
+require_relative "../../../scripts/check_changelog"
+
 RSpec.describe "changelog parity" do
-  CHANGELOG_EN = File.expand_path("../../../vscode/CHANGELOG.md", __dir__)
-  CHANGELOG_JA = File.expand_path("../../../vscode/CHANGELOG.ja.md", __dir__)
+  CHANGELOG_ROOT = File.expand_path("../../..", __dir__)
+  CHANGELOG_EN = File.join(CHANGELOG_ROOT, Changelog::EN)
+  CHANGELOG_JA = File.join(CHANGELOG_ROOT, Changelog::JA)
 
   # Read with an explicit encoding, never the locale's: the Japanese file
   # is entirely non-ASCII, and under a C/POSIX locale `File.read` hands
   # back US-ASCII and every scan raises. That has already broken this
   # project once.
-  def versions(path)
-    File.read(path, encoding: "UTF-8").scan(/^## (\d+\.\d+\.\d+)/).flatten
-  end
+  def read(path) = File.read(path, encoding: "UTF-8")
+
+  # Through `Changelog`, which is where the shape lives now. This file
+  # had its own scanner for each of these questions, and
+  # `scripts/check_changelog.rb` would have been a second one -- the
+  # arrangement `024.216` counted six of, each reader the only reader
+  # of its own result.
+  def versions(path) = Changelog.versions(read(path))
 
   it "documents the same releases in both languages, in the same order" do
     expect(versions(CHANGELOG_JA)).to eq(versions(CHANGELOG_EN))
   end
 
-  it "documents the version this build ships as" do
-    expect(versions(CHANGELOG_EN).first).to eq(Ovallsp::VERSION)
+  # The version the *check* would use, not `Ovallsp::VERSION` alone: on a
+  # release branch the newest section is the release being prepared and
+  # `VERSION` is still the one that shipped, and this example failed on
+  # every commit of that window.
+  it "documents the version this build is for" do
+    expected = CheckChangelog.expected_version(nil, CheckChangelog.branch, Ovallsp::VERSION)
+
+    expect(versions(CHANGELOG_EN).first).to eq(expected)
   end
 
   it "links each language's changelog to the other" do
@@ -37,15 +52,17 @@ RSpec.describe "changelog parity" do
   # with that, and the reasoning lives under a Details heading below it.
   # Pinned because the natural way to write a release entry is to start
   # explaining, and one entry that does drags the whole file back.
-  def releases(path)
-    File.read(path, encoding: "UTF-8").split(/^## /)[1..].map { |section| section.split(/^### /).first }
-  end
+  #
+  # `Changelog.sections` is the one parser. This file had three splits of
+  # its own for three questions about the same text, and
+  # `scripts/check_changelog.rb` would have been a fourth.
+  def sections(path) = Changelog.sections(read(path))
 
   [["English", CHANGELOG_EN], ["Japanese", CHANGELOG_JA]].each do |language, path|
     it "leads every #{language} release with a bullet list, before any prose section" do
-      offenders = releases(path).reject { |summary| summary.lines.any? { |line| line.start_with?("- ") } }
+      offenders = sections(path).reject { |section| section.bullets.positive? }
 
-      expect(offenders.map { |s| s.lines.first.strip }).to be_empty
+      expect(offenders.map(&:heading)).to be_empty
     end
   end
 
@@ -56,22 +73,13 @@ RSpec.describe "changelog parity" do
   # the way this file actually goes wrong, and it is the part a machine
   # can see (0.1.12, round 5).
   it "gives every release the same number of headline bullets in both languages" do
-    bullets = lambda do |path|
-      File.read(path, encoding: "UTF-8").split(/^## /)[1..].to_h do |section|
-        summary = section.split(/^### /).first
-        [section[/\A(\d+\.\d+\.\d+)/, 1], summary.lines.count { |line| line.start_with?("- ") }]
-      end
-    end
+    bullets = ->(path) { sections(path).to_h { |section| [section.version, section.bullets] } }
 
     expect(bullets.call(CHANGELOG_JA)).to eq(bullets.call(CHANGELOG_EN))
   end
 
   it "keeps the same releases explained in detail in both languages" do
-    detailed = lambda do |path|
-      File.read(path, encoding: "UTF-8").split(/^## /)[1..].filter_map do |section|
-        section[/\A(\d+\.\d+\.\d+)/, 1] if section.include?("\n### ")
-      end
-    end
+    detailed = ->(path) { sections(path).select { |s| s.details.start_with?("### ") }.map(&:version) }
 
     expect(detailed.call(CHANGELOG_JA)).to eq(detailed.call(CHANGELOG_EN))
   end

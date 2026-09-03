@@ -71,6 +71,48 @@ Never run either while anything else is mutating the same tree. The hunk
 sweep refuses a dirty tree and a concurrent sweep; the mutation applier
 restores each file but cannot see another writer, so that one is on you.
 
+## Before pushing
+
+    ruby scripts/preflight.rb --install-prepush
+
+Two things must be true of a push and of nothing else, so neither is in
+preflight: the outgoing range carries no secret, and no commit or tag
+message carries a real home path. The tree scan preflight runs cannot see
+a message, and `gitleaks` over the history is not a price to pay on every
+commit — so they are a pre-push hook. It refuses the push on either, and
+refuses when `gitleaks` is not installed rather than passing, because a
+scan that did not run reports what a clean one reports.
+`PREPUSH_SKIP=1 git push …` skips it for one push; say what you checked
+instead.
+
+## What else has to change when a file does
+
+    ruby scripts/check_doc_triggers.rb
+
+[`docs/DOCUMENTATION_MAP.md`](DOCUMENTATION_MAP.md)'s trigger table says
+what must change alongside what. The rows whose left column is a set of
+files are data in [`docs/doc_triggers.yml`](doc_triggers.yml), and this
+fails from preflight when one of them changed on your branch and none of
+its companions did. It asks for one companion, not all of them, and it
+covers only the pairs nothing already checks — that file says per rule
+what it adds.
+
+## Cutting a release
+
+    ruby scripts/release.rb status
+
+One command per step — `open`, `bump`, `gate`, `publish`, `record` —
+each refusing when the one before it left no evidence, and every refusal
+naming what clears it. It implements no check: each step runs the script
+or spec that already owns the question.
+
+**Two commits sit inside that sequence**, and they are not
+housekeeping: the release notes and the roadmap sections are written and
+committed after `open`, and the bump is committed before `gate`, which
+refuses a dirty tree so that what it gates is what `publish` sends.
+[`docs/PUBLISHING.md`](PUBLISHING.md) has the sequence with them in
+place, and the permission it operates under.
+
 ## Branches and pull requests
 
 One `release/<version>` branch per version, every commit for that release
@@ -118,11 +160,32 @@ edit with a reason.
 
 ## The register
 
-A register entry is written by hand, in the shape the register's legend
-gives. Its index, the move of a resolved entry to the archive and the
-generated half of `docs/ISSUES.md` come from the scripts that document
-names; `scripts/issues.rb` reads and retargets entries. A scripted edit
-of the file itself uses the block form below.
+`scripts/issues.rb` is the way in and the way out. It reads and retargets
+entries, and it opens and closes them:
+
+    ruby scripts/issues.rb intake                     # the untriaged list, numbered
+    ruby scripts/issues.rb promote <n> --kind K --target V \
+        --area A --direction D --user-visible yes|no [--note "…"]
+    ruby scripts/issues.rb close 024.N --released-in V [--drop-paragraphs]
+
+`promote` takes the n-th intake item, allocates a number never used
+before, writes the entry in the legend's shape, drops the bullet,
+restates the list's own count, and re-runs the register's three guards.
+`close` sets the status, moves the entry to the archive and re-indexes —
+and refuses while either language still publishes a paragraph for the
+finding, printing both locations. `--drop-paragraphs` removes the whole
+`##` section rather than the marker inside it, because a marker removed
+on its own leaves the limitation published and silences the guard that
+would have reported it. `docs/ISSUES.md` has the four decisions each
+option stands for, and why the command refuses rather than defaulting
+any of them.
+
+Every write goes through one primitive that is told what the edit should
+cost and refuses one that costs anything else. Editing the register by
+hand is still possible and is a worse idea than it looks: it is 25,000
+lines across two files, four enforced fields per entry, a number that may
+never be reused, and a generated index. A scripted edit of it uses the
+block form below.
 
 ## Edits that lose work
 

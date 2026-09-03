@@ -35,14 +35,21 @@ require_relative "utf8"
 # - **It says what it ran.** The output is the evidence, so a commit
 #   message can quote a run rather than a recollection.
 
+require "fileutils"
 require "open3"
 require "json"
 require_relative "check_suites_ran"
+require_relative "repo_files"
 
-ROOT = File.expand_path("..", __dir__)
-CORE = File.join(ROOT, "core")
+# **A module, so the hooks below can be driven rather than read.**
+# Nothing required this file: it was a script that ran on load, so an
+# example asserting what the pre-push hook refuses could only have
+# asserted the text of it. `prepush_hook_spec` runs it instead.
+module Preflight
+  ROOT = File.expand_path("..", __dir__)
+  CORE = File.join(ROOT, "core")
 
-Check = Struct.new(:name, :why, :dir, :command, :expect, keyword_init: true)
+  Check = Struct.new(:name, :why, :dir, :command, :expect, keyword_init: true)
 
 # `expect` is an optional lambda over the combined output; it returns a
 # string when the check passed its exit status but failed on what it
@@ -172,6 +179,23 @@ CHECKS = [
     why: "the site is not generated from the docs and propagates nothing on its own",
     dir: ROOT, command: %w[ruby scripts/check_site_links.rb]
   ),
+  # The parity spec asserts the newest section names the version already
+  # bumped to, so it says nothing while the entry is being written. This
+  # asks the same module about the packaged version, and `release.rb
+  # bump` asks it about the version being prepared.
+  Check.new(
+    name: "the newest changelog entry is in shape",
+    why: "a release's notes are written before the bump, which is the window the parity spec cannot see",
+    dir: ROOT, command: %w[ruby scripts/check_changelog.rb]
+  ),
+  # The trigger table's file-triggered rows, as data. Its "Checked by"
+  # column read `—` on these, which means the row was enforced by
+  # whoever remembered to open the document.
+  Check.new(
+    name: "a changed trigger file has a changed companion",
+    why: "docs/DOCUMENTATION_MAP.md's rows were enforced by memory, which is what that document exists about",
+    dir: ROOT, command: %w[ruby scripts/check_doc_triggers.rb]
+  ),
   Check.new(
     name: "every pasted interpreter session still reproduces",
     why: "a session is evidence only while it runs; until 0.2.16 all 69 of them were inert text",
@@ -179,100 +203,198 @@ CHECKS = [
   )
 ].freeze
 
-def run_check(check)
-  started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  out, status = Open3.capture2e(*check.command, chdir: check.dir)
-  # Explicit encoding, never the invoking shell's ambient locale. Under a
-  # locale-less shell `capture2e` hands back US-ASCII, and the first
-  # `String#[]` against output containing a Japanese failure message
-  # raises `invalid byte sequence` -- so the gate that exists to catch a
-  # failure would crash on one. `scripts/generate_sbom.rb` carries the
-  # same fix for the same reason, found the same way (Task 023.8).
-  out = out.dup.force_encoding(Encoding::UTF_8)
-  out = out.scrub("?") unless out.valid_encoding?
-  elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(1)
 
-  complaint = status.success? ? check.expect&.call(out) : "exited #{status.exitstatus}"
-  [complaint, out, elapsed]
-end
+  module_function
 
-HOOK = <<~SH
-  #!/bin/sh
-  # Installed by `ruby scripts/preflight.rb --install`.
-  # Skip a single commit with: PREFLIGHT_SKIP=1 git commit ...
-  [ -n "$PREFLIGHT_SKIP" ] && exit 0
-  exec ruby "$(git rev-parse --show-toplevel)/scripts/preflight.rb"
-SH
+  def run_check(check)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    out, status = Open3.capture2e(*check.command, chdir: check.dir)
+    # Explicit encoding, never the invoking shell's ambient locale. Under a
+    # locale-less shell `capture2e` hands back US-ASCII, and the first
+    # `String#[]` against output containing a Japanese failure message
+    # raises `invalid byte sequence` -- so the gate that exists to catch a
+    # failure would crash on one. `scripts/generate_sbom.rb` carries the
+    # same fix for the same reason, found the same way (Task 023.8).
+    out = out.dup.force_encoding(Encoding::UTF_8)
+    out = out.scrub("?") unless out.valid_encoding?
+    elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(1)
 
-if ARGV.include?("--list")
-  CHECKS.each { |c| puts "#{c.name}\n    #{c.why}\n    #{c.command.join(' ')}  (in #{c.dir == CORE ? 'core/' : '.'})" }
-  exit 0
-end
-
-if ARGV.include?("--install")
-  hooks = IO.popen(%w[git rev-parse --git-path hooks], chdir: ROOT, &:read).strip
-  hooks = File.expand_path(hooks, ROOT)
-  path = File.join(hooks, "pre-commit")
-  if File.exist?(path) && File.read(path) != HOOK
-    warn "preflight: #{path} already exists and is not this hook. Not overwriting it."
-    warn "preflight: add `exec ruby scripts/preflight.rb` to it yourself, or move it aside."
-    exit 1
+    complaint = status.success? ? check.expect&.call(out) : "exited #{status.exitstatus}"
+    [complaint, out, elapsed]
   end
-  require "fileutils"
-  FileUtils.mkdir_p(hooks)
-  File.write(path, HOOK)
-  File.chmod(0o755, path)
-  puts "preflight: installed #{path}."
-  puts "preflight: skip one commit with PREFLIGHT_SKIP=1."
-  exit 0
-end
 
+  HOOK = <<~SH
+    #!/bin/sh
+    # Installed by `ruby scripts/preflight.rb --install`.
+    # Skip a single commit with: PREFLIGHT_SKIP=1 git commit ...
+    [ -n "$PREFLIGHT_SKIP" ] && exit 0
+    exec ruby "$(git rev-parse --show-toplevel)/scripts/preflight.rb"
+  SH
 
-# 024.284: a green preflight is a statement about the Core. It runs
-# nothing under `vscode/`, and it cannot see the `spec/meta` examples
-# that refuse a partial tree -- which is why 024.281 and 024.282 stayed
-# red for a week while every local signal said the tree was fine.
-#
-# So: report, do not gate. This runs *after* the verdict and cannot
-# change it. It is deliberately not one of the `CHECKS` -- it needs the
-# network, and a check that needs the network at the front of every
-# commit is not one this repository wants. `--list` therefore does not
-# print it, and "all N checks passed" stays true about the N checks.
-def report_ci_status(root)
-  system("ruby", File.join(root, "scripts", "ci_status.rb"))
-end
+  # **The two checks that must run before a push, and only before a
+  # push.** `docs/DEVELOPMENT.md` says to inspect the outgoing range and
+  # run the secret scan; nothing ran either. Neither belongs in `CHECKS`:
+  # the tree scan there cannot see a commit message, and gitleaks over
+  # the history is not a price to pay on every commit.
+  #
+  # It refuses when `gitleaks` is absent rather than passing. A checker
+  # that cannot run reports exactly what a working one reports when
+  # nothing is wrong, and this one guards the channel 0.2.3 leaked
+  # through.
+  PREPUSH_HOOK = <<~SH
+    #!/bin/sh
+    # Installed by `ruby scripts/preflight.rb --install-prepush`.
+    # Skip a single push with: PREPUSH_SKIP=1 git push ...
+    [ -n "$PREPUSH_SKIP" ] && exit 0
+    root=$(git rev-parse --show-toplevel) || exit 1
+    cd "$root" || exit 1
 
-failures = []
-CHECKS.each do |check|
-  print "preflight: #{check.name}... "
-  $stdout.flush
-  complaint, out, elapsed = run_check(check)
-  if complaint
-    puts "FAILED (#{elapsed}s)"
-    failures << [check, complaint, out]
-  else
-    summary = out[/^\d+ examples?, \d+ failures?[^\n]*/]
-    puts "ok (#{elapsed}s)#{summary ? " -- #{summary}" : ""}"
+    # The outgoing range, from the refs git feeds this hook on stdin. A
+    # branch the remote does not have yet arrives with a zero remote sha,
+    # and then everything reachable from the local one is outgoing; a
+    # zero *local* sha is a deletion, which pushes no commits.
+    zero=0000000000000000000000000000000000000000
+    range=""
+    while read -r _localref localsha _remoteref remotesha; do
+      [ "$localsha" = "$zero" ] && continue
+      if [ "$remotesha" = "$zero" ]; then
+        entry="$localsha"
+      else
+        entry="$remotesha..$localsha"
+      fi
+      # No leading space. `--log-opts " <sha>"` is split by gitleaks and
+      # git is handed an empty argument, which it rejects -- and gitleaks
+      # 8.30.1 reports "0 commits scanned, no leaks found" and exits 0.
+      # The scan that did not run is indistinguishable from a clean one.
+      if [ -z "$range" ]; then range="$entry"; else range="$range $entry"; fi
+    done
+    [ -z "$range" ] && exit 0
+
+    # And the range has to be one git resolves. Same reason: an error
+    # from git reaches this hook as a clean scan, so it is asked here
+    # where the answer is still readable.
+    # shellcheck disable=SC2086
+    if ! git rev-list --quiet $range >/dev/null 2>&1; then
+      echo "pre-push: git cannot resolve the outgoing range ($range), so nothing would be scanned." >&2
+      echo "pre-push: fetch the remote and try again." >&2
+      exit 1
+    fi
+
+    if ! command -v gitleaks >/dev/null 2>&1; then
+      echo "pre-push: gitleaks is not installed, so the secret scan cannot run." >&2
+      echo "pre-push: install it, or push with PREPUSH_SKIP=1 and say what you checked instead." >&2
+      exit 1
+    fi
+
+    if ! gitleaks detect --config .gitleaks.toml --log-opts "$range"; then
+      echo "pre-push: gitleaks reported something in the outgoing range. Nothing was pushed." >&2
+      exit 1
+    fi
+
+    # shellcheck disable=SC2086
+    if ! ruby scripts/check_home_paths.rb --messages "$range"; then
+      echo "pre-push: a commit or tag message carries a real home path -- the channel a tree" >&2
+      echo "pre-push: scan cannot see. Rewrite the message before pushing." >&2
+      exit 1
+    fi
+  SH
+
+  # One installer for both hooks. Two copies of "write it unless somebody
+  # else's is there" would be two places that must agree about what
+  # "somebody else's" means.
+  def install_hook(hooks, name, body)
+    path = File.join(hooks, name)
+    if File.exist?(path) && File.read(path) != body
+      warn "preflight: #{path} already exists and is not this hook. Not overwriting it."
+      warn "preflight: fold this hook's commands into it yourself, or move it aside."
+      return 1
+    end
+
+    FileUtils.mkdir_p(hooks)
+    File.write(path, body)
+    File.chmod(0o755, path)
+    puts "preflight: installed #{path}."
+    0
+  end
+
+  def hooks_dir
+    found = IO.popen(RepoFiles.spawn_args("rev-parse", "--git-path", "hooks"), chdir: ROOT, &:read).strip
+    File.expand_path(found, ROOT)
+  end
+
+  # 024.284: a green preflight is a statement about the Core. It runs
+  # nothing under `vscode/`, and it cannot see the `spec/meta` examples
+  # that refuse a partial tree -- which is why 024.281 and 024.282 stayed
+  # red for a week while every local signal said the tree was fine.
+  #
+  # So: report, do not gate. This runs *after* the verdict and cannot
+  # change it. It is deliberately not one of the `CHECKS` -- it needs the
+  # network, and a check that needs the network at the front of every
+  # commit is not one this repository wants. `--list` therefore does not
+  # print it, and "all N checks passed" stays true about the N checks.
+  def report_ci_status(root)
+    system("ruby", File.join(root, "scripts", "ci_status.rb"))
+  end
+
+  def main(argv)
+    if argv.include?("--list")
+      CHECKS.each do |c|
+        puts "#{c.name}\n    #{c.why}\n    #{c.command.join(' ')}  (in #{c.dir == CORE ? 'core/' : '.'})"
+      end
+      return 0
+    end
+
+    if argv.include?("--install")
+      status = install_hook(hooks_dir, "pre-commit", HOOK)
+      puts "preflight: skip one commit with PREFLIGHT_SKIP=1." if status.zero?
+      return status
+    end
+
+    if argv.include?("--install-prepush")
+      status = install_hook(hooks_dir, "pre-push", PREPUSH_HOOK)
+      puts "preflight: skip one push with PREPUSH_SKIP=1." if status.zero?
+      return status
+    end
+
+    run_all
+  end
+
+  def run_all
+    failures = []
+    CHECKS.each do |check|
+      print "preflight: #{check.name}... "
+      $stdout.flush
+      complaint, out, elapsed = run_check(check)
+      if complaint
+        puts "FAILED (#{elapsed}s)"
+        failures << [check, complaint, out]
+      else
+        summary = out[/^\d+ examples?, \d+ failures?[^\n]*/]
+        puts "ok (#{elapsed}s)#{summary ? " -- #{summary}" : ""}"
+      end
+    end
+
+    if failures.empty?
+      puts "preflight: all #{CHECKS.length} checks passed."
+      report_ci_status(ROOT)
+      return 0
+    end
+
+    # stdout carries the running "ok"/"FAILED" lines and stderr carries the
+    # report; without this the report interleaves into the middle of them and
+    # the summary reads as if it came before the last check.
+    $stdout.flush
+
+    failures.each do |check, complaint, out|
+      warn "\n=== #{check.name}: #{complaint} ==="
+      warn "    why it is here: #{check.why}"
+      warn out.lines.last(30).join
+    end
+    warn "\npreflight: #{failures.length} of #{CHECKS.length} checks failed."
+    $stderr.flush
+    report_ci_status(ROOT)
+    1
   end
 end
 
-if failures.empty?
-  puts "preflight: all #{CHECKS.length} checks passed."
-  report_ci_status(ROOT)
-  exit 0
-end
-
-# stdout carries the running "ok"/"FAILED" lines and stderr carries the
-# report; without this the report interleaves into the middle of them and
-# the summary reads as if it came before the last check.
-$stdout.flush
-
-failures.each do |check, complaint, out|
-  warn "\n=== #{check.name}: #{complaint} ==="
-  warn "    why it is here: #{check.why}"
-  warn out.lines.last(30).join
-end
-warn "\npreflight: #{failures.length} of #{CHECKS.length} checks failed."
-$stderr.flush
-report_ci_status(ROOT)
-exit 1
+exit Preflight.main(ARGV) if $PROGRAM_NAME == __FILE__

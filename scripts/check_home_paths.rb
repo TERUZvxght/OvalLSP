@@ -202,15 +202,26 @@ module HomePaths
   # spends a section on. Refusing is the only honest answer; the
   # secret-scan job that runs this sets `fetch-depth: 0` for gitleaks
   # anyway, and `ci_skip_guard_spec.rb` pins that it still does.
-  def message_offences
-    raise "refusing to scan commit messages in a shallow clone -- fetch the full history (fetch-depth: 0)" if shallow?
+  # `range` narrows the commit half to what a push is about to send.
+  # Without it this reads every local ref, so a bad message on any
+  # unpushed branch refused every push of every other one -- a gate
+  # nobody can clear by fixing the thing they are pushing. ci.yml keeps
+  # the whole-history form by passing nothing; one implementation, two
+  # callers.
+  #
+  # Tags are always read whole: an annotated tag is pushed separately and
+  # is not in any commit range.
+  def message_offences(range = nil)
+    raise "refusing to scan commit messages in a shallow clone -- fetch the full history (fetch-depth: 0)" if
+      range.nil? && shallow?
 
-    commit_offences + tag_offences
+    commit_offences(range) + tag_offences
   end
 
-  def commit_offences
+  def commit_offences(range = nil)
     marker = "@@commit@@"
-    log = as_utf8(RepoFiles.capture(ROOT, ["log", "--all", "--format=#{marker}%H%n%B"]))
+    selector = range.to_s.empty? ? ["--all"] : range.to_s.split
+    log = as_utf8(RepoFiles.capture(ROOT, ["log", *selector, "--format=#{marker}%H%n%B"]))
 
     log.split(marker).reject { |entry| entry.strip.empty? }.flat_map do |entry|
       sha, body = entry.split("\n", 2)
@@ -256,9 +267,9 @@ if $PROGRAM_NAME == __FILE__
   offences =
     case mode
     when "--tree"     then HomePaths.tree_offences
-    when "--messages" then HomePaths.message_offences
+    when "--messages" then HomePaths.message_offences(ARGV[1])
     else
-      warn "usage: check_home_paths.rb --tree|--messages"
+      warn "usage: check_home_paths.rb --tree|--messages [<commit range>]"
       exit 2
     end
 

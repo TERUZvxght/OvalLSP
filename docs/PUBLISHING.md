@@ -167,6 +167,47 @@ meant to describe it. Compatibility itself is always decided on the
 protocol range, never by comparing version strings — so an older Core
 that still speaks the same protocol keeps working.
 
+## The steps, in order, as one command each
+
+    ruby scripts/release.rb status            # which steps are done
+    ruby scripts/release.rb open <version>    # branch, record, changelog skeletons
+    #   write both changelog sections and both roadmap sections, then commit
+    ruby scripts/release.rb bump              # every version file; commits nothing
+    git commit -am "…"                        # gate refuses a dirty tree
+    ruby scripts/release.rb gate              # gitleaks, preflight, nothing open
+    ruby scripts/release.rb publish           # hands over to vscode/scripts/release.sh
+    ruby scripts/release.rb record            # the artifact's hash, and the tag
+    git commit -am "…"                        # the artifact row `record` wrote
+
+**The two commits are part of the sequence, not housekeeping around it.**
+`gate` refuses a dirty tree so that what it gates is what `publish`
+sends: gating an uncommitted bump means `release.sh` refuses the dirty
+tree at publish, and committing then moves the index out from under the
+gate. `record` writes a row and leaves it uncommitted for the same
+reason it does not push — the last word is a person's.
+
+**Each step refuses when the one before it left no evidence, and every
+refusal names the command that clears it.** That is all `release.rb`
+adds: it implements no check of its own. `bump` asks
+`scripts/check_changelog.rb` and `scripts/documented_counts.rb`; `gate`
+asks `gitleaks`, `scripts/preflight.rb` and the register; `publish`
+execs `vscode/scripts/release.sh` and never bypasses its prompt.
+`docs/RELEASE_CHECKLIST.md` records which of its manual steps each of
+those absorbed.
+
+**The changelog's shape is the rule, and it is checked.** The newest
+section is the version being released; it leads with `- ` bullets, one
+per thing a reader would notice; the reasoning goes under `### Details`
+(`### 詳細` in Japanese) below them; and both languages carry the same
+number of bullets for that version. `scripts/changelog.rb` is the one
+implementation — `changelog_parity_spec` and `check_changelog.rb` both
+read it, and `check_changelog.rb --version <v>` is how the entry can be
+judged *before* the bump, which is the window in which it is written.
+The shape applies to the newest section only: everything below it was
+written under whatever convention held at the time, and rewriting a
+published release's notes to satisfy a later check would be changing
+what shipped.
+
 ## Building the release artifact
 
 Must be run on a real Apple Silicon Mac — never emulated/cross-compiled
