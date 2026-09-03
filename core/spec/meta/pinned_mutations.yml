@@ -955,3 +955,9 @@
   to: "          nil\n"
   spec: spec/ovallsp/struct_members_spec.rb
   example: "records a reader and a writer for each Struct member"
+- why: "A signature chain RBS declares and cannot build reads as a class with no ancestors; without the refusal, every argument-type report over rbs's own signatures is the class called incompatible with itself."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        return nil if chains.any? { |chain| Signatures::Environment.unavailable?(chain) }\n"
+  to: "        return nil if false\n"
+  spec: spec/ovallsp/diagnostics/unbuildable_signature_chain_spec.rb
+  example: "does not report the class against itself"

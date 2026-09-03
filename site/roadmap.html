@@ -200,6 +200,37 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v032">
+          <div class="tl-version">
+            <span class="v">0.3.2</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>The backlog the 0.3 line owed</h3>
+          <ul class="feature-list">
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>Renaming a local variable that a pattern match also binds is refused, rather than done wrongly.</strong> It used to rewrite the occurrences this extension could see and leave the pattern bound to the old name &mdash; the file still parsed, still ran, and answered something else.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>On Ruby 4.0, a method Ruby itself defines is no longer reported as one your class does not have.</strong> The list of such names is keyed by Ruby&rsquo;s minor version now, and measured for each rather than written once.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>A namespaced type is no longer reported as incompatible with itself.</strong> On a project with hand-written signatures that was <em>every</em> argument-type report this extension produced, and none of them was about your code.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>The macOS package is built and driven by CI</strong>, on an Apple Silicon runner, with the same test the publish gate runs. Every packaged run before this was Linux, while what is published is <code>darwin-arm64</code>.</span>
+                    </li>
+          </ul>
+          <p class="text-mute">
+            The full account is in the
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.md">changelog</a>,
+            which is where every release is recorded in full.
+          </p>
+        </article>
+
         <article class="tl-item" id="v031">
           <div class="tl-version">
             <span class="v">0.3.1</span>

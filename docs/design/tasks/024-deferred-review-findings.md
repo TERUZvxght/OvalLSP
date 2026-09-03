@@ -190,13 +190,13 @@ nobody can search is the recording habit without the benefit.
 | [`024.6`](024-deferred-review-findings-resolved.md#0246-the-seen-uris-spec-s-comment-overclaims) | fixed | 0.1.10 | The `seen_uris` spec's comment overclaims |
 | [`024.8`](024-deferred-review-findings-resolved.md#0248-ownership-retirement-on-exited-known-size-0-is-unpinned) | fixed | 0.1.10 | Ownership retirement on `exited() && known.size === 0` is unpinned |
 | [`024.10`](024-deferred-review-findings-resolved.md#02410-four-extension-ts-behaviours-cannot-be-unit-tested) | fixed | 0.1.10 | Four `extension.ts` behaviours cannot be unit-tested |
-| [`024.13`](#02413-a-reopened-core-class-looks-closed-in-both-directions-0-3-x) | open | 0.3.2 | A reopened core class looks closed, in both directions (0.3.x) |
+| [`024.13`](#02413-a-reopened-core-class-looks-closed-in-both-directions-0-3-x) | open | 0.4.0 | A reopened core class looks closed, in both directions (0.3.x) |
 | [`024.14`](024-deferred-review-findings-resolved.md#02414-workspace-wide-diagnostics-do-not-fire-against-the-real-rails-fixture) | fixed | 0.2.1 | Workspace-wide diagnostics do not fire against the real Rails fixture |
 | [`024.15`](024-deferred-review-findings-resolved.md#02415-the-index-s-answers-depend-on-which-file-was-edited-last) | fixed | 0.1.13 | The index's answers depend on which file was edited last |
 | [`024.16`](024-deferred-review-findings-resolved.md#02416-the-capability-e2e-suite-can-skip-in-full-while-ci-stays-green) | fixed | 0.1.13 | The capability E2E suite can skip in full while CI stays green |
 | [`024.17`](024-deferred-review-findings-resolved.md#02417-vscode-src-extension-ts-is-covered-by-no-test-that-runs-anywhere) | fixed | 0.1.13 | `vscode/src/extension.ts` is covered by no test that runs anywhere |
 | [`024.18`](#02418-the-unassigned-ivar-check-cannot-enumerate-what-it-needs-to) | open | 0.4.0 | The unassigned-`@ivar` check cannot enumerate what it needs to |
-| [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.3.2 | The argument-type check judges against a class the receiver is not |
+| [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.4.0 | The argument-type check judges against a class the receiver is not |
 | [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 0.4.0 | `contains?` treats an exclusive end offset as inclusive |
 | [`024.21`](024-deferred-review-findings-resolved.md#02421-a-qualified-constant-is-coloured-half-one-way-half-the-other) | fixed | 0.2.15 | A qualified constant is coloured half one way, half the other |
 | [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | 0.4.0 | The unassigned-`@ivar` check is silent in an application `rails new`… |
@@ -214,9 +214,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.34`](024-deferred-review-findings-resolved.md#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
 | [`024.35`](024-deferred-review-findings-resolved.md#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | done | 0.2.18 | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](024-deferred-review-findings-resolved.md#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
-| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.3.2 | The argument-type check reports nothing on measured real Ruby |
-| [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.3.2 | `scope_at` copies the whole environment once per descent step |
-| [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.3.2 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
+| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.4.0 | The argument-type check reports nothing on measured real Ruby |
+| [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.4.0 | `scope_at` copies the whole environment once per descent step |
+| [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.4.0 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](024-deferred-review-findings-resolved.md#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
 | [`024.41`](024-deferred-review-findings-resolved.md#02441-typing-a-reports-a-method-on-the-next-line) | fixed | 0.2.18 | Typing a `.` reports a method on the *next* line |
 | [`024.42`](#02442-a-signature-label-leaks-the-method-s-own-type-variable) | open | 0.4.0 | A signature label leaks the method's own type variable |
@@ -224,7 +224,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.4.0 | A partial's local is not resolved, and C11's stated basis names it |
 | [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.4.0 | Re-analysis after a keystroke is seconds on a large file, against a … |
 | [`024.46`](024-deferred-review-findings-resolved.md#02446-typing-self-cost-55-false-diagnostics-and-was-rolled-back) | fixed | 0.2.1 | Typing `self` cost 55 false diagnostics and was rolled back |
-| [`024.47`](#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | open | 0.3.2 | A namespaced class named after a core class loses its diagnostics, a… |
+| [`024.47`](#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | open | 0.4.0 | A namespaced class named after a core class loses its diagnostics, a… |
 | [`024.48`](024-deferred-review-findings-resolved.md#02448-the-measurement-tool-ran-an-engine-the-server-never-runs) | fixed | 0.2.1 | The measurement tool ran an engine the server never runs |
 | [`024.49`](024-deferred-review-findings-resolved.md#02449-a-release-record-kept-asserting-durations-it-could-not-witness-ending) | fixed | 0.2.3 | A release record kept asserting durations it could not witness ending |
 | [`024.50`](024-deferred-review-findings-resolved.md#02450-the-marketplace-description-promises-the-behaviour-0-2-1-removed) | fixed | 0.2.3 | The Marketplace description promises the behaviour 0.2.1 removed |
@@ -238,7 +238,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.58`](024-deferred-review-findings-resolved.md#02458-bin-ovallsp-loaded-every-abi-s-vendored-gems-not-the-running-one-s) | fixed | 0.2.2 | `bin/ovallsp` loaded every ABI's vendored gems, not the running one's |
 | [`024.59`](024-deferred-review-findings-resolved.md#02459-the-guard-against-a-stale-example-count-could-not-run) | fixed | 0.2.3 | The guard against a stale example count could not run |
 | [`024.60`](024-deferred-review-findings-resolved.md#02460-four-test-fixtures-raced-macos-first-execution-scan) | fixed | 0.2.3 | Four test fixtures raced macOS' first-execution scan |
-| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.3.2 | Two per-file stores are separated by nothing but their payload |
+| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.4.0 | Two per-file stores are separated by nothing but their payload |
 | [`024.63`](024-deferred-review-findings-resolved.md#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | fixed | 0.2.16 | The dispatch layer owns view inference, and it has broken the query … |
 | [`024.64`](024-deferred-review-findings-resolved.md#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | fixed | 0.2.12 | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
 | [`024.65`](024-deferred-review-findings-resolved.md#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
@@ -246,7 +246,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.67`](024-deferred-review-findings-resolved.md#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
 | [`024.68`](024-deferred-review-findings-resolved.md#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | fixed | 0.2.12 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
 | [`024.69`](024-deferred-review-findings-resolved.md#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | fixed | 0.2.12 | The two suites that drive a real editor are run by nobody but the ma… |
-| [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.3.2 | One mutable Rails fixture is shared by every worker, so the suite ca… |
+| [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.4.0 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](024-deferred-review-findings-resolved.md#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
 | [`024.73`](024-deferred-review-findings-resolved.md#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](024-deferred-review-findings-resolved.md#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | fixed | 0.2.16 | The trust gate stands in front of callers, not in front of what exec… |
@@ -296,7 +296,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.118`](024-deferred-review-findings-resolved.md#024118-workspaceindex-stale-compares-versions-across-buffers) | fixed | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](024-deferred-review-findings-resolved.md#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](024-deferred-review-findings-resolved.md#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
-| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.2 | Nothing measures how much of this tree no test would notice changing |
+| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.4.0 | Nothing measures how much of this tree no test would notice changing |
 | [`024.122`](024-deferred-review-findings-resolved.md#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | fixed | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.123`](024-deferred-review-findings-resolved.md#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.124`](024-deferred-review-findings-resolved.md#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
@@ -312,7 +312,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.134`](024-deferred-review-findings-resolved.md#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | fixed | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
 | [`024.135`](024-deferred-review-findings-resolved.md#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | fixed | 0.2.16 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
 | [`024.136`](024-deferred-review-findings-resolved.md#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | fixed | 0.2.16 | A route's optional segments are detected by matching the literal `(.… |
-| [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | 0.3.2 | `WorkspaceIndex#search` scans every symbol in the workspace |
+| [`024.137`](#024137-workspaceindex-search-holds-the-index-lock-for-the-whole-walk) | open | 0.4.0 | `WorkspaceIndex#search` holds the index lock for the whole walk |
 | [`024.138`](024-deferred-review-findings-resolved.md#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | fixed | 0.2.16 | No test mixes a schema change and a model-file change in one batch |
 | [`024.139`](024-deferred-review-findings-resolved.md#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
 | [`024.140`](024-deferred-review-findings-resolved.md#024140-a-scripted-edit-doubled-a-register-entry-and-every-check-stayed-green) | fixed | 0.2.14 | A scripted edit doubled a register entry, and every check stayed gre… |
@@ -396,9 +396,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.218`](024-deferred-review-findings-resolved.md#024218-six-isolated-agents-branched-from-the-wrong-commit-and-the-evidence-was-deleted-before-it-was-checked) | fixed | 0.2.15 | Six isolated agents branched from the wrong commit, and the evidence… |
 | [`024.219`](024-deferred-review-findings-resolved.md#024219-a-three-part-claim-shipped-with-one-part-pinned-and-the-other-two-were-false) | fixed | 0.2.15 | A three-part claim shipped with one part pinned, and the other two w… |
 | [`024.220`](024-deferred-review-findings-resolved.md#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | fixed | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
-| [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.3.2 | A block whose receiver cannot be vouched for contains a `private` th… |
+| [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.4.0 | A block whose receiver cannot be vouched for contains a `private` th… |
 | [`024.223`](024-deferred-review-findings-resolved.md#024223-one-unresolvable-include-in-a-project-s-own-rbs-turns-its-whole-class-into-false-reports) | fixed | 0.2.15 | One unresolvable `include` in a project's own RBS turns its whole cl… |
-| [`024.224`](#024224-a-namespaced-type-is-reported-incompatible-with-itself) | open | 0.3.2 | A namespaced type is reported incompatible with itself |
+| [`024.224`](024-deferred-review-findings-resolved.md#024224-a-namespaced-type-is-reported-incompatible-with-itself) | fixed | 0.3.2 | A namespaced type is reported incompatible with itself |
 | [`024.225`](024-deferred-review-findings-resolved.md#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | fixed | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
 | [`024.226`](024-deferred-review-findings-resolved.md#024226-an-argument-written-as-a-paren-less-call-is-judged-by-its-own-last-argument) | fixed | 0.2.15 | An argument written as a paren-less call is judged by its own last a… |
 | [`024.227`](024-deferred-review-findings-resolved.md#024227-every-outline-symbol-s-selectionrange-was-its-whole-declaration) | fixed | 0.2.15 | Every outline symbol's `selectionRange` was its whole declaration |
@@ -447,7 +447,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.272`](024-deferred-review-findings-resolved.md#024272-renaming-a-local-leaves-every-value-omitted-shorthand-behind-so-the-rename-is-still-partial) | fixed | 0.2.17 | Renaming a local leaves every value-omitted shorthand behind, so the… |
 | [`024.273`](024-deferred-review-findings-resolved.md#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | fixed | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
 | [`024.274`](024-deferred-review-findings-resolved.md#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | fixed | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
-| [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | 0.3.2 | A workspace-identity example fails only in a full-suite run, and not… |
+| [`024.275`](024-deferred-review-findings-resolved.md#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | fixed | 0.3.2 | A workspace-identity example fails only in a full-suite run, and not… |
 | [`024.276`](024-deferred-review-findings-resolved.md#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | fixed | 0.2.17 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
 | [`024.277`](024-deferred-review-findings-resolved.md#024277-a-local-variable-s-identity-follows-the-cref-so-a-block-that-changes-self-splits-it) | fixed | 0.2.17 | A local variable's identity follows the cref, so a block that change… |
 | [`024.278`](024-deferred-review-findings-resolved.md#024278-a-local-variable-s-identity-has-no-file-in-it-so-renaming-one-edits-another-file) | fixed | 0.2.17 | A local variable's identity has no file in it, so renaming one edits… |
@@ -467,7 +467,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.292`](024-deferred-review-findings-resolved.md#024292-045-disagrees-with-its-own-table-about-what-0-3-0-is-blocked-on) | fixed | 0.3.0 | `045` disagrees with its own table about what 0.3.0 is blocked on |
 | [`024.293`](024-deferred-review-findings-resolved.md#024293-check-pinned-mutations-rb-reads-a-skipped-example-as-a-mutation-that-escaped) | fixed | 0.3.0 | `check_pinned_mutations.rb` reads a skipped example as a mutation th… |
 | [`024.294`](#024294-a-template-s-ivar-receiver-is-not-checked-and-its-type-is-one-action-s) | open | 0.4.0 | A template's `@ivar` receiver is not checked, and its type is one ac… |
-| [`024.295`](#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | open | 0.3.2 | The gem index is fetched on every boot and persisted nowhere |
+| [`024.295`](#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | open | 0.4.0 | The gem index is fetched on every boot and persisted nowhere |
 | [`024.296`](024-deferred-review-findings-resolved.md#024296-renaming-a-local-a-pattern-also-binds-rewrites-the-rest-and-leaves-the-pattern) | fixed | 0.3.2 | Renaming a local a pattern also binds rewrites the rest and leaves t… |
 | [`024.297`](#024297-call-hierarchy-lists-no-callee-reached-through-send-super-or-a-macro) | open | 0.4.0 | Call hierarchy lists no callee reached through `send`, `super` or a … |
 | [`024.298`](#024298-an-inlay-hint-on-foo-new-names-new-s-parameters-not-initialize-s) | open | 0.4.0 | An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initi… |
@@ -511,7 +511,7 @@ nobody can search is the recording habit without the benefit.
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -673,6 +673,24 @@ halves were live.
 gone and what is left is a decline on a reopened core class -- a
 repair of the remaining half, and a smaller one than the entry's
 title.
+
+## Not attempted in 0.3.2: what is left is a decline, not a wrong answer
+
+Driven at 0.3.0 and what is left is a *decline*: with an Agent
+connected a reopened `Array` no longer reports `a.second`, and it does
+not report `a.totally_bogus_method` either. Turning that silence back
+into an answer means knowing what the gems define for a class the
+workspace has partly reopened, and the entry's own record of the
+attempt says why a proxy for it does not work — `#reopens_foreign_class?`
+removed 11 false reports, introduced none, and took four true ones
+with it, one of whose specs states in its own comment that it exists
+to keep that edge.
+
+Without an Agent the answer has to come from somewhere else, and
+building that somewhere is capability, which `docs/PUBLISHING.md`
+puts outside a patch. Moved to 0.4.0. The published limitation stands
+unchanged in both languages, because what it describes is still true.
+
 ## 024.18 The unassigned-`@ivar` check cannot enumerate what it needs to
 
 ```yaml
@@ -809,7 +827,7 @@ more authority than it has.
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.2
+target: 0.4.0
 ```
 
 Reported by an independent review that drove the engine over 25 installed gems; not reproduced from a fixture here, which is why it is recorded rather than fixed.
@@ -1027,6 +1045,25 @@ another is the work.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** A call judged
 against a class the receiver is not is a wrong answer, which the
 table puts on the patch line.
+
+## Not attempted in 0.3.2, and the reason is this release's own change
+
+The residual is constant resolution respecting `Module.nesting` for a
+bare name — this entry's own Direction, and `024.47`'s area, where a
+rollback is recorded.
+
+0.3.2 changes how an argument's type is compared: `024.224`'s fix
+makes `Engine#ancestor_names` decline when the signature chain for a
+reachable name could not be built. That is one change to that
+comparison. This entry is a second, and `024.47`'s closing sentence is
+that two changes to how a type name is compared, in one release,
+reviewed together, is how that rollback happened.
+
+So it moves for a reason specific to this release rather than a
+general one, and it moves to 0.4.0. `bare_name_argument_type_spec.rb`
+holds the reproduction pending with the two silences that misled and
+the control that makes them mean something; none of that is disturbed.
+
 ## 024.20 `contains?` treats an exclusive end offset as inclusive
 
 ```yaml
@@ -1383,7 +1420,7 @@ user-visible-note: >
   way the check accepts, it is not silent -- it reports, and on the one
   such corpus measured every report is false. That is `024.224`, and
   the question this entry frames cannot be answered until it is fixed.
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_type_findings`,
@@ -1527,6 +1564,34 @@ check that currently answers wrongly; fixing the wrongness comes first.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** A check that
 reports nothing where it should is repair work against `G15`, a row
 0.2.0 already claimed.
+
+## The premise this entry was waiting on is settled in 0.3.2, and what is left is not a defect
+
+This entry could not be answered while `024.224` stood: its own
+`user-visible-note` says so — on the one corpus where the check is not
+silent, every report was false, and the question "what is this check's
+yield" cannot be asked of an output that is entirely one defect.
+
+`024.224` is fixed. Re-measured over rbs 4.2.0 with its own `sig/`, the
+check now produces **zero** there, with `unresolved-constant` unchanged
+at 369 as the control. So the honest statement of its measured yield is
+the one this entry's title makes: **nothing, on every corpus it has been
+pointed at** — 2,042 files of stdlib, Rails gems and minitest at zero,
+and now the hand-written-signature corpus at zero too.
+
+That is no longer a wrong answer to repair. It is a check whose gates
+ask for more than real code states, and widening them means knowing
+what a receiver's type is where nothing declares it — the enumeration
+question. Moved to 0.4.0 on that basis, and the published paragraph in
+both languages now carries the zero rather than the six.
+
+**The zero is not itself evidence the check is sound**, and the entry
+stays open for that reason rather than closing beside `024.224`: a check
+that has never produced a true report has not been shown to be capable
+of one. Producing a deliberate mismatch a real corpus contains, and
+watching it be reported, is what would settle that — and no measurement
+here has done it.
+
 ## 024.38 `scope_at` copies the whole environment once per descent step
 
 ```yaml
@@ -1539,7 +1604,7 @@ user-visible-note: >
   measurable curve starts. Recorded rather than fixed because the fix is
   in the inference core and the round that found it was already
   repairing the round before it.
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`locate`, `capture_scope`)
@@ -1706,13 +1771,35 @@ from the number rather than the title.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** Cost on the
 completion request path. Nothing new is announced by making it
 cheaper.
+
+## Re-measured in 0.3.2, and the curve is where it was
+
+Same shape as the table above, on this machine, `scope_at` over one
+method with N locals:
+
+    locals   0.3.2      as recorded
+        10   0.021 ms   0.021 ms
+        50   0.308 ms   0.272 ms
+       100   0.686 ms   0.874 ms
+       200   2.868 ms   3.645 ms
+
+Unchanged within the noise of a laptop — and the two larger figures
+are *lower* than the ones recorded, which is the direction that says
+nothing has regressed rather than that anything improved.
+
+Moved to 0.4.0 on the entry's own reasoning: the fix is in the
+inference core, where an environment copied per descent step becomes
+an environment shared and unwound. `docs/PUBLISHING.md` puts that
+outside a patch, and 0.3.2 has already spent its measurement on the
+entries it could finish.
+
 ## 024.39 `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread
 
 ```yaml
 status: open
 kind: defect
 user-visible: no
-target: 0.3.2
+target: 0.4.0
 user-visible-note: >
   No wrong answer has been produced. A reviewer ran 2,000 concurrent
   `infer_at` pairs and 400 `scope_at`/`infer_at` pairs in both size
@@ -1774,6 +1861,16 @@ pushed at from the side during a review loop.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** Per-request state
 on an object two threads reach is a correctness repair, and announces
 nothing.
+
+## Not attempted in 0.3.2: the same file as `024.38`, and it should be touched once
+
+Per-request state on a long-lived object is the same class of change
+as `024.38` and lands in the same file. Attempting one without the
+other would mean touching `LocalInferencer`'s lifecycle twice, and
+`048`'s record — eight restructurings of working code proposed, every
+one measured worse — is the argument for doing it once, deliberately,
+with a corpus on both sides. Moved to 0.4.0 alongside `024.38`.
+
 ## 024.42 A signature label leaks the method's own type variable
 
 ```yaml
@@ -2143,7 +2240,7 @@ shipped as a patch.
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/index/type_name_resolution.rb`
@@ -2361,6 +2458,26 @@ core class loses its diagnostics -- is not true of the plain shape.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** Driven at 0.3.0 and
 the headline did not reproduce; whatever remains of the two
 populations is a repair.
+
+## Not attempted in 0.3.2, and it is now the only entry resting on the identity change
+
+The literal half is pinned pending in `shadowed_literal_spec.rb` with
+the measurement that stops it: writing the literal's type rooted makes
+the two new examples pass and breaks 11 examples across 7 files,
+because every one of them reads the literal's name bare.
+
+What changes in 0.3.2 is the company it kept. This entry and
+`024.224` were both recorded as needing the same direction — a type
+that carries the identity of what produced it, rather than encoding it
+in a name every reader has to normalise back. `024.224` turned out not
+to need it: its cause was a swallowed `UNAVAILABLE`, and one guard
+fixed it. So the argument for that change now rests on this entry
+alone, and it should be made or declined on this entry's own evidence
+rather than on a second case that has evaporated.
+
+Moved to 0.4.0, where it can be weighed as one change to a type every
+component reads rather than as a shared prerequisite.
+
 ## 024.62 Two per-file stores are separated by nothing but their payload
 
 ```yaml
@@ -2373,7 +2490,7 @@ user-visible-note: >
   affected. What is recorded is that the correctness rests on four
   call sites each remembering a different subset, rather than on the
   structure — a hazard for the fifth, not a fault in the fourth.
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
@@ -2492,6 +2609,18 @@ what it is, rather than acted on.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** A boundary with no
 stated reason is refactoring, and `048` measured that eight such
 proposals in this tree all failed.
+
+## Not attempted in 0.3.2: a simplification carries an ordinary change's obligations
+
+Two per-file stores that differ only in payload is a real
+duplication, and merging them is exactly the shape `048` measured
+eight times and rejected eight times: a restructuring of code that
+works, where the count that matters is places that must agree rather
+than lines. It is not that this one is wrong — it is that a
+simplification of working code carries an ordinary change's
+obligations, and a patch release whose measurement is already spent
+is the wrong place to take them on. Moved to 0.4.0.
+
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 
 ```yaml
@@ -2502,7 +2631,7 @@ user-visible-note: >
   Nothing an editor user sees. The suite runs serially today and is
   green that way; what the shared fixture costs is the ability to run
   it any other way, which is a contributor and CI cost.
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/spec/fixtures/rails_real` (its `db/*.sqlite3`, `tmp/`
@@ -2591,6 +2720,39 @@ faster, not on the list of things that make a released claim true, and
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** The suite's own
 fixture. It bit a 0.3.0 measurement, which is exactly the cost the
 entry describes, and fixing it announces nothing.
+
+## Driven in 0.3.2: the two suites already run concurrently, and the fixture does not move
+
+The entry names `db/*.sqlite3`, `tmp/` and `.bundle` as what a second
+worker would collide on. Measured against the fixture as it stands —
+23 files, and `db/` holds none:
+
+    real_rails_spec.rb and capabilities_spec.rb, started together
+      real_rails    19 examples, 0 failures
+      capabilities  95 examples, 0 failures
+      fixture       byte-identical before and after
+
+Serially, each of them alone leaves it byte-identical too. So the
+*persistent* half of the hazard is gone: `capabilities_spec` copies the
+fixture per run (`FileUtils.cp_r` into a per-pid tmpdir) and 0.3.1 gave
+the suite its own `XDG_CACHE_HOME`, which between them moved the two
+things a run used to write.
+
+**This does not close the entry, and the difference is worth stating.**
+Two workers agreeing on the end state is not the same as two workers
+being safe: what was shown is one pairing, once, on one machine. The
+entry's own lever — 3 workers by file, 172s to 67s — was measured
+against a suite that has since grown by half again, and nothing here
+re-measured *that*. What has changed is that the reason to expect
+breakage is weaker than when it was written, so the next attempt starts
+from an experiment rather than from an assumption.
+
+**A measurement error worth recording**, because it nearly became the
+finding: the first comparison hashed `shasum` output that carries each
+file's *path*, so the backup copy and the original differed for having
+been in different directories and it read as MUTATED. Compare contents,
+from inside each root, or the paths are what is being compared.
+
 ## 024.76 Fifty-four `unknown-method` reports over real gem source, and all of them false
 
 ```yaml
@@ -3109,7 +3271,7 @@ user-visible-note: >
   Nothing an editor user meets directly. What it costs is that a
   behaviour can be broken silently, which every user-visible entry in
   this register that began "and no test noticed" was downstream of.
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `scripts/check_pinned_mutations.rb`, `scripts/hunk_sweep.rb`,
@@ -3234,6 +3396,24 @@ a manual step. Still infrastructure of its own size.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** A measure of this
 tree's own coverage. 0.3.0 pinned five decisions by hand, which is
 the absence this entry names.
+
+## Not attempted in 0.3.2: layer 3 is a capability
+
+Layer 3 is a scheduled mutation run plus a ratchet gate in CI: a new
+script, a recorded count, and a job that fails when the count rises.
+That is a capability, and `docs/PUBLISHING.md` puts a capability
+outside a patch — so taking it here would either mis-number the release
+or hold the release for it.
+
+Nothing about it has decayed in the meantime, and one thing has
+improved: `check_pinned_mutations.rb` now refuses a `from:` that
+matches no line, so layer 2 can no longer report a mutation as caught
+because it was never applied. That closes the way layer 2 could have
+been silently empty while the ratchet was still missing, which is the
+worse of the two gaps this entry names.
+
+Moved to 0.4.0.
+
 ## 024.129 No undefined-method report on a core-library receiver
 
 ```yaml
@@ -3295,13 +3475,13 @@ which is the E2E harness rather than a probe.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** A scope from a
 concern's `included do` gaining a type is an answer where the chain
 currently has none.
-## 024.137 `WorkspaceIndex#search` scans every symbol in the workspace
+## 024.137 `WorkspaceIndex#search` holds the index lock for the whole walk
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/workspace_index.rb` (`#search`, `#rank`)
@@ -3481,7 +3661,7 @@ three false results, which is what made the contradiction worth chasing
 instead of picking whichever number was more convenient. The corpus above
 is installed gems only, and the harness refuses a root inside this tree.
 
-**Re-triaged in 0.2.17** (`024.276`). Workspace symbol search scans every symbol on every keystroke. No capability, no gem question — a repair to something `W3` already claims works. Its body carries a warning worth heeding before re-measuring: a corpus run once looked as though the change had altered the answers while an in-process comparison of both implementations against one index said they were identical, and `CLAUDE.md` names that exact corpus among its three false results.
+**Re-triaged in 0.2.17** (`024.276`). Workspace symbol search scans every symbol on every keystroke. *(That sentence was already false when it was written -- 0.2.16 replaced the full scan with an index on the names being matched, which the published limitation says and this line did not; driven in 0.3.2, see below.)* No capability, no gem question — a repair to something `W3` already claims works. Its body carries a warning worth heeding before re-measuring: a corpus run once looked as though the change had altered the answers while an in-process comparison of both implementations against one index said they were identical, and `CLAUDE.md` names that exact corpus among its three false results.
 
 ### 0.2.18: the empty query's cost, split — and why it stays where it is
 
@@ -3534,13 +3714,42 @@ not measured one.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** Measured at 0.16 ms
 per search over 2,000 classes -- cost, and small, so the patch line
 and not urgently.
+
+## Re-read and re-driven in 0.3.2: the entry describes code that is no longer there
+
+It says `#search` "runs a `downcase.include?` over every key of
+`@by_symbol`". It does not, and has not for some time — it walks
+`@by_simple_name`, the same index `#find` uses, and only then reaches
+into `@by_symbol` for the entries of the names that matched. The
+premise the cost was argued from is gone.
+
+Measured over this repository's own `core/lib` — 89 files, 1,874
+symbols — with `limit: 100`:
+
+    search("a")                    0.95 ms   (100 hits, the cap)
+    search("build")                0.08 ms   (20 hits)
+    search("reso")                 0.12 ms   (49 hits)
+    search("definitely_not_present") 0.06 ms  (0 hits)
+
+A single-character query is the worst case and costs under a
+millisecond. What survives of the entry is the *lock*: the walk still
+holds `@mutex`, which is the lock indexing takes, so a large enough
+workspace could still put a picker keystroke in front of indexing. That
+is a real shape and this measurement does not reach it — 1,874 symbols
+is a small workspace, and the entry's concern was a large one.
+
+So it stays open on the half that was not measured away, with the half
+that was struck out rather than left to be quoted forward. Moved to
+0.4.0: what is left needs a workspace big enough to show it, which is
+an experiment to set up rather than a fix to write.
+
 ## 024.221 A block whose receiver cannot be vouched for contains a `private` that Ruby would let through
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (`#iterates_a_literal?`,
@@ -3627,223 +3836,22 @@ side.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** `:public` where
 Ruby says private is a wrong answer, and since 0.3.0 it is one
 completion acts on.
-## 024.224 A namespaced type is reported incompatible with itself
 
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.2
-```
+## Not attempted in 0.3.2: a fourth sentinel every reader must remember
 
-**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`#compatible_nominal?`
-at 571, `#ancestor_names` at 589, and the comment at 580-600)
+The entry's own last section says the shape that fits is a third
+visibility value — *unknown* — and that this is a sentinel every
+reader of a declaration has to remember, of the kind `024.243`'s
+second shape was rejected for. `CLAUDE.md`'s DTSTTCPW section names
+that shape directly, with `Environment::UNAVAILABLE` as the standing
+example of the cost being paid repeatedly rather than once: a
+reviewer found a *new* consumer getting it wrong in 0.2.16, and
+`024.224` — fixed in this release — is a third.
 
-Driven over rbs 4.0.3 with its own `sig/` as the signature root — 102
-files, 89 hand-written `.rbs`, which is the first hand-written-signature
-corpus this project has pointed the engine at — every `argument-type`
-report it produces is this:
+Adding a fourth such sentinel to `visibility`, which every
+declaration carries and many readers branch on, is not a patch's
+change. Moved to 0.4.0.
 
-    <rbs>/lib/rbs/cli.rb:498            `constant` expects RBS::TypeName here, but TypeName is given
-    <rbs>/lib/rbs/inline_parser.rb:533  `new` expects RBS::Location here, but Location is given
-    <rbs>/lib/rbs/inline_parser.rb:534  `new` expects RBS::Location here, but Location is given
-
-Taken from the interpreter rather than reasoned about:
-
-    $ ruby -e 'require "rbs"; module RBS
-      p [TypeName.equal?(RBS::TypeName), Location.equal?(RBS::Location)]
-    end'
-    # => [true, true]
-    # ruby 3.4.10
-
-They are the same class. The expected side arrives from RBS
-namespace-qualified; the actual side is inferred from Ruby source written
-*inside* `module RBS`, so it arrives bare, and the reachable set
-`#ancestor_names` builds carries the `::`-prefixed and last-segment
-spellings but not the bare qualified one that `simple_name(expected.name)`
-produces.
-
-**Any namespaced project whose parameter types come from RBS and whose
-argument types are inferred from Ruby source is exposed**, which is every
-project that writes `sig/` the way RBS itself does.
-
-**This is not `024.223`**, though the same corpus produced both.
-`024.223`'s fix — a chain that could not be built stops reading as an
-absent one — removes all 20 false `unknown-method` reports on that corpus
-and leaves these three untouched, measured: `argument-type` is 3 before
-and 3 after, with `unresolved-constant` identical at 319 as the control.
-The two want separate fixes and the register should not let one close the
-other.
-
-**Direction, and the caution on it.** The cheap repair is to have
-`#ancestor_names` emit `Index::SymbolId.bare_name(entry)` alongside the
-two spellings it already emits; a review pass measured that at 3 to 0.
-That is the symptom's fix. Three spellings of a type name float between
-the RBS side, the index side and the hierarchy side and each reader
-normalises differently, which is the shape `CLAUDE.md`'s same-place rule
-says to mechanise — `workspace_index.resolve_type_name` already maps
-every spelling to one answer, so comparing through the index rather than
-by `include?` over hand-built variants is the fix that removes the class.
-
-Note what that caution is *itself* cautioned by: 0.2.1 moved the
-type-name shadowing rule to where the value is produced and had to roll
-it back (`024.47`). This belongs at the comparison, not in the converter.
-
-**Also stale, and it is what makes this invisible on reading**: the
-comment at `engine.rb:580-600` asserts the expected side arrives bare and
-that `simple_name_of` is the form `TypeConverter` gives. Both were true
-before 0.2.5 stopped truncating and are false at HEAD.
-
-**Targeted 0.2.16 rather than 0.2.15** because the honest fix is a shared
-resolution path with three readers, and 0.2.15 already carries
-`024.223`'s change to the same area. Two changes to how a type name is
-compared, in one release, reviewed together, is how `024.47` happened.
-
-### Two attempts in 0.2.16, both measured unsound, and why the third is not being written
-
-`CLAUDE.md`'s same-place rule says a hand fix does not get a third go at
-one place. This is that point, so what follows is the deliverable and the
-code change is not.
-
-**Attempt 1 — the cheap repair this entry's own Direction names.** Emit
-`Index::SymbolId.bare_name(entry)` from `#ancestor_names` alongside the
-two spellings it already emits. Measured 3 reports to 0 on the rbs
-corpus, which is why it looked finished. Declined during 0.2.16 for the
-reason the Direction already gave: it adds a fourth spelling to a set of
-hand-built spellings, which is the class of defect rather than the fix
-for it.
-
-**Attempt 2 — the shared resolution path the Direction actually asks
-for.** A `Diagnostics::TypeIdentity.of(name, workspace_index,
-signatures)` answering one identity per type name whatever spelling it
-arrives in, with `#compatible_nominal?` putting both sides through it and
-`#ancestor_names` replaced by an `#ancestor_identities` that asks RBS
-about identities rather than raw hierarchy spellings. It refuses through
-two rules this repository already owns — `WorkspaceIndex#guessed_type_name?`
-and `Index::TypeNameResolution.substitution?` — rather than inventing a
-resolution rule, and it deletes `#simple_name_of`. On paper this is the
-right shape. A reviewer drove it and found two things the author's own
-measurement could not have seen:
-
-- **It buys a false negative wider than the false positive it removes.**
-  The expected side is a name RBS produced — absolute and unambiguous by
-  construction — and putting it through `guessed_type_name?` makes it
-  guessed as soon as the workspace declares one class sharing its last
-  segment. Reproduced on a clone, with and without the patch, `sig/`
-  declaring `Zoo::Barn#feed: (Zoo::Animal) -> void`:
-
-      # workspace as the patch's own control example writes it,
-      # with no Ruby class named Animal anywhere
-      base    ["`feed` expects Zoo::Animal here, but Animal is given"]
-      patched ["`feed` expects Zoo::Animal here, but Farm::Animal is given"]
-
-      # the same fixture, plus the ordinary `module Farm; class Animal; end; end`
-      base    ["`feed` expects Zoo::Animal here, but Farm::Animal is given"]
-      patched []          <- the true mismatch, silenced
-
-  The patch's headline control — "it still reports a same-named class
-  from another namespace" — holds only because its fixture declares no
-  Ruby class named `Animal` at all. Add the class the source is written
-  against and the fix loses exactly the report it was designed to keep.
-
-- **It reintroduces `024.223`'s conflation at a consumer it adds
-  itself.** Half two calls `declared_by_signatures?`, which is
-  `!signatures.ancestors(...).empty?` — and `Environment::UNAVAILABLE` is
-  a frozen `[]`, so a chain that could not be built reads as "not
-  declared". Probed with this entry's own fixture, adding one
-  `include _Serializable` to `class Key` brings the original report back
-  unchanged. The two halves' fixtures each avoid the other's condition.
-
-Four behavioural decisions in that patch were also unpinned — reverse-applied
-one at a time with the whole core suite green — including the very decision
-the report credits with the fix.
-
-**The root cause, stated plainly.** Three spellings of a type name float
-between the RBS side, the index side and the hierarchy side, and each
-reader normalises differently. That much this entry already said. What
-the two attempts add is *why a fix at the comparison keeps failing*: the
-comparison is being asked to recover an identity that was **already lost
-upstream**, and every recovery rule strong enough to reunite the two
-spellings is also strong enough to unite two genuinely different classes.
-`guessed_type_name?` and `substitution?` are refusals designed for a
-*receiver*, where declining costs a missed report; on an *argument's
-expected type* the same refusal costs a wrong silence, and neither rule
-was written for that side.
-
-**The direction actually needed.** The expected type must not arrive as a
-name to be re-resolved at all. `Signatures::TypeConverter` knows the
-absolute `RBS::TypeName` at the moment it builds the `Types::Nominal`,
-and that identity is exact; it is thrown away and a String is compared
-downstream. Carrying it — a nominal that remembers what resolved it —
-removes the comparison's job rather than improving it, and no refusal
-rule is needed on the expected side because there is nothing left to
-guess. That is a change to a type every component reads, which is a
-release's worth of blast radius on this project's own evidence
-(`0.2.5`'s one-line converter change), and it is why this is re-scoped
-rather than attempted a third time.
-
-**Re-scoped to 0.3.0**, where `024.R7`'s work already opens the
-signature and index sides together. Until then the entry stays open and
-`KNOWN_LIMITATIONS` keeps its paragraph in both languages: the product
-does have this defect, and 0.2.16 shipped without fixing it.
-
-
-**Re-driven at 0.3.0 over rbs 4.0.3 with its own `sig/`, and it has
-grown from three to seven.** 102 files, control `unresolved-constant`
-at 326:
-
-    lib/rbs/cli.rb:498               `constant` expects RBS::TypeName here, but TypeName is given
-    lib/rbs/inline_parser.rb:533     `new` expects RBS::Location here, but Location is given
-    lib/rbs/inline_parser.rb:534     `new` expects RBS::Location here, but Location is given
-    lib/rbs/prototype/runtime.rb:525 `generate_mixin` expects RBS::TypeName here, but TypeName is given
-    lib/rbs/prototype/runtime.rb:528 `generate_methods` expects RBS::TypeName here, but TypeName is given
-    lib/rbs/prototype/runtime.rb:565 `generate_mixin` expects RBS::TypeName here, but TypeName is given
-    lib/rbs/prototype/runtime.rb:567 `generate_methods` expects RBS::TypeName here, but TypeName is given
-
-**Every `argument-type` report this corpus produces is this entry.**
-The check's whole output on a hand-written-signature corpus is false.
-
-**And there is a direction that is not spelling normalisation.**
-`CLAUDE.md` records why normalising the two spellings cannot work --
-every rule strong enough to reunite `TypeName` and `RBS::TypeName`
-also unites two different classes. But the *actual* side is inferred
-from Ruby source whose lexical nesting the parser already records on
-the candidate: a bare `TypeName` written inside `module RBS` resolves
-to `RBS::TypeName` the way Ruby resolves it, not by guessing at the
-string. That is a different mechanism from the one the register
-rejects, and it is the one worth measuring next -- 7 to 0, with
-`unresolved-constant` at 326 as the control.
-
-**Attempted in 0.3.0 and abandoned before a change, with one fact
-gained.** The lexical-nesting direction sketched above is not the one:
-two fixtures were built for it -- a bare name written inside its own
-`module`, then the same across two files, which is rbs's own shape --
-and **neither reproduces**. Both were deleted rather than kept, because
-a passing example that does not reproduce the defect is worse than no
-example: it reads as coverage.
-
-What the fixtures ruled out is that this is Ruby-side constant
-resolution. rbs writes the expected side **bare** in its own signature:
-
-    sig/resolver/constant_resolver.rbs:29
-      def constant: (TypeName constant_name) -> Constant?
-
-and it arrives at the check as `RBS::TypeName`. So the absolutisation
-RBS performs is reaching one side and not the other, and both sides
-are RBS's -- not, as this entry says, an actual side "inferred from
-Ruby source written inside `module RBS`".
-
-That puts the root exactly where `CLAUDE.md` already puts it, in the
-DTSTTCPW section: `Signatures::TypeConverter` holds an absolute
-`RBS::TypeName` at the moment it builds the `Types::Nominal` and
-flattens it to a String, after which three readers normalise spellings
-to get the identity back. The direction is to keep the identity, which
-is a change to what a `Nominal` carries and to its readers -- not a
-hunk a review round can add.
-
-**Retargeted to 0.3.2 in 0.3.0's closing sweep.** Seven reports and
-all of them false, on the only hand-written-signature corpus this
-engine has been pointed at.
 ## 024.237 Four shapes stopped reporting by declining on the body, not by reading it
 
 ```yaml
@@ -4060,158 +4068,6 @@ rather than a hunk in a review round, so this stays open and moves off
 measured in 0.3.0 and none shippable. The direction needs a change to
 how ancestors are read, and it ends in members a module did not offer
 before.
-## 024.275 A workspace-identity example fails only in a full-suite run, and not reproducibly
-
-```yaml
-status: open
-kind: defect
-user-visible: no
-user-visible-note: >
-  Nothing a user meets that is known. It is filed because the example
-  guards a user-visible invariant -- that the root is the one the editor
-  named -- and an assertion that fails sometimes is either a defect in
-  the product or a defect in the test, and neither is acceptable
-  unexamined.
-target: 0.3.2
-```
-
-**Area:** `core/spec/ovallsp/server_workspace_identity_spec.rb`,
-`core/lib/ovallsp/server.rb` (`#client_workspace_root`)
-
-`takes the first workspace folder when the client sends no rootUri`, and
-its neighbour `keeps its own cwd when the named root does not exist`,
-failed in a full-suite run during 0.2.17. What is known, all measured:
-
-- Three consecutive full runs gave **2 failures, then 1, then 0**, in
-  declining step with the number of other agents running suites on the
-  same machine.
-- **The same seed is not deterministic**: `--seed 48603` gave one failure
-  and then, re-run, none. So it is not example ordering.
-- The file alone passes: six runs, and six more while four other suites
-  were deliberately loading the machine.
-- Pairing it with the neighbours most likely to leak — the cache specs,
-  the cold-index spec, the observation directory, the cache-sweep spec —
-  passes every time.
-
-**One hypothesis was tested and refuted**, and it is worth recording
-because it is the one this repository's own history points at. If a
-`Cache::Store` prune ever aimed outside its cache root it could delete
-another process's `Dir.mktmpdir` — the `/Applications` incident's shape,
-with the tmpdir parent shared by every agent on the machine. Driven:
-`remove_within` refuses any path not strictly inside the expanded cache
-root, and `prune_generations_of` is aimed by `File.dirname(current)` with
-`root` passed separately rather than derived. The containment holds.
-
-**What has not been established** is the value the assertion actually
-saw. Both runs that captured the message were the runs that passed, so
-the `got` side is unknown, and the two obvious readings —
-`File.directory?` answering false for a symlink whose target still
-exists, and the root simply never being adopted — have not been told
-apart.
-
-Filed rather than guessed at. The next full-suite run that reproduces it
-should capture the failure message before anything else; that one line
-decides whether this is the product or the test.
-
-**Not reproduced in 0.2.17, and not fixed.** Three full-suite runs during this release — 2,791, 2,794 and 2,799 examples — came back with zero failures in this file, on a machine running nothing else. That is consistent with the load hypothesis the entry already records and is not evidence of anything on its own: the same file passed twelve times during the original investigation too.
-
-Moved to the patch line rather than left naming a release that is being cut, because there is nothing here to do until it fails again. The instruction stands and is the whole of the work: **the next full-suite run that reproduces it captures the failure message before anything else.** That one line decides whether this is the product or the test, and it has never been captured.
-
-### A second example of the same shape, 0.2.18
-
-`spec/ovallsp/observation/collector_spec.rb`'s "lets an object given a
-singleton method inside an observed run be collected" failed once in a
-full-suite preflight and passed three times out of three when run alone.
-
-It is a **GC** example — it asserts an object becomes collectable — so
-the obvious hypothesis is different from the workspace-identity one:
-the longer the suite, the more live objects a `GC.start` has to work
-through, and a test that asserts collection has happened by a given
-point is measuring the collector's schedule rather than the code.
-
-Recorded here rather than as its own entry because what this entry is
-about is the *class*: an example that fails only in a full run and not
-reproducibly. Two of them now, in unrelated subsystems, which is itself
-the argument that the cause is the run and not either subject.
-
-**Still nothing captured.** Neither instance has had its failure message
-read at the moment it failed. That remains the whole of the work.
-### 0.2.18: the instruction is now the assertion, not a sentence
-
-**What this entry has been waiting on is one line of output, and it
-asked for it in a way that could not fire.** "The next full-suite run
-that reproduces it captures the failure message before anything else"
-addresses whoever happens to be watching. Nobody was, twice, across two
-releases — and *both* runs that recorded a message were runs that
-passed, so the `got` side has still never been seen.
-
-So the capture is built into the assertion.
-`spec/support/workspace_identity_report.rb` is attached to **all five**
-root assertions in that file, not only the two that have failed, and a
-reproduction now records itself:
-
-```
-workspace root is not the one the editor named.
-expected="…/link"
-got="…/real"
-load=3.02
-  real: …/real exists=true directory=true symlink=false
-  link: …/link exists=true directory=true symlink=true -> …/real
-```
-
-That tells the entry's two readings apart in one line each:
-`File.directory?` answering false for a symlink whose target still
-exists shows as `symlink=true exists=false dangling`, and a root never
-adopted shows as `got=` the cwd with `link` intact. The load figure is
-there because the load hypothesis is the only one both halves of this
-entry share. `server_identity_report_spec.rb` pins what the report
-says, so it cannot quietly stop naming one of them.
-
-**Verified by forcing it**: `client_workspace_root` was made to decline
-every path in a scratch copy, and the report above is what came out.
-
-### And the fabricated absolute path is gone
-
-`keeps its own cwd when the named root does not exist` named
-`file:///nonexistent-<pid>` — a path at the filesystem root chosen to
-be obviously fake, which is the shape `CLAUDE.md`'s `/Applications`
-rule is about. Nothing here deletes, so it was never that incident's
-hazard. What it was is an assertion whose verdict depended on the state
-of the machine's root directory, in a file whose failures came and went
-with how many other processes were running. The absent root is now
-inside the example's own tmpdir; the guard is still pinned (removing
-`File.directory?` still fails it).
-
-### The GC pair, same entry, different hypothesis
-
-The two `collector_spec.rb` examples recorded above now re-collect and
-re-measure up to ten times rather than asserting on the first count.
-Their hypothesis is specific — they assert an object *has been*
-collected by a given point, which measures the collector's schedule as
-much as the code.
-
-**It cannot weaken them**, which is what made it allowed: pre-fix the
-delta is `CHURN_COUNT` *permanently*, so no number of further
-collections moves it. Confirmed by reintroducing the retention in a
-scratch copy — the example still fails, `expected: < 2`.
-
-**Still open**, and now for a reason it can discharge: nothing here
-claims to have found the cause. What changed is that the next
-reproduction will say what it was, without anyone having to be present.
-**Target moved to `unscheduled`, which is what it has always been.**
-It said 0.2.18, and there is nothing here anyone can schedule: the
-work is to read a failure message, and the failure has occurred twice
-in some sixty full-suite runs. Naming a release for it makes a
-commitment nobody can keep and pushes it forward one release at a
-time, which is how it reached 0.2.18 from 0.2.16.
-
-What changed in 0.2.18 is that the trigger no longer needs a person.
-When it fires, the message arrives with it, and the entry becomes
-ordinary work in whatever release that is.
-
-
-
-**Retargeted to 0.3.2.** An assertion that fails sometimes is either a defect in the product or a defect in the test, and leaving it unscheduled is how it stays neither. 0.3.0 attached a self-recording report to the assertion, so the next reproduction carries the value nobody has seen; 0.3.2 is when that evidence is read, and if it has still not fired the entry is a candidate for closure as unreproducible rather than for another wait.
 ## 024.289 A class that includes an unread module is not checked at class level, so a typo there is silent
 
 ```yaml
@@ -4391,7 +4247,7 @@ calls capability, which is why the target moved off the patch line.
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.2
+target: 0.4.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb`, `core/lib/ovallsp/cache/`
@@ -4432,6 +4288,21 @@ duplicate-name collapse, because persistence would freeze it.
 
 0.3.1 fixed the half of this that was making *wrong* answers rather
 than late ones: the index is now dropped when the Agent restarts.
+
+## Where this stands after 0.3.2
+
+`024.305` — the duplicate-name collapse this entry named as what must
+land first — is fixed, so the blocker is gone. The key problem is
+not: attribution is by definition site, so a model's generated
+modules are filed under activerecord and change when `app/models`
+does, and `Cache::Key.workspace_digest` has no term that moves when
+they do. Neither the per-gem key nor a whole-index one can see that.
+
+What is left is therefore a design question — what identity a
+persisted index is keyed by — rather than plumbing. Moved to 0.4.0.
+0.3.2 fixed the half of this that was making *wrong* answers rather
+than late ones, in 0.3.1: the index is dropped when the Agent
+restarts.
 
 ## 024.297 Call hierarchy lists no callee reached through `send`, `super` or a macro
 

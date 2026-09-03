@@ -6,6 +6,77 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.3.2 — a rename that changed what your program does
+
+Renaming a local variable that a pattern match also binds rewrote the
+occurrences this extension could see and left the pattern bound to the
+old name. The file still parsed, still ran, and answered something
+else — the worst way a rename can fail, because nothing tells you. It
+declines that rename now and says why.
+
+- **Ruby 4.0: a method Ruby itself defines is no longer reported as one
+  your class does not have.** `instance_variables_to_inspect` is on
+  `Object` in 4.0 and the bundled signatures do not declare it, so
+  every class in a workspace picked it up as a mistake. The list of
+  such names is keyed by Ruby's minor version now, and measured for
+  each rather than written once.
+- **A namespaced type is no longer reported as incompatible with
+  itself.** ``expects RBS::TypeName here, but TypeName is given``,
+  where the two names are one class, was *every* argument-type report
+  this extension produced over a project with hand-written signatures.
+  None of them was about your code.
+- **What a method returns is shown the way its signature writes it.**
+  `Array#each` read `Enumerator[Unknown]` for a method RBS describes
+  exactly; it reads `Enumerator[Elem, self]`.
+- **An argument-count message reads as a count again.** A method taking
+  nought or one argument said "takes 0..1 argument".
+- **The macOS package is now built and driven by CI**, on an Apple
+  Silicon runner, with the same test the publish gate runs. Every
+  packaged run before this was Linux, while what is published is
+  `darwin-arm64`.
+- **Inlay hints label block parameters.** They have for some releases;
+  no release note said so, which is why it is here.
+
+### Details
+
+**The rename.** Taken from Ruby before anything was written:
+
+    def m(pair) = (_a = 0; case pair; in [_a, 1] then _a; end)
+    m([5, 1])   # => 5
+    # after renaming `_a` to `zz`
+    def m(pair) = (zz = 0; case pair; in [_a, 1] then zz; end)
+    m([5, 1])   # => 0
+
+The refusal already existed for the case where *no* occurrence is a
+write; an ordinary `_a = 0` in the same scope supplies one. What
+changed is that the name a pattern bound is kept, so the planner can be
+given the input it could not see rather than guarded at each caller.
+
+**The namespaced type.** Two earlier attempts treated it as two
+spellings of one name and were both measured unsound. It was neither.
+When RBS declares a type whose ancestry it cannot build — `rbs`'s own
+`sig/typename.rbs` includes an interface `rbs` does not load for itself
+— the check was reading that failure as "this class has no ancestors"
+and concluding a mismatch from a question it could not ask. It declines
+now. Measured over `rbs` 4.2.0 with its own signatures: six reports
+before, none after, with the unrelated categories unchanged; and two
+further corpora, 375 and 759 files, byte-identical on both sides.
+
+**What this release is.** 0.3.2 is the backlog the 0.3 line owed: the
+thirty-four register entries targeted at it when it opened. Nineteen
+are fixed. The other fifteen were each *driven* rather than reassigned,
+and moved to 0.4.0 with the measurement that says why a patch cannot
+hold them — including two whose recorded premise turned out to be false
+and one that no longer reproduced at all. `docs/KNOWN_LIMITATIONS.md`
+is the user-facing half of that and has been kept in step in both
+languages.
+
+**Two checks caught this release's own work**, which is the only
+endorsement a check needs. The pinned-mutation check refused a mutation
+that had come to match no line at all, rather than reporting a pin that
+named nothing as caught; and the Ruby 4.0 job found a teardown race
+that was not 4.0's.
+
 ## 0.3.1 — a restart left the old gems answering
 
 A `bundle install` restarts the Runtime Agent, and the list of classes

@@ -11981,6 +11981,305 @@ first attempt to decide whether it was pre-existing stashed only the two
 `core/lib` files and left the new spec in place, so the "it fails without
 my change too" run still contained the cause.*
 
+## 024.224 A namespaced type is reported incompatible with itself
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: yes
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`#compatible_nominal?`
+at 571, `#ancestor_names` at 589, and the comment at 580-600)
+
+Driven over rbs 4.0.3 with its own `sig/` as the signature root — 102
+files, 89 hand-written `.rbs`, which is the first hand-written-signature
+corpus this project has pointed the engine at — every `argument-type`
+report it produces is this:
+
+    <rbs>/lib/rbs/cli.rb:498            `constant` expects RBS::TypeName here, but TypeName is given
+    <rbs>/lib/rbs/inline_parser.rb:533  `new` expects RBS::Location here, but Location is given
+    <rbs>/lib/rbs/inline_parser.rb:534  `new` expects RBS::Location here, but Location is given
+
+Taken from the interpreter rather than reasoned about:
+
+    $ ruby -e 'require "rbs"; module RBS
+      p [TypeName.equal?(RBS::TypeName), Location.equal?(RBS::Location)]
+    end'
+    # => [true, true]
+    # ruby 3.4.10
+
+They are the same class. The expected side arrives from RBS
+namespace-qualified; the actual side is inferred from Ruby source written
+*inside* `module RBS`, so it arrives bare, and the reachable set
+`#ancestor_names` builds carries the `::`-prefixed and last-segment
+spellings but not the bare qualified one that `simple_name(expected.name)`
+produces.
+
+**Any namespaced project whose parameter types come from RBS and whose
+argument types are inferred from Ruby source is exposed**, which is every
+project that writes `sig/` the way RBS itself does.
+
+**This is not `024.223`**, though the same corpus produced both.
+`024.223`'s fix — a chain that could not be built stops reading as an
+absent one — removes all 20 false `unknown-method` reports on that corpus
+and leaves these three untouched, measured: `argument-type` is 3 before
+and 3 after, with `unresolved-constant` identical at 319 as the control.
+The two want separate fixes and the register should not let one close the
+other.
+
+**Direction, and the caution on it.** The cheap repair is to have
+`#ancestor_names` emit `Index::SymbolId.bare_name(entry)` alongside the
+two spellings it already emits; a review pass measured that at 3 to 0.
+That is the symptom's fix. Three spellings of a type name float between
+the RBS side, the index side and the hierarchy side and each reader
+normalises differently, which is the shape `CLAUDE.md`'s same-place rule
+says to mechanise — `workspace_index.resolve_type_name` already maps
+every spelling to one answer, so comparing through the index rather than
+by `include?` over hand-built variants is the fix that removes the class.
+
+Note what that caution is *itself* cautioned by: 0.2.1 moved the
+type-name shadowing rule to where the value is produced and had to roll
+it back (`024.47`). This belongs at the comparison, not in the converter.
+
+**Also stale, and it is what makes this invisible on reading**: the
+comment at `engine.rb:580-600` asserts the expected side arrives bare and
+that `simple_name_of` is the form `TypeConverter` gives. Both were true
+before 0.2.5 stopped truncating and are false at HEAD.
+
+**Targeted 0.2.16 rather than 0.2.15** because the honest fix is a shared
+resolution path with three readers, and 0.2.15 already carries
+`024.223`'s change to the same area. Two changes to how a type name is
+compared, in one release, reviewed together, is how `024.47` happened.
+
+### Two attempts in 0.2.16, both measured unsound, and why the third is not being written
+
+`CLAUDE.md`'s same-place rule says a hand fix does not get a third go at
+one place. This is that point, so what follows is the deliverable and the
+code change is not.
+
+**Attempt 1 — the cheap repair this entry's own Direction names.** Emit
+`Index::SymbolId.bare_name(entry)` from `#ancestor_names` alongside the
+two spellings it already emits. Measured 3 reports to 0 on the rbs
+corpus, which is why it looked finished. Declined during 0.2.16 for the
+reason the Direction already gave: it adds a fourth spelling to a set of
+hand-built spellings, which is the class of defect rather than the fix
+for it.
+
+**Attempt 2 — the shared resolution path the Direction actually asks
+for.** A `Diagnostics::TypeIdentity.of(name, workspace_index,
+signatures)` answering one identity per type name whatever spelling it
+arrives in, with `#compatible_nominal?` putting both sides through it and
+`#ancestor_names` replaced by an `#ancestor_identities` that asks RBS
+about identities rather than raw hierarchy spellings. It refuses through
+two rules this repository already owns — `WorkspaceIndex#guessed_type_name?`
+and `Index::TypeNameResolution.substitution?` — rather than inventing a
+resolution rule, and it deletes `#simple_name_of`. On paper this is the
+right shape. A reviewer drove it and found two things the author's own
+measurement could not have seen:
+
+- **It buys a false negative wider than the false positive it removes.**
+  The expected side is a name RBS produced — absolute and unambiguous by
+  construction — and putting it through `guessed_type_name?` makes it
+  guessed as soon as the workspace declares one class sharing its last
+  segment. Reproduced on a clone, with and without the patch, `sig/`
+  declaring `Zoo::Barn#feed: (Zoo::Animal) -> void`:
+
+      # workspace as the patch's own control example writes it,
+      # with no Ruby class named Animal anywhere
+      base    ["`feed` expects Zoo::Animal here, but Animal is given"]
+      patched ["`feed` expects Zoo::Animal here, but Farm::Animal is given"]
+
+      # the same fixture, plus the ordinary `module Farm; class Animal; end; end`
+      base    ["`feed` expects Zoo::Animal here, but Farm::Animal is given"]
+      patched []          <- the true mismatch, silenced
+
+  The patch's headline control — "it still reports a same-named class
+  from another namespace" — holds only because its fixture declares no
+  Ruby class named `Animal` at all. Add the class the source is written
+  against and the fix loses exactly the report it was designed to keep.
+
+- **It reintroduces `024.223`'s conflation at a consumer it adds
+  itself.** Half two calls `declared_by_signatures?`, which is
+  `!signatures.ancestors(...).empty?` — and `Environment::UNAVAILABLE` is
+  a frozen `[]`, so a chain that could not be built reads as "not
+  declared". Probed with this entry's own fixture, adding one
+  `include _Serializable` to `class Key` brings the original report back
+  unchanged. The two halves' fixtures each avoid the other's condition.
+
+Four behavioural decisions in that patch were also unpinned — reverse-applied
+one at a time with the whole core suite green — including the very decision
+the report credits with the fix.
+
+**The root cause, stated plainly.** Three spellings of a type name float
+between the RBS side, the index side and the hierarchy side, and each
+reader normalises differently. That much this entry already said. What
+the two attempts add is *why a fix at the comparison keeps failing*: the
+comparison is being asked to recover an identity that was **already lost
+upstream**, and every recovery rule strong enough to reunite the two
+spellings is also strong enough to unite two genuinely different classes.
+`guessed_type_name?` and `substitution?` are refusals designed for a
+*receiver*, where declining costs a missed report; on an *argument's
+expected type* the same refusal costs a wrong silence, and neither rule
+was written for that side.
+
+**The direction actually needed.** The expected type must not arrive as a
+name to be re-resolved at all. `Signatures::TypeConverter` knows the
+absolute `RBS::TypeName` at the moment it builds the `Types::Nominal`,
+and that identity is exact; it is thrown away and a String is compared
+downstream. Carrying it — a nominal that remembers what resolved it —
+removes the comparison's job rather than improving it, and no refusal
+rule is needed on the expected side because there is nothing left to
+guess. That is a change to a type every component reads, which is a
+release's worth of blast radius on this project's own evidence
+(`0.2.5`'s one-line converter change), and it is why this is re-scoped
+rather than attempted a third time.
+
+**Re-scoped to 0.3.0**, where `024.R7`'s work already opens the
+signature and index sides together. Until then the entry stays open and
+`KNOWN_LIMITATIONS` keeps its paragraph in both languages: the product
+does have this defect, and 0.2.16 shipped without fixing it.
+
+
+**Re-driven at 0.3.0 over rbs 4.0.3 with its own `sig/`, and it has
+grown from three to seven.** 102 files, control `unresolved-constant`
+at 326:
+
+    lib/rbs/cli.rb:498               `constant` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/inline_parser.rb:533     `new` expects RBS::Location here, but Location is given
+    lib/rbs/inline_parser.rb:534     `new` expects RBS::Location here, but Location is given
+    lib/rbs/prototype/runtime.rb:525 `generate_mixin` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/prototype/runtime.rb:528 `generate_methods` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/prototype/runtime.rb:565 `generate_mixin` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/prototype/runtime.rb:567 `generate_methods` expects RBS::TypeName here, but TypeName is given
+
+**Every `argument-type` report this corpus produces is this entry.**
+The check's whole output on a hand-written-signature corpus is false.
+
+**And there is a direction that is not spelling normalisation.**
+`CLAUDE.md` records why normalising the two spellings cannot work --
+every rule strong enough to reunite `TypeName` and `RBS::TypeName`
+also unites two different classes. But the *actual* side is inferred
+from Ruby source whose lexical nesting the parser already records on
+the candidate: a bare `TypeName` written inside `module RBS` resolves
+to `RBS::TypeName` the way Ruby resolves it, not by guessing at the
+string. That is a different mechanism from the one the register
+rejects, and it is the one worth measuring next -- 7 to 0, with
+`unresolved-constant` at 326 as the control.
+
+**Attempted in 0.3.0 and abandoned before a change, with one fact
+gained.** The lexical-nesting direction sketched above is not the one:
+two fixtures were built for it -- a bare name written inside its own
+`module`, then the same across two files, which is rbs's own shape --
+and **neither reproduces**. Both were deleted rather than kept, because
+a passing example that does not reproduce the defect is worse than no
+example: it reads as coverage.
+
+What the fixtures ruled out is that this is Ruby-side constant
+resolution. rbs writes the expected side **bare** in its own signature:
+
+    sig/resolver/constant_resolver.rbs:29
+      def constant: (TypeName constant_name) -> Constant?
+
+and it arrives at the check as `RBS::TypeName`. So the absolutisation
+RBS performs is reaching one side and not the other, and both sides
+are RBS's -- not, as this entry says, an actual side "inferred from
+Ruby source written inside `module RBS`".
+
+That puts the root exactly where `CLAUDE.md` already puts it, in the
+DTSTTCPW section: `Signatures::TypeConverter` holds an absolute
+`RBS::TypeName` at the moment it builds the `Types::Nominal` and
+flattens it to a String, after which three readers normalise spellings
+to get the identity back. The direction is to keep the identity, which
+is a change to what a `Nominal` carries and to its readers -- not a
+hunk a review round can add.
+
+**Retargeted to 0.3.2 in 0.3.0's closing sweep.** Seven reports and
+all of them false, on the only hand-written-signature corpus this
+engine has been pointed at.
+
+## Fixed in 0.3.2, and the cause was neither of the two this entry chased
+
+Two attempts were declined for being spelling normalisation, and the
+direction recorded here was to carry `RBS::TypeName`'s identity through
+`Types::Nominal` — a change to a type every component reads. Driven at
+0.3.2, **the spelling is a symptom of a swallowed failure**, and the
+fix is one guard in the reader that swallows it.
+
+`Signatures::Environment#ancestors` answers `UNAVAILABLE` — a frozen
+`[]` — when RBS declares a type whose ancestry it cannot build
+(`024.223`). `Engine#ancestor_names` added whatever came back to the
+reachable set, so an unavailable chain was indistinguishable there from
+a type with no ancestors, and `#compatible_nominal?` then asserted a
+mismatch from a question it could not ask. That is the exact shape
+`CLAUDE.md`'s swallowed-failure rule forbids, one layer below the layer
+that knows what to do with it — and the register had already noticed it
+*in a proposed patch* while missing that it was at HEAD.
+
+Why rbs's own signatures trip it, taken from the run rather than
+reasoned about:
+
+    failed to build ancestors of ::RBS::TypeName:
+      sig/typename.rbs:52:4...52:19: Could not find mixin: _ToJson
+
+`sig/typename.rbs` includes an interface rbs does not load for itself.
+With the chain unavailable, `via_signatures` contributes nothing and the
+set comes out as every spelling of the class except the bare-qualified
+one the expected side is compared as:
+
+    actual="TypeName"  expected="RBS::TypeName"
+    reachable=["TypeName", "::RBS::TypeName", "Object", "Kernel",
+               "BasicObject"]
+
+**Measured, rbs 4.2.0 with its own `sig/` as the signature root**, 109
+files, corpus-sha256 identical on both sides:
+
+    argument-type          6  ->  0        (all six were this entry)
+    unresolved-constant  369  ->  369      (control)
+
+0 introduced. Two further corpora, each run against a `git worktree` of
+HEAD so the two sides differ only in this change:
+
+    language_server-protocol-3.17.0.6, its own sig/, 375 files
+      byte-identical, both sides
+
+    activesupport + activerecord + activemodel 8.1.3.1, 759 files,
+    stdlib signatures
+      unresolved-constant  1788 = 1788
+      unknown-method         97 =   97
+      byte-identical, both sides
+
+`#ancestor_names` has exactly one caller, `#compatible_nominal?`, so
+`argument-type` is the whole blast radius by construction — and the two
+runs above are what says so from outside the code rather than from
+reading it.
+
+**The deciding control is in the spec, not in prose.** One fixture, two
+signature files one `include _Missing` apart: with the chain
+unbuildable the call is reported, with it buildable the same call is
+silent. That is what makes the chain rather than the spelling the
+cause, and an earlier fixture that lacked it passed at HEAD for a
+reason unrelated to the defect.
+
+**What it costs, pinned as an assertion rather than written as a
+sentence.** A *genuine* mismatch whose argument's own chain is
+unavailable is now declined too. The reachable set is a lower bound and
+a chain that could not be built may well have had the expected type in
+it, so this is section 0's preferred direction — a missed report rather
+than a wrong one — and
+`spec/ovallsp/diagnostics/unbuildable_signature_chain_spec.rb` asserts
+it so the price cannot quietly change.
+
+**What is left, and it is a different entry.** The actual side still
+arrives under-qualified: a bare `TypeName` written inside a module
+nested deeper than the class is recorded as written, and only the
+hierarchy index recovers it. Nothing in this fix touches that, and the
+fixture that reproduces it is `024.19`'s. The half this entry was
+titled for — *a namespaced type reported incompatible with itself* — no
+longer happens on the corpus that produced it.
+
 ## 024.225 A scripted edit inserted the entire file before its own anchor, and the line count was the only symptom
 
 ```yaml
@@ -15621,6 +15920,183 @@ variable and a `rescue => _e` cannot produce the illegal pair, and
 declining them cost documentHighlight and Find References an
 occurrence apiece. The parser tracks pattern depth and declines an
 underscore target only inside one.
+
+## 024.275 A workspace-identity example fails only in a full-suite run, and not reproducibly
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets that is known. It is filed because the example
+  guards a user-visible invariant -- that the root is the one the editor
+  named -- and an assertion that fails sometimes is either a defect in
+  the product or a defect in the test, and neither is acceptable
+  unexamined.
+target: 0.3.2
+```
+
+**Area:** `core/spec/ovallsp/server_workspace_identity_spec.rb`,
+`core/lib/ovallsp/server.rb` (`#client_workspace_root`)
+
+`takes the first workspace folder when the client sends no rootUri`, and
+its neighbour `keeps its own cwd when the named root does not exist`,
+failed in a full-suite run during 0.2.17. What is known, all measured:
+
+- Three consecutive full runs gave **2 failures, then 1, then 0**, in
+  declining step with the number of other agents running suites on the
+  same machine.
+- **The same seed is not deterministic**: `--seed 48603` gave one failure
+  and then, re-run, none. So it is not example ordering.
+- The file alone passes: six runs, and six more while four other suites
+  were deliberately loading the machine.
+- Pairing it with the neighbours most likely to leak — the cache specs,
+  the cold-index spec, the observation directory, the cache-sweep spec —
+  passes every time.
+
+**One hypothesis was tested and refuted**, and it is worth recording
+because it is the one this repository's own history points at. If a
+`Cache::Store` prune ever aimed outside its cache root it could delete
+another process's `Dir.mktmpdir` — the `/Applications` incident's shape,
+with the tmpdir parent shared by every agent on the machine. Driven:
+`remove_within` refuses any path not strictly inside the expanded cache
+root, and `prune_generations_of` is aimed by `File.dirname(current)` with
+`root` passed separately rather than derived. The containment holds.
+
+**What has not been established** is the value the assertion actually
+saw. Both runs that captured the message were the runs that passed, so
+the `got` side is unknown, and the two obvious readings —
+`File.directory?` answering false for a symlink whose target still
+exists, and the root simply never being adopted — have not been told
+apart.
+
+Filed rather than guessed at. The next full-suite run that reproduces it
+should capture the failure message before anything else; that one line
+decides whether this is the product or the test.
+
+**Not reproduced in 0.2.17, and not fixed.** Three full-suite runs during this release — 2,791, 2,794 and 2,799 examples — came back with zero failures in this file, on a machine running nothing else. That is consistent with the load hypothesis the entry already records and is not evidence of anything on its own: the same file passed twelve times during the original investigation too.
+
+Moved to the patch line rather than left naming a release that is being cut, because there is nothing here to do until it fails again. The instruction stands and is the whole of the work: **the next full-suite run that reproduces it captures the failure message before anything else.** That one line decides whether this is the product or the test, and it has never been captured.
+
+### A second example of the same shape, 0.2.18
+
+`spec/ovallsp/observation/collector_spec.rb`'s "lets an object given a
+singleton method inside an observed run be collected" failed once in a
+full-suite preflight and passed three times out of three when run alone.
+
+It is a **GC** example — it asserts an object becomes collectable — so
+the obvious hypothesis is different from the workspace-identity one:
+the longer the suite, the more live objects a `GC.start` has to work
+through, and a test that asserts collection has happened by a given
+point is measuring the collector's schedule rather than the code.
+
+Recorded here rather than as its own entry because what this entry is
+about is the *class*: an example that fails only in a full run and not
+reproducibly. Two of them now, in unrelated subsystems, which is itself
+the argument that the cause is the run and not either subject.
+
+**Still nothing captured.** Neither instance has had its failure message
+read at the moment it failed. That remains the whole of the work.
+### 0.2.18: the instruction is now the assertion, not a sentence
+
+**What this entry has been waiting on is one line of output, and it
+asked for it in a way that could not fire.** "The next full-suite run
+that reproduces it captures the failure message before anything else"
+addresses whoever happens to be watching. Nobody was, twice, across two
+releases — and *both* runs that recorded a message were runs that
+passed, so the `got` side has still never been seen.
+
+So the capture is built into the assertion.
+`spec/support/workspace_identity_report.rb` is attached to **all five**
+root assertions in that file, not only the two that have failed, and a
+reproduction now records itself:
+
+```
+workspace root is not the one the editor named.
+expected="…/link"
+got="…/real"
+load=3.02
+  real: …/real exists=true directory=true symlink=false
+  link: …/link exists=true directory=true symlink=true -> …/real
+```
+
+That tells the entry's two readings apart in one line each:
+`File.directory?` answering false for a symlink whose target still
+exists shows as `symlink=true exists=false dangling`, and a root never
+adopted shows as `got=` the cwd with `link` intact. The load figure is
+there because the load hypothesis is the only one both halves of this
+entry share. `server_identity_report_spec.rb` pins what the report
+says, so it cannot quietly stop naming one of them.
+
+**Verified by forcing it**: `client_workspace_root` was made to decline
+every path in a scratch copy, and the report above is what came out.
+
+### And the fabricated absolute path is gone
+
+`keeps its own cwd when the named root does not exist` named
+`file:///nonexistent-<pid>` — a path at the filesystem root chosen to
+be obviously fake, which is the shape `CLAUDE.md`'s `/Applications`
+rule is about. Nothing here deletes, so it was never that incident's
+hazard. What it was is an assertion whose verdict depended on the state
+of the machine's root directory, in a file whose failures came and went
+with how many other processes were running. The absent root is now
+inside the example's own tmpdir; the guard is still pinned (removing
+`File.directory?` still fails it).
+
+### The GC pair, same entry, different hypothesis
+
+The two `collector_spec.rb` examples recorded above now re-collect and
+re-measure up to ten times rather than asserting on the first count.
+Their hypothesis is specific — they assert an object *has been*
+collected by a given point, which measures the collector's schedule as
+much as the code.
+
+**It cannot weaken them**, which is what made it allowed: pre-fix the
+delta is `CHURN_COUNT` *permanently*, so no number of further
+collections moves it. Confirmed by reintroducing the retention in a
+scratch copy — the example still fails, `expected: < 2`.
+
+**Still open**, and now for a reason it can discharge: nothing here
+claims to have found the cause. What changed is that the next
+reproduction will say what it was, without anyone having to be present.
+**Target moved to `unscheduled`, which is what it has always been.**
+It said 0.2.18, and there is nothing here anyone can schedule: the
+work is to read a failure message, and the failure has occurred twice
+in some sixty full-suite runs. Naming a release for it makes a
+commitment nobody can keep and pushes it forward one release at a
+time, which is how it reached 0.2.18 from 0.2.16.
+
+What changed in 0.2.18 is that the trigger no longer needs a person.
+When it fires, the message arrives with it, and the entry becomes
+ordinary work in whatever release that is.
+
+
+
+**Retargeted to 0.3.2.** An assertion that fails sometimes is either a defect in the product or a defect in the test, and leaving it unscheduled is how it stays neither. 0.3.0 attached a self-recording report to the assertion, so the next reproduction carries the value nobody has seen; 0.3.2 is when that evidence is read, and if it has still not fired the entry is a candidate for closure as unreproducible rather than for another wait.
+
+**Closed in 0.3.2 as unreproducible, which is what this entry asked
+for.** 0.2.18 attached a self-recording report to the assertion
+precisely so the next reproduction would carry the value nobody had
+seen, and set 0.3.2 as when that evidence gets read. It has not fired:
+**27 CI runs since the report landed, 3 of them failures, none of them
+this.** Nor has any local run in this release, including several full
+suites and the two real-Rails suites run concurrently.
+
+The report stays where it is. Closing this is not a claim that the
+behaviour is correct — it is a refusal to keep an entry open on
+evidence that has had three releases to arrive and has not. If it fires
+once, the line it prints is the entry, and it will be a better one than
+this.
+
+**The file moved underneath it in 0.3.2**, which is worth saying rather
+than leaving for someone to notice: four examples there dispatched
+`initialize` without joining the cold-index thread, and the `around`
+block removed the cache tmpdir underneath it. That is a *different*
+failure — `Errno::ENOTEMPTY` at teardown, not a wrong workspace root —
+found by the Ruby 4.0 job and fixed. Whether it was ever a contributor
+to this one cannot be established now, and pretending otherwise would
+be inventing the reproduction this entry never got.
 
 ## 024.276 A closing pass retargeted 54 entries at 0.3.0, and 53 of them give one of two pasted reasons
 

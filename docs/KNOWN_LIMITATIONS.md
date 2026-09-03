@@ -241,24 +241,23 @@ answer is one it already has. <!-- documents: 024.20 -->
 
 ## Reports that are wrong today
 
-**A namespaced type reported incompatible with itself.** If your `sig/`
-declares a parameter inside a namespace — `module App; class Registry;
-def fetch: (Key key) -> Key` — and the Ruby that calls it is written
-inside that same namespace, the declared type arrives qualified and the
-inferred one arrives bare, and the argument-type check compares the two
-spellings as different classes. Driven over the `rbs` gem's own 89
-hand-written signatures, every argument-type report it produces is this
-one shape: ``expects RBS::TypeName here, but TypeName is given``, where
-the two names are the same class. Nothing is wrong with your
-code. <!-- documents: 024.224 -->
-
-
 The engine's standing policy is that a wrong report is worse than a
 missed one. These are the places it currently says something untrue —
 one of them as a colour, the rest as diagnostics. Every one is recorded
 and all are visible on ordinary code, so they are listed here rather
 than left for you to find.
 
+
+**One this list carried until 0.3.2 is gone.** A namespaced type was
+reported incompatible with itself — ``expects RBS::TypeName here, but
+TypeName is given``, where the two names are one class — and over the
+`rbs` gem's own hand-written signatures that was *every* argument-type
+report the engine produced. The cause was not the two spellings: when
+RBS declares a type whose ancestry it cannot build, the check was
+reading the failure as "this class has no ancestors" and concluding a
+mismatch from a question it could not ask. It declines now. Measured
+over rbs 4.2.0 with its own `sig/`: six reports before, none after,
+with the unrelated categories unchanged (024.224, fixed in 0.3.2).
 
 Two that this list used to carry are gone — fixed in earlier releases,
 not this one. **A `*_path`/`*_url` call is no longer reported as a
@@ -337,10 +336,10 @@ missed one", so each is narrow on purpose. What that costs a user:
   not reported at all, and where they *are* reported they have so far
   been wrong. Over Ruby's standard library, five Rails gems and minitest
   — 2,042 files — this check produces **zero** findings. Over the `rbs`
-  gem with its own RBS loaded, measured again in 0.2.18, it produces
-  **six**, and all six are the same false report: a namespaced type
-  called incompatible with itself (`RBS::Location` against `Location`,
-  which are one class). Before 0.2.0's last round of fixes two corpora
+  gem with its own RBS loaded — 109 files, 89 hand-written signatures,
+  and the only such corpus this check has been pointed at — it produced
+  **six** until 0.3.2, and all six were one false report, now fixed; it
+  produces **zero** there too. Before 0.2.0's last round of fixes two corpora
   produced 795 and 151, and every one of those was wrong too. **No
   measurement of this check has yet produced a true report on real
   code.** Treat it as something that will not catch a mistake in yours;

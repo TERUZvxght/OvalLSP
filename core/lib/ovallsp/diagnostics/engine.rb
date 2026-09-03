@@ -641,15 +641,28 @@ module Ovallsp
         # `Signatures::Environment#ancestors` resolves a *qualified* name:
         # `ancestors("Integer")` is empty while `ancestors("::Integer")` is
         # the real chain.
-        via_signatures = workspace.flat_map do |entry|
-          # `Environment#ancestors` already maps every name through
-          # `TypeConverter.simple_name`, so they arrive bare -- mapping
-          # them again here was the mirror of the no-op the comment above
-          # confesses to on the workspace side.
-          context.signatures&.ancestors(qualified_owner(entry)) || []
-        end
+        #
+        # `Environment#ancestors` already maps every name through
+        # `TypeConverter.simple_name`, so they arrive bare -- mapping them
+        # again here was the mirror of the no-op the comment above
+        # confesses to on the workspace side.
+        chains = workspace.map { |entry| context.signatures&.ancestors(qualified_owner(entry)) || [] }
 
-        (workspace + via_signatures).uniq
+        # `UNAVAILABLE` is RBS declaring a type whose ancestry it cannot
+        # build, and it is a frozen `[]` -- so adding it to the set is
+        # indistinguishable here from a type that really has no ancestors,
+        # and the comparison then asserts a mismatch from a question it
+        # could not ask. Same answer as the hole above, for the same
+        # reason: the reachable set is a lower bound, and the link that
+        # could not be built may well *be* the expected type.
+        #
+        # rbs's own `sig/typename.rbs` includes an interface rbs does not
+        # load for itself, so `::RBS::TypeName` is exactly this -- and all
+        # six of rbs 4.2.0's `argument-type` reports were the class being
+        # reported incompatible with itself (`024.224`).
+        return nil if chains.any? { |chain| Signatures::Environment.unavailable?(chain) }
+
+        (workspace + chains.flatten).uniq
       end
 
       # The last segment, which is what `TypeConverter` gives a signature's
