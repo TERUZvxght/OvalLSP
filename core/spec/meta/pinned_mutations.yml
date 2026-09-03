@@ -614,8 +614,8 @@
   example: "records a multiple-assignment target"
 - why: "Declining an underscore target inside a pattern -- Ruby lets one pattern bind such a name twice, so two edits that are each the name exactly make the file stop parsing."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        @pattern_depth.positive? && name.to_s.start_with?(\"_\")\n"
-  to: "        false\n"
+  from: "        declined = @pattern_depth.positive? && name.to_s.start_with?(\"_\")\n"
+  to: "        declined = false\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "declines an underscore-prefixed target, which a pattern may repeat"
 - why: "Declining a value-omitted shorthand's pattern binding -- the range Prism reports for it is the hash key's and is spelled without the colon, so the range comparison passes it and Rename rewrites a pattern's key."

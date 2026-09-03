@@ -258,6 +258,15 @@ module Ovallsp
       def binding_site_unknown?(symbol_id)
         return false unless symbol_id.kind == :local_variable
 
+        # **A pattern binds it and the occurrence list does not carry
+        # that.** The test below asks whether *any* occurrence is a
+        # write, which an ordinary `_a = 0` in the same scope satisfies —
+        # so before `024.296` the refusal did not fire and the rename
+        # went ahead on what it could see, leaving `in [_a, 1]` bound to
+        # the old name while the body read the new one. The file parses
+        # and runs, and answers 0 where it answered 5.
+        return true if @workspace_index.pattern_bound_name?(simple_name(symbol_id))
+
         references = @reference_index.references(symbol_id, minimum_confidence: :high)
         references.any? && references.none?(&:write)
       end

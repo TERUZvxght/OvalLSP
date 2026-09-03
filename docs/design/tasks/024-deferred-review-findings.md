@@ -468,7 +468,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.293`](024-deferred-review-findings-resolved.md#024293-check-pinned-mutations-rb-reads-a-skipped-example-as-a-mutation-that-escaped) | fixed | 0.3.0 | `check_pinned_mutations.rb` reads a skipped example as a mutation th… |
 | [`024.294`](#024294-a-template-s-ivar-receiver-is-not-checked-and-its-type-is-one-action-s) | open | 0.4.0 | A template's `@ivar` receiver is not checked, and its type is one ac… |
 | [`024.295`](#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | open | 0.3.2 | The gem index is fetched on every boot and persisted nowhere |
-| [`024.296`](#024296-renaming-a-local-a-pattern-also-binds-rewrites-the-rest-and-leaves-the-pattern) | open | 0.3.2 | Renaming a local a pattern also binds rewrites the rest and leaves t… |
+| [`024.296`](024-deferred-review-findings-resolved.md#024296-renaming-a-local-a-pattern-also-binds-rewrites-the-rest-and-leaves-the-pattern) | fixed | 0.3.2 | Renaming a local a pattern also binds rewrites the rest and leaves t… |
 | [`024.297`](#024297-call-hierarchy-lists-no-callee-reached-through-send-super-or-a-macro) | open | 0.4.0 | Call hierarchy lists no callee reached through `send`, `super` or a … |
 | [`024.298`](#024298-an-inlay-hint-on-foo-new-names-new-s-parameters-not-initialize-s) | open | 0.4.0 | An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initi… |
 | [`024.299`](#024299-completion-on-a-relation-offers-none-of-the-model-s-own-scopes-or-class-methods) | open | 0.4.0 | Completion on a relation offers none of the model's own scopes or cl… |
@@ -4381,66 +4381,6 @@ duplicate-name collapse, because persistence would freeze it.
 
 0.3.1 fixed the half of this that was making *wrong* answers rather
 than late ones: the index is now dropped when the Agent restarts.
-
-## 024.296 Renaming a local a pattern also binds rewrites the rest and leaves the pattern
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.2
-```
-
-**Area:** `core/lib/ovallsp/parser_service.rb` (`declined_underscore?`),
-`core/lib/ovallsp/rename/planner.rb` (`binding_site_unknown?`)
-
-A pattern's binding site is not recorded, and `024.273`'s refusal only
-fires when *no* occurrence of the name is a write. An ordinary
-assignment of the same name in the same scope defeats it, so the rename
-goes ahead on the occurrences it can see and leaves the pattern:
-
-    def m(pair)
-      _a = 0
-      case pair
-      in [_a, 1]
-        _a
-      end
-    end
-
-Driven against the real server, with a non-underscore name bound the
-same way as the control in the same fixture:
-
-    rename `_a` from its read -> edits at [[1, 2], [4, 4]]
-    rename `zz` from its read -> edits at [[6, 2], [8, 6], [9, 4]]
-
-The control rewrites its pattern site at line 8; the subject leaves line
-3 alone. What comes back parses, runs, and answers something else:
-
-    $ ruby -e '
-    def before(pair); _a = 0; case pair; in [_a, 1]; _a; end; end
-    def after(pair);  bb = 0; case pair; in [_a, 1]; bb; end; end
-    p before([5, 1])
-    p after([5, 1])
-    '
-    # => 5
-    # => 0
-    # ruby 3.4.10
-
-**The published limitation said the opposite until this entry.**
-`KNOWN_LIMITATIONS` read "so none is made", which is true only for the
-half where nothing else assigns the name -- there the rename is refused.
-The half where it *does* edit is the one a user meets, and it was
-described as the one that does not happen. That is `024.131`'s shape:
-an entry understating its defect in the direction that argues for the
-lower triage. Both languages now carry the shape that reproduces.
-
-**Not the hash-pattern shorthand.** `in {a:}` is left behind for every
-name, underscore or not, which is the recorded shorthand gap rather
-than this. The control for that spelling does not behave, so it is not
-counted here.
-
-**Why 0.3.2 and not 0.4.0**: it is a wrong answer applied to the user's
-file, which `docs/PUBLISHING.md`'s table puts on the patch line.
 
 ## 024.297 Call hierarchy lists no callee reached through `send`, `super` or a macro
 

@@ -814,20 +814,13 @@ local in a thousand files of real gem source and running what came out.
   the signature and its call sites by hand. Every other parameter —
   positional, optional, `*rest`, `**opts`, `&block`, and block
   parameters — is renamed with its uses.
-- **Renaming a local that a pattern also binds rewrites the rest and
-  leaves the pattern.** `in [_a, 1]` — or `in {a:}` for any name — is a
-  binding this extension does not record, and where the same name is
-  also assigned normally in that scope the rename goes ahead on the
-  occurrences it can see. The file still parses and still runs, and the
-  method answers something else:
-
-  ```ruby
-  def m(pair) = (_a = 0; case pair; in [_a, 1] then _a; end)   # => 5
-  def m(pair) = (bb = 0; case pair; in [_a, 1] then bb; end)   # => 0
-  ```
-
-  With no ordinary assignment of that name, the rename is refused
-  instead and nothing is edited. <!-- documents: 024.296 -->
+- **Renaming a local that a pattern also binds is refused**, and
+  nothing is edited. `in [_a, 1]` is a binding this extension does not
+  record — a pattern may legally bind an `_`-prefixed name twice, and
+  rewriting both places would not parse — so it cannot carry the rename
+  out and says so instead. Until 0.3.2 it went ahead on the occurrences
+  it could see, leaving the pattern behind: the file still ran, and the
+  method answered 0 where it had answered 5.
 
 ## In a view template, diagnostics say nothing about a method called on an `@ivar`
 

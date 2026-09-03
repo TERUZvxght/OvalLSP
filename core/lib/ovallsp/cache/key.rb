@@ -52,6 +52,12 @@ module Ovallsp
       # need the assignment sites, and documentHighlight reads the same
       # flag). A cache written under 5 unmarshals into a shape with one
       # member fewer, which is what this number exists to refuse.
+      # 7: `FileSummary` gained `pattern_bound_names` in 0.3.2 -- the
+      # names a pattern binds and the occurrence list deliberately does
+      # not carry, which `Rename` needs in order to refuse a rename it
+      # cannot carry out (`024.296`). A cache written under 6 unmarshals
+      # into a shape with one member fewer, which is what this number
+      # exists to refuse.
       #
       # **Not a bump, and deliberately not numbered.** 0.3.0 also added
       # `singletonAncestors`, and 0.3.1 the visibility split, to what the
@@ -62,7 +68,7 @@ module Ovallsp
       # had. One numbered `7:` for a bump that did not happen invites the
       # next real bump to take 8, and the list would then skip a value it
       # is the record of.
-      SCHEMA_VERSION = 6
+      SCHEMA_VERSION = 7
 
       module_function
 

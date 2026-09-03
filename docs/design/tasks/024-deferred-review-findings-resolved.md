@@ -16738,6 +16738,69 @@ honest refusal.
 Both halves, because either alone leaves something wrong: without the
 first, the next suite that skips is misreported again; without the
 second, four real decisions go unverified on CI.
+## 024.296 Renaming a local a pattern also binds rewrites the rest and leaves the pattern
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: yes
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`declined_underscore?`),
+`core/lib/ovallsp/rename/planner.rb` (`binding_site_unknown?`)
+
+A pattern's binding site is not recorded, and `024.273`'s refusal only
+fires when *no* occurrence of the name is a write. An ordinary
+assignment of the same name in the same scope defeats it, so the rename
+goes ahead on the occurrences it can see and leaves the pattern:
+
+    def m(pair)
+      _a = 0
+      case pair
+      in [_a, 1]
+        _a
+      end
+    end
+
+Driven against the real server, with a non-underscore name bound the
+same way as the control in the same fixture:
+
+    rename `_a` from its read -> edits at [[1, 2], [4, 4]]
+    rename `zz` from its read -> edits at [[6, 2], [8, 6], [9, 4]]
+
+The control rewrites its pattern site at line 8; the subject leaves line
+3 alone. What comes back parses, runs, and answers something else:
+
+    $ ruby -e '
+    def before(pair); _a = 0; case pair; in [_a, 1]; _a; end; end
+    def after(pair);  bb = 0; case pair; in [_a, 1]; bb; end; end
+    p before([5, 1])
+    p after([5, 1])
+    '
+    # => 5
+    # => 0
+    # ruby 3.4.10
+
+**The published limitation said the opposite until this entry.**
+`KNOWN_LIMITATIONS` read "so none is made", which is true only for the
+half where nothing else assigns the name -- there the rename is refused.
+The half where it *does* edit is the one a user meets, and it was
+described as the one that does not happen. That is `024.131`'s shape:
+an entry understating its defect in the direction that argues for the
+lower triage. Both languages now carry the shape that reproduces.
+
+**Not the hash-pattern shorthand.** `in {a:}` is left behind for every
+name, underscore or not, which is the recorded shorthand gap rather
+than this. The control for that spelling does not behave, so it is not
+counted here.
+
+**Why 0.3.2 and not 0.4.0**: it is a wrong answer applied to the user's
+file, which `docs/PUBLISHING.md`'s table puts on the patch line.
+
+**Fixed in 0.3.2.** The parser records the *name* a pattern binds even where it declines the occurrence, `WorkspaceIndex` counts it per file exactly as it counts `open_surface_owners`, and `Rename::Planner` refuses on it -- the shape CLAUDE.md calls giving a guard the input it could not see. Taken from Ruby before anything was written: the same method answers 5 before the rename and 0 after it, so this was a working program rewritten into a different one. `FileSummary` gains a member, so `SCHEMA_VERSION` is 7; the golden pair moved with it, which is what that spec exists to force.
+
 ## 024.305 One name, six modules, and the index keeps the empty one
 
 ```yaml
