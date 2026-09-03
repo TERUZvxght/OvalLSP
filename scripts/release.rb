@@ -163,23 +163,33 @@ module Release
     relative
   end
 
-  # A release is cut from what has shipped. `open`'s own refusal says so
-  # about the tree and said nothing about the branch, so `open` on a
-  # feature branch cut the release from that branch's work.
+  # A release is cut from what has shipped, and **that is a statement
+  # about a commit, not a branch name.**
+  #
+  # This asked the name first and returned on `main` without comparing
+  # anything, so a local `main` nobody had pulled cut -- and would have
+  # published -- a release missing whatever had merged. The other half
+  # was unreachable: `git` already turns a failed `rev-parse` into
+  # `Refused`, and the `rescue Refused; raise` in front of the catch-all
+  # re-raised it, so the remedy that branch existed to print was never
+  # printed. One rule now, and both ends of it say what to run.
   def refuse_off_main
     here = branch
-    return if here == "main"
-    return if git("rev-parse", "HEAD").strip == git("rev-parse", "origin/main").strip
+    shipped = origin_main
+    return if git("rev-parse", "HEAD").strip == shipped
 
-    raise Refused, "this is `#{here}`, and a release branches from `main`.\n" \
+    raise Refused, "`#{here}` is not what has shipped, and a release is cut from that.\n" \
                    "  Run: git checkout main && git pull"
-  rescue Refused
-    raise
-  rescue StandardError
-    # No `origin/main` to compare against is not permission to branch
-    # from anywhere; it is one fewer way to say yes.
-    raise Refused, "this is `#{here}`, and a release branches from `main`.\n" \
-                   "  Run: git checkout main"
+  end
+
+  def origin_main
+    out = RepoFiles.capture(ROOT, %w[rev-parse origin/main])
+    unless $?.success?
+      raise Refused, "this clone has no `origin/main`, so what has shipped is not something it can " \
+                     "point at.\n  Run: git fetch origin"
+    end
+
+    out.strip
   end
 
   def targeted(version)
@@ -359,7 +369,32 @@ module Release
     raise Refused, "--accept #{number} needs --reason: say why #{version} does not owe it." if reason.to_s.strip.empty?
 
     remember(version, "accepted" => state(version).fetch("accepted", {}).merge(number => reason))
+    write_acceptance_into_record(version, number, reason)
     puts "release: #{number} accepted as not owed by #{version} — #{reason}"
+  end
+
+  # **And into the release's own record**, because `core/tmp/` is
+  # untracked and goes with the machine. "This release does not owe
+  # 024.N, because ..." is a decision, and a decision that survives only
+  # in a scratch file reaches neither the record nor the next reader —
+  # which is what the register exists to stop happening to findings.
+  #
+  # Above `## 残課題`, so it sits with the other outstanding-work prose
+  # rather than after it.
+  def write_acceptance_into_record(version, number, reason)
+    path = release_record(version) or return
+
+    body = File.read(path, encoding: "UTF-8")
+    line = "- `#{number}` — accepted as not owed by #{version}: #{reason}\n"
+    return if body.include?(line)
+
+    heading = "## 残課題"
+    section = body.include?(heading) ? heading : nil
+    File.write(path, section ? body.sub(section) { "## Accepted, and why\n\n#{line}\n#{heading}" } : "#{body}\n#{line}")
+  end
+
+  def release_record(version)
+    Dir.glob(File.join(ROOT, "docs", "design", "tasks", "*-#{version}-*.md")).min
   end
 
   def refuse_open_entries(version)
@@ -429,11 +464,14 @@ module Release
   def index_tree = git("write-tree").strip
 
   def quotable_block(version)
-    <<~TEXT
+    accepted = state(version).fetch("accepted", {})
+    owed = accepted.empty? ? "nothing open against #{version}" : "nothing open against #{version}, and:"
+
+    [<<~TEXT.rstrip, *accepted.map { |number, reason| "      #{number} accepted — #{reason}" }].join("\n")
       #{version} gated on #{branch}
         versions agree: vscode/package.json, core/lib/ovallsp/version.rb
         changelog: both languages lead with #{version}
-        register: nothing open against #{version}
+        register: #{owed}
         gitleaks: clean; preflight: all checks passed
     TEXT
   end

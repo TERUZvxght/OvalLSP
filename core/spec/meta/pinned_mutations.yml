@@ -1188,7 +1188,7 @@
   from: "    refuse_off_main\n"
   to: ""
   spec: spec/meta/release_flow_spec.rb
-  example: "refuses to branch from anything but main"
+  example: "refuses a branch that has commits main does not"
 - why: "`gate` refuses a dirty tree, so what it gates is what publish sends; without it gate fingerprints the index, release.sh refuses the dirty tree, and committing then invalidates the gate."
   file: scripts/release.rb
   from: "    unless dirty.empty?\n      raise Refused, \"the tree is not clean, and what is gated must be what is published:\\n\" \\\n"
@@ -1207,3 +1207,27 @@
   to: "    unless true\n"
   spec: spec/meta/release_flow_spec.rb
   example: "refuses when what was served does not match what was built"
+- why: "A release is cut from what has shipped, compared as a commit; returning on the branch's name let a local main nobody had pulled cut a release missing what had merged."
+  file: scripts/release.rb
+  from: "    return if git(\"rev-parse\", \"HEAD\").strip == shipped\n"
+  to: "    return if true\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses a local main that origin/main is ahead of"
+- why: "A clone with no origin/main is refused by name, with the fetch to run; the branch that meant to say so was unreachable behind a rescue that re-raised."
+  file: scripts/release.rb
+  from: "      raise Refused, \"this clone has no `origin/main`, so what has shipped is not something it can \" \\\n                     \"point at.\\n  Run: git fetch origin\"\n"
+  to: "      raise Refused, \"origin/main is unknown\"\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "names the fetch when it cannot see origin/main, rather than the git error"
+- why: "An accepted entry's reason is written into the release record; core/tmp/ is untracked, so the decision survived nowhere a later reader looks."
+  file: scripts/release.rb
+  from: "    write_acceptance_into_record(version, number, reason)\n"
+  to: ""
+  spec: spec/meta/release_flow_spec.rb
+  example: "writes an accepted entry's reason into the release record"
+- why: "The quotable block names the entries the release was let off, so the commit message can carry the decision rather than only the verdict."
+  file: scripts/release.rb
+  from: "    [<<~TEXT.rstrip, *accepted.map { |number, reason| \"      #{number} accepted — #{reason}\" }].join(\"\\n\")\n"
+  to: "    [<<~TEXT.rstrip].join(\"\\n\")\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "lists an accepted entry in the block a commit message can quote"

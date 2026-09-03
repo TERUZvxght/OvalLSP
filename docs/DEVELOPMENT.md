@@ -105,8 +105,13 @@ One command per step — `open`, `bump`, `gate`, `publish`, `record` —
 each refusing when the one before it left no evidence, and every refusal
 naming what clears it. It implements no check: each step runs the script
 or spec that already owns the question.
-[`docs/PUBLISHING.md`](PUBLISHING.md) has the sequence and the
-permission it operates under.
+
+**Two commits sit inside that sequence**, and they are not
+housekeeping: the release notes and the roadmap sections are written and
+committed after `open`, and the bump is committed before `gate`, which
+refuses a dirty tree so that what it gates is what `publish` sends.
+[`docs/PUBLISHING.md`](PUBLISHING.md) has the sequence with them in
+place, and the permission it operates under.
 
 ## Branches and pull requests
 

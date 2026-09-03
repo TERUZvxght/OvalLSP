@@ -171,10 +171,20 @@ that still speaks the same protocol keeps working.
 
     ruby scripts/release.rb status            # which steps are done
     ruby scripts/release.rb open <version>    # branch, record, changelog skeletons
-    ruby scripts/release.rb bump              # every version file
+    #   write both changelog sections and both roadmap sections, then commit
+    ruby scripts/release.rb bump              # every version file; commits nothing
+    git commit -am "…"                        # gate refuses a dirty tree
     ruby scripts/release.rb gate              # gitleaks, preflight, nothing open
     ruby scripts/release.rb publish           # hands over to vscode/scripts/release.sh
     ruby scripts/release.rb record            # the artifact's hash, and the tag
+    git commit -am "…"                        # the artifact row `record` wrote
+
+**The two commits are part of the sequence, not housekeeping around it.**
+`gate` refuses a dirty tree so that what it gates is what `publish`
+sends: gating an uncommitted bump means `release.sh` refuses the dirty
+tree at publish, and committing then moves the index out from under the
+gate. `record` writes a row and leaves it uncommitted for the same
+reason it does not push — the last word is a person's.
 
 **Each step refuses when the one before it left no evidence, and every
 refusal names the command that clears it.** That is all `release.rb`

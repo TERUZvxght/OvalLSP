@@ -9,6 +9,7 @@
 # is worse than most, because both are shipped inside the VSIX and one of
 # them is what a Japanese-reading user sees on the Marketplace page.
 require_relative "../../../scripts/changelog"
+require_relative "../../../scripts/check_changelog"
 
 RSpec.describe "changelog parity" do
   CHANGELOG_ROOT = File.expand_path("../../..", __dir__)
@@ -32,8 +33,14 @@ RSpec.describe "changelog parity" do
     expect(versions(CHANGELOG_JA)).to eq(versions(CHANGELOG_EN))
   end
 
-  it "documents the version this build ships as" do
-    expect(versions(CHANGELOG_EN).first).to eq(Ovallsp::VERSION)
+  # The version the *check* would use, not `Ovallsp::VERSION` alone: on a
+  # release branch the newest section is the release being prepared and
+  # `VERSION` is still the one that shipped, and this example failed on
+  # every commit of that window.
+  it "documents the version this build is for" do
+    expected = CheckChangelog.expected_version(nil, CheckChangelog.branch, Ovallsp::VERSION)
+
+    expect(versions(CHANGELOG_EN).first).to eq(expected)
   end
 
   it "links each language's changelog to the other" do

@@ -127,11 +127,37 @@ RSpec.describe "the shape of a changelog entry" do
   # examples above prove the checker can fail; this one proves it is
   # aimed at something that passes, which is the half a planted fixture
   # can never show.
+  # **Against the version the check would use, not against
+  # `Ovallsp::VERSION`.** Between `open` and `bump` the newest section is
+  # the release being prepared and `VERSION` is still the one that
+  # shipped, so measuring against `VERSION` made this example -- and the
+  # parity spec's -- fail on every commit in that window. That is the
+  # window `check_changelog.rb --version` exists for, and asking the same
+  # question two ways is how the two answers came to disagree.
   it "reports nothing about the changelogs this repository ships" do
     en = File.read(File.join(CHANGELOG_SHAPE_ROOT, Changelog::EN), encoding: "UTF-8")
     ja = File.read(File.join(CHANGELOG_SHAPE_ROOT, Changelog::JA), encoding: "UTF-8")
+    expected = CheckChangelog.expected_version(nil, CheckChangelog.branch, Ovallsp::VERSION)
 
-    expect(Changelog.complaints(en, ja, Ovallsp::VERSION)).to be_empty
+    expect(Changelog.complaints(en, ja, expected)).to be_empty
+  end
+
+  # And the composition itself, driven: what the two specs above now do
+  # is ask `expected_version` first and `complaints` second, so the pair
+  # is pinned rather than each half separately.
+  describe "the pair the suite asks" do
+    def complaints_on(branch_name)
+      Changelog.complaints(english, japanese,
+                           CheckChangelog.expected_version(nil, branch_name, older))
+    end
+
+    it "says nothing while a release branch carries the section it is preparing" do
+      expect(complaints_on("release/#{prepared}")).to be_empty
+    end
+
+    it "says so when the same files sit on a branch that names no release" do
+      expect(complaints_on("main")).not_to be_empty
+    end
   end
 
   # The shape applies to the newest section only. Everything below it was

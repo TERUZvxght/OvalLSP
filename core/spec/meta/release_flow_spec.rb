@@ -43,6 +43,10 @@ RSpec.describe "scripts/release.rb" do
     # branches from `main` — so the fixture is on `main` whatever the
     # machine's default is.
     RepoFiles.run(root, "branch", "-M", "main", out: File::NULL, err: File::NULL)
+    # A real clone has `origin/main`, and it is what "what has shipped"
+    # means -- `open` compares HEAD against it rather than against a
+    # branch name.
+    RepoFiles.run(root, "update-ref", "refs/remotes/origin/main", "HEAD", out: File::NULL)
     stub_const("Release::ROOT", root)
   end
 
@@ -84,32 +88,48 @@ RSpec.describe "scripts/release.rb" do
     # **The rule is about the commit, not the name.** With no
     # `origin/main` to compare against there is one fewer way to say yes,
     # so this refuses.
-    it "refuses to branch from anything but main" do
-      branch("feature-x")
-
-      expect(run("open", prepared)).to eq(2)
-      expect(RepoFiles.capture(root, %w[branch --show-current]).strip).to eq("feature-x")
-    end
-
     # And it refuses a branch that has *moved*, which is the case the
     # name test would miss in the other direction.
     it "refuses a branch that has commits main does not" do
-      RepoFiles.run(root, "update-ref", "refs/remotes/origin/main", "HEAD", out: File::NULL)
       branch("feature-x")
       write("some-work.txt", "not shipped\n")
       commit_all("work that has not shipped")
 
       expect(run("open", prepared)).to eq(2)
+      expect(RepoFiles.capture(root, %w[branch --show-current]).strip).to eq("feature-x")
     end
 
     # **The control**, and the reason the rule is not "the branch is
     # called main": a branch sitting on exactly what has shipped *is*
     # what has shipped, whatever it is called.
     it "allows a branch sitting exactly where origin/main is" do
-      RepoFiles.run(root, "update-ref", "refs/remotes/origin/main", "HEAD", out: File::NULL)
       branch("feature-x")
 
       expect(run("open", prepared)).to eq(0)
+    end
+
+    # **And the name buys nothing.** `main` returned before any
+    # comparison, so a local `main` nobody had pulled cut a release
+    # missing whatever had merged — and would have published it. The rule
+    # is HEAD against `origin/main`, whatever the branch is called.
+    it "refuses a local main that origin/main is ahead of" do
+      write("merged-elsewhere.txt", "landed while you were away\n")
+      commit_all("what merged")
+      RepoFiles.run(root, "update-ref", "refs/remotes/origin/main", "HEAD", out: File::NULL)
+      RepoFiles.run(root, "reset", "-q", "--hard", "HEAD~1", out: File::NULL)
+
+      expect { run("open", prepared) }.to output(/git pull/).to_stderr
+    end
+
+    # With no `origin/main` there is nothing to compare against, and that
+    # is one fewer way to say yes rather than permission. It said so
+    # through a raw `fatal: ambiguous argument` and named no remedy: the
+    # rescue meant to catch that re-raised the refusal `git` had already
+    # turned the error into.
+    it "names the fetch when it cannot see origin/main, rather than the git error" do
+      RepoFiles.run(root, "update-ref", "-d", "refs/remotes/origin/main", out: File::NULL)
+
+      expect { run("open", prepared) }.to output(/git fetch origin/).to_stderr
     end
 
     it "refuses a tree that is not clean before it branches" do
@@ -205,6 +225,33 @@ RSpec.describe "scripts/release.rb" do
     # Asserted on what was *recorded*, not on the exit code: `gate` ends
     # in a refusal here whatever happens, because gitleaks runs last and
     # this is a throwaway tree. The mutation manifest said so.
+    # **The reason has to outlive the working copy.** It was written only
+    # to `core/tmp/`, which is untracked and gone with the machine, and
+    # the quotable block did not mention it - so the decision "this
+    # release does not owe 024.N, because ..." reached neither the record
+    # nor the commit message, which are the two places anyone would look
+    # for it later.
+    it "writes an accepted entry's reason into the release record" do
+      open_entry
+      commit_all
+      record = File.join(root, "docs", "design", "tasks", "060-#{prepared}-what-this-release-is-for.md")
+      FileUtils.mkdir_p(File.dirname(record))
+      File.write(record, "# #{prepared}\n\n## 残課題\n\n未処理の指摘はこの文書ではなく `024` に書く。\n")
+
+      run("gate", "--accept", open_entry, "--reason", "It is a plan, and the release does not owe it.")
+
+      expect(File.read(record, encoding: "UTF-8")).to include(open_entry)
+      expect(File.read(record, encoding: "UTF-8")).to include("does not owe it")
+    end
+
+    it "lists an accepted entry in the block a commit message can quote" do
+      expect(Release.quotable_block(prepared)).not_to include("024.")
+
+      Release.remember(prepared, "accepted" => { unspellable_number(901) => "It is a plan." })
+
+      expect(Release.quotable_block(prepared)).to include(unspellable_number(901))
+    end
+
     it "refuses an --accept with no reason, and records nothing" do
       bump_version_files
       open_entry
