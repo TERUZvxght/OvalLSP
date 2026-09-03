@@ -1243,3 +1243,21 @@
   to: "    if false\n"
   spec: spec/meta/release_flow_spec.rb
   example: "refuses a second run rather than writing a second row"
+- why: "`open` refuses an existing release branch before it tries to make one; git's own `already exists` names no remedy, and the remedy is to go back to the branch that is there."
+  file: scripts/release.rb
+  from: "    if branch_exists?(\"release/#{version}\")\n"
+  to: "    if false\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses when the release branch already exists, naming the checkout"
+- why: "The remedy is chosen by direction; `git pull` cannot clear a main that is ahead of origin/main, and the refusal named it in both directions."
+  file: scripts/release.rb
+  from: "                   \"  #{remedy_for(here, shipped)}\"\n"
+  to: "                   \"  Run: git checkout main && git pull\"\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "does not offer a pull when main is ahead of origin/main"
+- why: "A second acceptance joins the list the first opened; a heading per acceptance leaves a record with two sections of one line each."
+  file: scripts/release.rb
+  from: "    File.write(path, body.include?(ACCEPTED_HEADING) ? add_to_accepted(body, line) : open_accepted(body, line))\n"
+  to: "    File.write(path, open_accepted(body, line))\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "gathers a second acceptance under the heading the first wrote"

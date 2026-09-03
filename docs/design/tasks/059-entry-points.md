@@ -489,6 +489,36 @@ nothing, and for a new reason: it replaced only the first line of a
 two-line refusal, so the second line still carried the remedy the
 example looks for. Widened to span both.
 
+### Round 7 — `attack`
+
+The round-6 fixes pushed at their edges, plus a read of the fix diff.
+Three findings, all LOW, and all of the same kind: a refusal that is
+right to refuse and wrong about what to do next.
+
+| # | Finding | Disposition |
+|---|---|---|
+| D1 | LOW — two acceptances wrote two `## Accepted, and why` headings, one line each, because the heading was inserted whenever the line was new. | Fixed. A second acceptance joins the list the first opened; the heading is written only when there is none. |
+| D2 | LOW — the remedy was wrong in one direction. With `main` *ahead* of `origin/main`, `open` refused with `git checkout main && git pull`, which cannot clear that state. | Fixed. The remedy is chosen by direction: behind, `git pull`; ahead, merge into `main` by pull request or give the commits up with `git reset --hard origin/main`; diverged, reconcile on `main` first. |
+| D3 | LOW — `open <v>` with `release/<v>` already there ended in git's own "a branch named … already exists", which names no remedy — and it is the situation a person re-running `open` is most likely to be in. | Fixed. It refuses before branching, naming `git checkout release/<v>` and `release.rb status` for how far that branch got. Nothing is written. |
+
+**Rounds 5, 6 and 7 each found defects**, which is the bound
+`docs/REVIEW_LOOP.md` sets: after three such rounds the change ships
+with the open findings recorded. There are none — every finding of all
+three rounds is fixed here, each with an example watched failing first
+and a mutation the manifest applies. So this ships under that rule with
+nothing outstanding, rather than in spite of it.
+
+The three are one shape between them, and it is worth naming because it
+is the shape a fourth round would most likely find again: **a gate that
+knows it must say no, and does not know what the person should do
+instead.** `release.rb` was written with "every refusal names what
+clears it" as a rule, and these are the three places the rule was
+applied to the common case and not to the edge — a second run, a branch
+in the other direction, a second acceptance. The countermeasure is not
+another rule; it is that each of those refusals now has an example
+asserting the *message*, not the exit code, which is what round 5's C-2
+and round 6's C2 also ended up needing.
+
 ## What is still owed
 
 **`publish` and `record` have never been run for real.** Round 6 walked

@@ -64,6 +64,8 @@ module Release
 
   def tagged?(version) = git("tag", "--list", "v#{version}").strip != ""
 
+  def branch_exists?(name) = git("branch", "--list", name).strip != ""
+
   def dirty = git("status", "--porcelain").rstrip
 
   def git(*args)
@@ -134,6 +136,11 @@ module Release
                      "#{dirty}\n  Commit or stash it, then run this again."
     end
     refuse_off_main
+    if branch_exists?("release/#{version}")
+      raise Refused, "`release/#{version}` already exists, so #{version} has been opened.\n" \
+                     "  Run: git checkout release/#{version}  — and `ruby scripts/release.rb status` " \
+                     "says how far it got."
+    end
 
     git("checkout", "-q", "-b", "release/#{version}")
     document = write_record(version)
@@ -202,7 +209,27 @@ module Release
     return if git("rev-parse", "HEAD").strip == shipped
 
     raise Refused, "`#{here}` is not what has shipped, and a release is cut from that.\n" \
-                   "  Run: git checkout main && git pull"
+                   "  #{remedy_for(here, shipped)}"
+  end
+
+  # **Which way it is wrong decides what clears it.** The refusal named
+  # `git pull` in both directions, and a pull cannot clear a branch that
+  # is *ahead* of `origin/main` -- there the commits have to land on
+  # `main` first, by the pull request every other change goes through, or
+  # be given up deliberately.
+  def remedy_for(here, shipped)
+    if ancestor?(git("rev-parse", "HEAD").strip, shipped)
+      "Run: git checkout main && git pull"
+    elsif ancestor?(shipped, git("rev-parse", "HEAD").strip)
+      "`#{here}` has commits origin/main does not. Merge them into main by pull request first, or " \
+        "give them up with `git reset --hard origin/main` if they are not wanted."
+    else
+      "`#{here}` and origin/main have each moved. Reconcile them on main before cutting a release."
+    end
+  end
+
+  def ancestor?(earlier, later)
+    RepoFiles.run(ROOT, "merge-base", "--is-ancestor", earlier, later, out: File::NULL, err: File::NULL)
   end
 
   def origin_main
@@ -411,9 +438,24 @@ module Release
     line = "- `#{number}` — accepted as not owed by #{version}: #{reason}\n"
     return if body.include?(line)
 
-    heading = "## 残課題"
-    section = body.include?(heading) ? heading : nil
-    File.write(path, section ? body.sub(section) { "## Accepted, and why\n\n#{line}\n#{heading}" } : "#{body}\n#{line}")
+    # Under the heading if it is there, and only otherwise does the
+    # heading get written. Inserting one per acceptance left a record
+    # with two sections of one line each, which reads as two decisions
+    # taken at two times rather than one list.
+    File.write(path, body.include?(ACCEPTED_HEADING) ? add_to_accepted(body, line) : open_accepted(body, line))
+  end
+
+  ACCEPTED_HEADING = "## Accepted, and why"
+
+  def add_to_accepted(body, line)
+    body.sub(/^#{Regexp.escape(ACCEPTED_HEADING)}\n\n/) { "#{ACCEPTED_HEADING}\n\n#{line}" }
+  end
+
+  def open_accepted(body, line)
+    owed = "## 残課題"
+    return "#{body}\n#{ACCEPTED_HEADING}\n\n#{line}" unless body.include?(owed)
+
+    body.sub(owed) { "#{ACCEPTED_HEADING}\n\n#{line}\n#{owed}" }
   end
 
   def release_record(version)

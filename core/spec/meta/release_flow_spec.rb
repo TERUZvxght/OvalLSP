@@ -90,6 +90,37 @@ RSpec.describe "scripts/release.rb" do
     # so this refuses.
     # And it refuses a branch that has *moved*, which is the case the
     # name test would miss in the other direction.
+    # **The situation a person re-running `open` is most likely to be
+    # in.** It ended in git's own "a branch named ... already exists",
+    # which names no remedy — and the remedy is not to make another
+    # branch, it is to go back to the one that is there.
+    it "refuses when the release branch already exists, naming the checkout" do
+      RepoFiles.run(root, "branch", "release/#{prepared}", out: File::NULL)
+      before = Dir.glob(File.join(root, "docs", "design", "tasks", "*.md")).length
+
+      expect { run("open", prepared) }.to output(%r{git checkout release/#{prepared}}).to_stderr
+      expect(Dir.glob(File.join(root, "docs", "design", "tasks", "*.md")).length).to eq(before)
+      expect(File.read(File.join(root, "vscode", "CHANGELOG.md"), encoding: "UTF-8"))
+        .not_to include("## #{prepared}")
+    end
+
+    # **The remedy has a direction.** `git pull` cannot clear a `main`
+    # that is *ahead* of `origin/main`, and that was what the refusal
+    # said in both directions.
+    it "does not offer a pull when main is ahead of origin/main" do
+      write("not-merged-yet.txt", "local\n")
+      commit_all("a commit main has and origin does not")
+
+      expect { run("open", prepared) }.not_to output(/git pull/).to_stderr
+    end
+
+    it "says what clears a main that is ahead" do
+      write("not-merged-yet.txt", "local\n")
+      commit_all("a commit main has and origin does not")
+
+      expect { run("open", prepared) }.to output(/pull request|reset --hard/).to_stderr
+    end
+
     it "refuses a branch that has commits main does not" do
       branch("feature-x")
       write("some-work.txt", "not shipped\n")
@@ -242,6 +273,25 @@ RSpec.describe "scripts/release.rb" do
 
       expect(File.read(record, encoding: "UTF-8")).to include(open_entry)
       expect(File.read(record, encoding: "UTF-8")).to include("does not owe it")
+    end
+
+    # Two acceptances belong under one heading. A fresh heading per
+    # acceptance leaves a record with two sections of one line each,
+    # which reads as two decisions taken at two times.
+    it "gathers a second acceptance under the heading the first wrote" do
+      open_entry
+      commit_all
+      record = File.join(root, "docs", "design", "tasks", "060-#{prepared}-what-this-release-is-for.md")
+      FileUtils.mkdir_p(File.dirname(record))
+      File.write(record, "# #{prepared}\n\n## 残課題\n\n未処理の指摘はこの文書ではなく `024` に書く。\n")
+
+      run("gate", "--accept", open_entry, "--reason", "It is a plan.")
+      run("gate", "--accept", unspellable_number(902), "--reason", "Nor does the release owe this one.")
+
+      body = File.read(record, encoding: "UTF-8")
+      expect(body.scan("## Accepted, and why").length).to eq(1)
+      expect(body).to include(open_entry)
+      expect(body).to include(unspellable_number(902))
     end
 
     it "lists an accepted entry in the block a commit message can quote" do
