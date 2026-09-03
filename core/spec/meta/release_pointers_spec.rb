@@ -8,7 +8,7 @@ require_relative "../../../scripts/check_release_pointers"
 # and rebuilt the release. `docs/design/tasks/028-0.2.3-review-loop.md`
 # records the merge and what each preparation had independently corrected.
 #
-# `CLAUDE.md`'s "Where a release's work lives" is the rule that came out of
+# `docs/DEVELOPMENT.md`'s "Branches and pull requests" is the rule that came out of
 # it, and `docs/DOCUMENTATION_MAP.md` carries the row. Neither was checked:
 # that row's "Checked by" column is one of eight reading as nothing at all.
 # When this file was written, `release/0.3.1` existed on the remote and no

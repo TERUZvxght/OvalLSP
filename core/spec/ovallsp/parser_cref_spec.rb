@@ -199,8 +199,8 @@ RSpec.describe "Ovallsp::ParserService and the cref a declaration is recorded ag
   # not a singleton context. Ruby disagrees: the *default definee* inside
   # a method written in `class << self` is still the singleton class.
   #
-  # Run, not reasoned about -- CLAUDE.md's "establish where the expected
-  # value comes from" exists because of this example, and the session it
+  # Run, not reasoned about -- docs/CODE_DISCIPLINE.md's "know where the expectation
+  # came from" exists because of this example, and the session it
   # asks for is this:
   #
   #   $ ruby -e '

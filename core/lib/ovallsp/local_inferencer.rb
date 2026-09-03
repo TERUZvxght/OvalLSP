@@ -128,7 +128,7 @@ module Ovallsp
     # a workspace `Putter`, which is the ranking `024.230`'s first
     # attempt broke.
     #
-    # `CLAUDE.md`'s test for whether one value serves two readers is
+    # `docs/CODE_DISCIPLINE.md`'s test for whether one value serves two readers is
     # whether they want the same answer; these want it *most* of the
     # time, which is the case that says they do not.
     # `ivars` is kept apart from `locals` rather than merged into it:

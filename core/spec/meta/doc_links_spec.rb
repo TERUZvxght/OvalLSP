@@ -18,7 +18,7 @@ require "tmpdir"
 # `scripts/check_site_links.rb` had already bought this countermeasure
 # for `site/` alone, and its header makes the argument: nothing else
 # would notice a renamed page. This is the same argument for the other
-# 101 documents, and by CLAUDE.md's rule the fourth occurrence buys the
+# 101 documents, and by docs/REVIEW_LOOP.md's rule the fourth occurrence buys the
 # check rather than a fourth fix.
 RSpec.describe "documentation links" do
   DOC_LINKS_SCRIPT = File.expand_path("../../../scripts/check_doc_links.rb", __dir__)
@@ -133,7 +133,7 @@ RSpec.describe "documentation links" do
   # instance that raised it was macOS: APFS folds case, so a citation
   # differing from the real filename only in case resolved here and was a
   # dead link on Linux and in GitHub's renderer — the local-green/CI-red
-  # asymmetry `CLAUDE.md` already records for the real-Rails suites.
+  # asymmetry `docs/DEVELOPMENT.md` already records for the real-Rails suites.
   #
   # Pinned by the *rule* rather than by that one instance, because the
   # instance cannot fail on a case-sensitive filesystem and the rule can:

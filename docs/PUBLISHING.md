@@ -1,12 +1,10 @@
 # Publishing OvalLSP to the VS Code Marketplace
 
-[日本語版](PUBLISHING.ja.md)
-
 This document describes how OvalLSP is packaged and published. It is a
 process document, not an authorization to publish — see
 [docs/RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) (Japanese) for the
 gate that must pass first, and note the explicit approvals required
-below. (The first Preview, v0.1.1, has already been published following
+below. `AGENTS.md`'s "Branches, commits, releases" lines point here. (The first Preview, v0.1.1, has already been published following
 this process; this document remains the reference for any future
 release.)
 
@@ -326,6 +324,16 @@ Release is for, and it is worth the third copy then.
 When that starts, the body should point at the changelog entry rather
 than restate it, and carry the SHA-256 from
 [`docs/RELEASE_ARTIFACTS.md`](RELEASE_ARTIFACTS.md).
+
+## External contributions: none until 1.0.0
+
+The repository does not accept issues or pull requests during the
+Preview, and the contributor-facing documents — a contributing guide, a
+code of conduct, a support page — were removed in 058 rather than kept
+stale. Reopening is a 1.0.0 item, `024.R10` in the register: the documents
+come back when there is a stable product for a contributor to work
+against, and the process documents' Japanese translations are judged again
+at that point.
 
 ## Credentials
 

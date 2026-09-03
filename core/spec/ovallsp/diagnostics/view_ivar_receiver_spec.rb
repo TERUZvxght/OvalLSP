@@ -10,7 +10,7 @@
 # `diagnostics/`, `semantic/`, `server_views`, `server_unassigned_ivar`
 # and every other spec file naming `unknown-method`. A capability the
 # release counts, with nothing failing when it goes, is the defect
-# `CLAUDE.md` names in its own right: correct code with no test is one
+# `docs/CODE_DISCIPLINE.md` names in its own right: correct code with no test is one
 # refactor away from incorrect code with no test.
 #
 # The template half is the same value not arriving. `Views::ControllerIvars`
@@ -118,7 +118,7 @@ RSpec.describe "an @ivar receiver, in a class and in a template" do
 
     # **The load-bearing control.** Without it the example above passes
     # equally well if ERB diagnostics were switched off wholesale, and
-    # this file would assert nothing at all -- the shape `CLAUDE.md`'s
+    # this file would assert nothing at all -- the shape `docs/CODE_DISCIPLINE.md`'s
     # "an assertion that cannot fail is not a test" is about.
     it "still reports a typo on a constant receiver in the same template" do
       expect(messages(template)).to include(/Post has no method named `no_such_class_method_yy`/)

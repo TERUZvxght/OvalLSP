@@ -16,7 +16,7 @@ require "json"
 #
 # Nothing could have noticed. A design document restating a manifest is
 # two copies of one fact with no relationship between them, which is the
-# shape `CLAUDE.md`'s countermeasure rule is about -- so the relationship
+# shape `docs/REVIEW_LOOP.md`'s countermeasure rule is about -- so the relationship
 # is made here, and the restatement is checked against the manifest that
 # owns it.
 #

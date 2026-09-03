@@ -16,8 +16,8 @@ require_relative "../../../scripts/repo_files"
 #
 # So the git invocation lives here, once, and goes through
 # `RepoFiles`, which unsets the whole family of location variables at the
-# spawn. That is the containment `CLAUDE.md`'s "a test that deletes
-# things" section prescribes: not a guard at each call site, but one
+# spawn. That is the containment `docs/CODE_DISCIPLINE.md`'s "Code that
+# deletes" section prescribes: not a guard at each call site, but one
 # function no caller can aim elsewhere.
 #
 # `untracked_visibility_spec.rb` fails on a git spawn anywhere in
@@ -27,7 +27,7 @@ module ThrowawayRepo
   THROWAWAY_IDENTITY = ["-c", "user.email=t@example.invalid", "-c", "user.name=t"].freeze
 
   # Initialises `root` as a repository. `root` must already exist --
-  # `Dir.mktmpdir` with a block, per `CLAUDE.md`; nothing here ever takes
+  # `Dir.mktmpdir` with a block, per `docs/CODE_DISCIPLINE.md`; nothing here ever takes
   # a fabricated absolute path.
   def init_throwaway_repo(root)
     raise ArgumentError, "#{root} does not exist" unless File.directory?(root)

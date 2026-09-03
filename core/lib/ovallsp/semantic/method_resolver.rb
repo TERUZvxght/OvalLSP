@@ -169,7 +169,7 @@ module Ovallsp
         # chain always contains at least the receiver itself, for a name
         # nothing declares and for the empty string alike, in both
         # singleton and instance modes. It is not carried here.
-        # CLAUDE.md: a guard no input can reach is the same defect as an
+        # docs/CODE_DISCIPLINE.md: a guard no input can reach is the same defect as an
         # untested one.
         #
         # Always the *instance* chain, even for a singleton lookup: a
@@ -351,7 +351,7 @@ module Ovallsp
       #
       # `AncestorEntry#declaration_kind` already knew: its
       # `INSTANCE_SIDE_ORIGINS` is `%i[extend class_object]`. The rule was
-      # not missing, it was copied. CLAUDE.md's same-place rule asks for a
+      # not missing, it was copied. docs/REVIEW_LOOP.md's same-place rule asks for a
       # countermeasure rather than a third hand-fix, and this is it: both
       # readers call the value that owns the question.
       def side_of(entry, singleton)

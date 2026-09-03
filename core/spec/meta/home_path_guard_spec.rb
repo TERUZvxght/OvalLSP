@@ -5,13 +5,13 @@ require "tmpdir"
 require_relative "../../../scripts/check_home_paths"
 
 # 0.2.3's countermeasure for a class the norm alone failed to hold twice.
-# CLAUDE.md has said since the repository went public that local absolute
+# The rule -- in `docs/DEVELOPMENT.md` since 058, `CLAUDE.md` before -- says local absolute
 # paths must not be committed, and it names Git metadata and copied
 # command output as disclosure paths rather than only source files. It
 # was missed anyway, twice: 0.2.1's record named a scaffolded application
 # by its absolute path, and 0.2.3's pre-publish gate quoted the build
 # machine's home directory into both a task document and a commit
-# message. Same place twice, so CLAUDE.md's own rule says the third pass
+# message. Same place twice, so docs/REVIEW_LOOP.md's own rule says the third pass
 # is a machine check rather than a third hand fix.
 #
 # The detector lives in `scripts/check_home_paths.rb` and this spec reads

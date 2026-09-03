@@ -10,7 +10,7 @@
 # This is the hunk sweep turned around. The sweep asks "does *anything* fail
 # when this line is reverted"; this asks "does *this example* fail when the
 # decision it names is inverted". A comment claiming an example distinguishes
-# something is a claim about this tree, and `CLAUDE.md` says a claim about
+# something is a claim about this tree, and `docs/CODE_DISCIPLINE.md` says a claim about
 # this tree is derived rather than typed.
 #
 # Each entry names:
@@ -34,7 +34,7 @@
 # Run by `scripts/check_pinned_mutations.rb`, which **writes the mutation into
 # the real, tracked file** and puts the original bytes back. So do not run its
 # applying mode while anything else is mutating the tree, for the reason
-# `CLAUDE.md` gives for the hunk sweep. The suite runs `--verify-only`, which
+# `docs/MEASURING.md` gives for the sweeps. The suite runs `--verify-only`, which
 # writes nothing.
 #
 # How it restores, and why a throwaway copy on the load path was tried and
@@ -345,7 +345,7 @@
 # Every entry below inverts one decision inside code the hunk sweep cannot
 # reach: `#def_self_type`, `#enclosing_class_object` and `Types.class_of`
 # arrive as whole methods, so reverse-applying their hunk removes the call
-# site too and proves only that the method exists. `CLAUDE.md` names that
+# site too and proves only that the method exists. `docs/CODE_DISCIPLINE.md` names that
 # blind spot; these are the internal decisions pinned separately.
 
 - why: "024.85's singleton-class context -- reading the enclosing frame's type instead of the flag, which cannot tell a class body from a `class << self` body once both hold a class object."

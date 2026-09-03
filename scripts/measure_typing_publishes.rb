@@ -9,7 +9,7 @@ require_relative "repo_files"
 # recalled. 0.2.8's drive round reported 22 publishes for one method name
 # typed on a 4,006-line file, and that number has not been re-derived
 # since; C9 is not worth building against a number nobody can reproduce
-# (CLAUDE.md, "a measurement is a claim").
+# (docs/MEASURING.md, "a measurement is a claim").
 #
 #   ruby scripts/measure_typing_publishes.rb [file-to-type-into] [keystrokes] [interval-seconds]
 #
@@ -33,7 +33,7 @@ puts "measure-typing-publishes: #{TARGET} (#{text.lines.size} lines), " \
 puts "measure-typing-publishes: cwd #{Dir.pwd}, version #{File.read(File.join(ROOT, 'core/lib/ovallsp/version.rb'))[/"([^"]+)"/, 1]}"
 # Which code this side actually ran, printed before it runs rather than
 # assumed afterwards -- three of this project's corpus comparisons were
-# false because both sides ran the same tree (CLAUDE.md).
+# false because both sides ran the same tree (docs/MEASURING.md).
 #
 # Through `RepoFiles` rather than a backtick: `-C` sets the working
 # directory and does *not* override an inherited `GIT_DIR`, so under a
@@ -95,7 +95,7 @@ Open3.popen3({ "OVALLSP_DISABLE_CACHE" => "1" }, "bundle", "exec", "ruby", "-Ili
   # Without this the count is dominated by the cold pass over the whole
   # repository, which typing did not cause: a first run measured 179
   # publishes and 169 of them were that pass still arriving. A baseline
-  # that has not settled is not a baseline (CLAUDE.md, "a measurement is
+  # that has not settled is not a baseline (docs/MEASURING.md, "a measurement is
   # a claim").
   quiet_since = Time.now
   loop do

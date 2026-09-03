@@ -7,8 +7,9 @@
 > currently investigating and fixing things in this codebase, so
 > **external issue proposals and pull requests are not currently being
 > accepted** — reviewing them would be deprioritized against that
-> ongoing work, risking overlap with changes already in progress. See
-> [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+> ongoing work, risking overlap with changes already in progress.
+> Reopening to external contributions is a 1.0.0 item (register entry
+> 024.R10).
 
 A monorepo for a semantic Ruby/Rails language server. Design background
 and overall direction are documented in
@@ -280,9 +281,11 @@ npm run test:unit         # vscode-API-independent unit tests
 npm run test:integration  # real Extension Development Host tests (downloads a VS Code binary)
 ```
 
-## Contributing / Security / Support
+## Security, and contributing
 
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [SECURITY.md](SECURITY.md)
-- [SUPPORT.md](SUPPORT.md)
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SECURITY.md](SECURITY.md) — how to report a vulnerability, and a past
+  incident that affected source checkouts.
+- External issues and pull requests are not accepted during the Preview;
+  the note at the top of this file says why, and 1.0.0 is where that
+  changes (`024.R10`). How the repository itself is developed is in
+  [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).

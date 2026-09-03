@@ -12,7 +12,7 @@ require "fileutils"
 # the reachable set, so an unavailable chain contributes nothing and is
 # indistinguishable there from a type with no ancestors at all. The
 # comparison then reports a mismatch from a question it could not ask,
-# which is the one thing `CLAUDE.md`'s swallowed-failure rule says a
+# which is the one thing `docs/CODE_DISCIPLINE.md`'s swallowed-failure rule says a
 # contained failure must never let a caller do.
 #
 # The reproduction is rbs's own signatures, and it is ordinary:

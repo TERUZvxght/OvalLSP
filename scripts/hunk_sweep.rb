@@ -6,7 +6,7 @@ require_relative "repo_files"
 
 # Reverse-applies each behavioural hunk of a change set on its own and
 # runs the suite, so a line no test fails on is found by a machine
-# instead of by a reviewer. CLAUDE.md calls that an unpinned behavioural
+# instead of by a reviewer. docs/CODE_DISCIPLINE.md calls that an unpinned behavioural
 # line and a defect in its own right.
 #
 #   ruby scripts/hunk_sweep.rb [base-ref]        # default: main
@@ -17,7 +17,7 @@ require_relative "repo_files"
 # figures did not reproduce when a reviewer re-ran them (5 pinned against
 # 6, "two comment-only" against one), and one reviewer contaminated a
 # result by mutating the same worktree while a sweep was running it --
-# the rule against that is in CLAUDE.md and had nothing to enforce it.
+# the rule against that is in docs/MEASURING.md and had nothing to enforce it.
 #
 # Two things are reported, not one:
 #
@@ -216,4 +216,4 @@ accounted = pinned + unpinned + commentary + entangled + errored
 puts "hunk_sweep: #{pinned} pinned, #{unpinned} unpinned, #{commentary} comment-only, " \
      "#{entangled} not separable, #{errored} load-bearing " \
      "(#{accounted} of #{hunks.length} accounted for)"
-puts "An unpinned behavioural line is a defect in its own right (CLAUDE.md)." if unpinned.positive?
+puts "An unpinned behavioural line is a defect in its own right (docs/CODE_DISCIPLINE.md)." if unpinned.positive?

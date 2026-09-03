@@ -64,7 +64,7 @@ RSpec.describe "a literal whose class name a workspace class shares" do
   # examples across 7 files — `capabilities_spec`'s hover row, overload
   # narrowing three ways, the constant ladder, argument type in two
   # specs, root-scoped models, non-ASCII `explainType` — because every
-  # one of them reads the literal's name bare. `CLAUDE.md` records the
+  # one of them reads the literal's name bare. `docs/MEASURING.md` records the
   # same class from 0.2.5: one line in a type converter, one failure in
   # the suite, and a second consequence a corpus found immediately.
   #

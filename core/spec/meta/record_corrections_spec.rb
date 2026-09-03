@@ -131,7 +131,7 @@ RSpec.describe "corrections that stay corrected" do
     let(:sources) do
       { "scripts/preflight.rb" => read("scripts", "preflight.rb"),
         "scripts/check_suites_ran.rb" => read("scripts", "check_suites_ran.rb"),
-        "CLAUDE.md" => read("CLAUDE.md") }
+        "docs/DEVELOPMENT.md" => read("docs", "DEVELOPMENT.md") }
     end
 
     it "quotes no frozen example count" do

@@ -36,7 +36,7 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
 
   # `initialize` reaches `build_cache_store`, which marks a workspace
   # scope and starts `Cache::Store.prune_generations` -- the function
-  # CLAUDE.md's "a test that deletes things" section is entirely about.
+  # docs/CODE_DISCIPLINE.md's "Code that deletes" section is entirely about.
   # Without this the ordinary unit suite writes permanent scope
   # directories into the developer's own `~/.cache/ovallsp` and sweeps it:
   # a review round measured three new directories per run of this file,
@@ -237,7 +237,7 @@ end
 
   # The absent root is **inside this example's own tmpdir**, not a
   # fabricated path at `/`. The previous form was `/nonexistent-<pid>`,
-  # which is the shape CLAUDE.md's `/Applications` rule names: a path
+  # which is the shape docs/CODE_DISCIPLINE.md's `/Applications` rule names: a path
   # chosen to be obviously fake is chosen without looking at what is
   # actually there, and it made this example's verdict depend on the
   # state of the machine's root directory. Nothing here deletes, so it

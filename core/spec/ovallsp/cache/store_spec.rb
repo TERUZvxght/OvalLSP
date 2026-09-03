@@ -264,7 +264,7 @@ RSpec.describe Ovallsp::Cache::Store do
         # candidate; `Float::INFINITY` would sort it to the newest end and
         # keep it, evicting a readable generation in its place. A count
         # assertion is satisfied by both -- the fixture problem round 39
-        # found, and the blind spot CLAUDE.md names: the method arrived
+        # found, and the blind spot docs/CODE_DISCIPLINE.md names: the method arrived
         # whole, so reverse-applying its hunk only tested that it exists.
         expect(remaining.length).to eq(3)
         expect(remaining).not_to include(vanishing)

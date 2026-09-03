@@ -9,7 +9,7 @@
 # only stays true if resolving an entry moves it, and doing that by hand
 # is the operation this repository has the worst record with -- a scripted
 # edit took the register from 11,555 lines to 25,878 twice over
-# (`024.225`), and `CLAUDE.md` asks for a form of work that can be
+# (`024.225`), and `docs/DEVELOPMENT.md` asks for a form of work that can be
 # replayed rather than one that exists only in the tree.
 #
 # So it is one script, run after closing an entry, and

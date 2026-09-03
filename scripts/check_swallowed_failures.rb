@@ -105,7 +105,7 @@ found.each do |site|
     # an assertion. A refused spelling stays parseable so that this
     # message can name it, not so that a site can sit in it.
     problems << "#{site["file"]}:#{site["line"]}  #{site["source"]}\n      is marked `swallows`. " \
-                "Catching a failure and continuing is not allowed by default (CLAUDE.md): make it surface, " \
+                "Catching a failure and continuing is not allowed by default (docs/CODE_DISCIPLINE.md): make it surface, " \
                 "or write the argument for why no caller can assert from the value it returns and mark it " \
                 "`contained: <why>`."
   end

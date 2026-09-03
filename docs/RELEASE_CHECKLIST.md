@@ -10,7 +10,7 @@ Task 022の受け入れ基準(「1.0 release checklistが全項目判定可能�
 
 | # | 項目 | 状態 | 根拠/備考 |
 |---|---|---|---|
-| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 3,124 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` / `test:integration`(source Core)/ `test:integration:packaged`(packaged Core)、いずれも0 failures — 後ろ2つは ci.yml の `vscode-integration` ジョブが両方実行し、どちらにも「examples が0件なら落とす」ガードが付いています。**core側の数は `core/spec/meta/documented_counts_spec.rb` が実行中のスイートと突き合わせます** — 890/895/1,776/1,833 と三度陳腐化し、「毎回測り直すこと」と書いた行自体がまた陳腐化したため、覚えておくのをやめて検査させることにした。vscode側の数はここから消した。増える数字を2箇所に書く理由がない |
+| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 3,120 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` / `test:integration`(source Core)/ `test:integration:packaged`(packaged Core)、いずれも0 failures — 後ろ2つは ci.yml の `vscode-integration` ジョブが両方実行し、どちらにも「examples が0件なら落とす」ガードが付いています。**core側の数は `core/spec/meta/documented_counts_spec.rb` が実行中のスイートと突き合わせます** — 890/895/1,776/1,833 と三度陳腐化し、「毎回測り直すこと」と書いた行自体がまた陳腐化したため、覚えておくのをやめて検査させることにした。vscode側の数はここから消した。増える数字を2箇所に書く理由がない |
 | 2 | compatibility matrix green or documented | ✅ 判定可能・文書化済み | `docs/SUPPORT_MATRIX.md`。実際に検証済みなのはmacOS(darwin-arm64) + Ruby 3.4(3.4.5/3.4.7/3.4.10) + Rails 8.1のみ — Ruby 3.3は`required_ruby_version >= 3.3`が拒否しないというだけで実際の動作確認実績ではないため、Task 023.1/023.4でsupported表から外した。VSIXのnative payloadはdarwin-arm64 + Ruby 3.4.x専用。それ以外では、0.2.1 以降は起動前に `prism`/`rbs` の有無を確認し、あればそちらで動かして Output に記録する。無ければ診断を出す(ADR-0005 と 0.2.1 の変更)。以前の版がRails 7.1を"supported"としていた誤りと、GitHub Actions未実行にもかかわらず"CIで実行"としていた誤りは修正済み |
 | 3 | benchmark regression within threshold | ✅ 判定可能・report-only | `docs/design/tasks/021-persistent-cache-notes.md`。1k/5kファイル規模での実測は未実施(既知のギャップとして記録済み) |
 | 4 | no known P0/P1 | ✅ 判定可能・green | Task 022.2(Bundler境界分離)は round 1-31 の独立レビューで収束、`docs/design/tasks/022.2-collector-tracepoint-state-machine.md`の最終release gateセクションに全不具合の重大度分類を記録。Packaging/Support Matrix整備(本ドキュメント更新の対象作業)自体の独立レビューは次アクション参照 |
@@ -43,6 +43,18 @@ ruby scripts/deferred_findings.rb --targeting <version>
 誰も走らせ直さなかったのは、どのエントリを走らせ直すべきかを言うものが
 無かったからです。
 
+`AGENTS.md`'s "Branches, commits, releases" の行がこの文書を指す。同じ
+タイミングで、自動化されていない 4 手順を手で行う。058 で
+`docs/DOCUMENTATION_MAP.md` からここへ移した。そこにあった 5 手順のうち
+parity と coverage の spec だけは preflight の full suite が毎回行っている。
+CI の secret-scan job は `main` への push では全履歴を、pull request では
+その PR のコミットを走査するので、リリース前の全履歴走査は手元で行う。
+
+1. `docs/DOCUMENTATION_MAP.md` のトリガ表を、このリリースの変更すべてについて歩く。
+2. 両言語の changelog を揃える — bullets が先、details が下、EN と JA が同じことを言う。
+3. `gitleaks detect --config .gitleaks.toml` を全履歴に対して走らせる。
+4. 直前のバージョン番号をリポジトリ全体で grep し、履歴でないのに残っているものを直す。
+
 ## Apple Silicon Marketplace Preview Release Gate (Task 023)
 
 上記の1.0リリースチェックリストとは別に、Task 023(Apple Silicon向け
@@ -66,7 +78,7 @@ Marketplace Preview公開)固有の22項目のゲートを設ける。各項目�
 | 2 | Core full RSpec failure/pending 0 | ✅ CI の `core` ジョブ(`bundle exec rspec --order random`)。0 failures(件数は `documented_counts_spec.rb` が上の行と突き合わせる) |
 | 3 | Real Rails integration failure/pending 0 | ✅ CI の `core` ジョブ + 同ジョブの "Fail if the real-Rails or capability suites were skipped instead of run" ステップ。gem が無いと両 suite は丸ごと skip して `rspec` は 0 で終わるため、**走ったこと自体**を別に検査している |
 | 4 | VS Code unit/integration failure 0 | ✅ `test:unit`・`test:integration` |
-| 5 | packaged integration failure 0 | ✅ `test:integration:packaged` — **0.2.17 から ci.yml の `vscode-integration` ジョブが実行します**。それまでは6文書がこの名前を挙げ、実行するものが無い状態で本行が ✅ でした(`024.125`)。実行するのは `ubuntu-latest` なので、検証されるのは**Core を拡張内に配置した読み込み経路**であって darwin-arm64 のパッケージングではありません — そちらは publish 時の `vsix_semantic_smoke.rb` と手動実行のみで、`docs/EXTENSION_CAPABILITIES.md` が両言語でそう開示しています |
+| 5 | packaged integration failure 0 | ✅ `test:integration:packaged` — **0.2.17 から ci.yml の `vscode-integration` ジョブが実行します**。それまでは6文書がこの名前を挙げ、実行するものが無い状態で本行が ✅ でした(`024.125`)。実行するのは `ubuntu-latest` なので、検証されるのは**Core を拡張内に配置した読み込み経路**であって darwin-arm64 のパッケージングではありません — そちらは 0.3.2 から ci.yml の `Packaged Core (darwin-arm64)` ジョブが push ごとに vendoring と `vsix_semantic_smoke.rb` を行い、publish 時にも同じ smoke が走ります。パッケージ済み Core に対して capability suite(1 層目)を回すことは未着手で、`docs/EXTENSION_CAPABILITIES.md` が両言語でそう開示しています |
 | 6 | Apple Silicon semantic smoke PASS | ✅ `scripts/vsix_semantic_smoke.rb`(hover/documentSymbol/definition/stderr allowlist、Task 023.4で拡張) |
 | 7 | Extension/Core version handshake PASS | ✅ `vscode/src/versionInfo.ts#compareVersionInfo`のテスト(Task 023.2、8種の不一致モード全て) |
 | 8 | update E1/C1→E2/C2 PASS | ✅ `versionInfo.test.ts`の"never mixes E1/C1 and E2/C2"(Task 023.5) |
@@ -75,7 +87,7 @@ Marketplace Preview公開)固有の22項目のゲートを設ける。各項目�
 | 11 | SBOM name/version match PASS | ✅ `scripts/verify_sbom_against_vsix.rb`(既存、Task 022由来、本タスクでは変更なし) |
 | 12 | LICENSE/Third Party Notice match PASS | ✅ `vscode/LICENSE`(既存)+本タスクで追加した`vscode/THIRD_PARTY_NOTICES.md`が`docs/SBOM.md`と一致することを目視確認済み |
 | 13 | Privacy doc matches actual code | ✅ `vscode/PRIVACY.md`の記述を`grep`でtelemetry/network呼び出しの不在を確認してから作成(Task 023.6) |
-| 14 | secret scan PASS | ✅ CI の `secret-scan` ジョブ(`gitleaks-action`、`fetch-depth: 0` で全履歴、`.gitleaks.toml` でテストフィクスチャのみ許可リスト化)+ 同ジョブの `check_home_paths.rb --messages`(commit message は tree scan からは見えない) |
+| 14 | secret scan PASS | ✅ CI の `secret-scan` ジョブ(`gitleaks-action`。`main` への push では `fetch-depth: 0` の全履歴を、pull request ではその PR のコミットを走査。`.gitleaks.toml` でテストフィクスチャのみ許可リスト化)+ 同ジョブの `check_home_paths.rb --messages`(commit message は tree scan からは見えない) |
 | 14.1 | 出荷する artifact 自身へのパス検査 | ✅ 0.2.5 で追加 | `release.sh` が unpack 後の実 artifact に `$HOME` 検査を掛け、native 拡張以外に一致があれば publish を拒否する。**それまで CI は ubuntu ビルドしか見ておらず**（`$HOME` が `/home/runner`、vendoring される native 拡張も別物）、実際に配布する darwin-arm64 成果物は一度も検査されていなかった。`grep` はシェルが解決する名前ではなく `/usr/bin/grep` を絶対パスで呼ぶ — ugrep ラッパーはバイナリを無言で飛ばす。`core/spec/meta/release_script_guard_spec.rb` がこのステップの存在を pin する(コメントアウトでも落ちることを実測確認済み) |
 | 15 | `vsce ls --tree`内容検査PASS | ✅ CI の `package-contents-inspection` ジョブ + `release.sh` の `vsce ls --tree` でmkmf.log等のテキストベースのリーク(Task 023.6で修正済み)はhard failで検出する。`prism.bundle`/`rbs_extension.bundle`自体がこのビルドマシンのrbenv libruby絶対パスを`LC_LOAD_DYLIB`として埋め込んでいる件(`otool -L`で確認)は、独立レビュー(Review B)で「別マシンでの動的リンク解決を壊す可能性が高い」と指摘され、実際にこのマシン上の異なるRuby 3.4.xインストール間で`LoadError`を再現して確認した。1回目の修正案(`DYLD_LIBRARY_PATH`を設定するがrbenv shim自体をそのまま起動)は同じレビューで「macOSは`/bin/bash`を経由するプロセスに対し`DYLD_*`環境変数を無効化するため効果がない」と再度指摘され、実際にrbenv shim経由で無効化されることを確認した。最終的に、解決されたRubyの`RbConfig::CONFIG["bindir"]`/`["libdir"]`を問い合わせ、shimではなく実体の`<bindir>/ruby`を直接起動する方式(`vscode/src/platformCompatibility.ts#queryRubyConfigPaths`、Task 023.8)へ修正し、実際のrbenv shim経由での再現・修正確認まで完了した。埋め込みパス自体は残るがwarningとして報告し続け、機能的な影響は解消済み |
 | 16 | darwin-arm64 target確認 | ✅ `vscode/package.json` の `package` スクリプト自体が `--target darwin-arm64` 固定 + `release.sh` が生成された VSIX のファイル名を検証する |

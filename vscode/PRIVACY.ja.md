@@ -126,8 +126,7 @@ Serverビルドを指定した場合、上記は引き続きOvalLSP自身のコ�
 
 ## ご質問・懸念事項
 
-連絡方法は
-[SUPPORT.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md)
-を、セキュリティ固有の懸念については
+セキュリティ固有の懸念については
 [SECURITY.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.ja.md)
-を参照してください。
+を参照してください。それ以外の報告は Preview の間は受け付けておらず、理由は
+リポジトリの [README](https://github.com/TERUZvxght/OvalLSP/blob/main/README.ja.md) にあります。

@@ -271,7 +271,7 @@ RSpec.describe "spec file constants" do
 # Both constants are prefixed now. This is what would have said so:
 # a census over an empty glob is indistinguishable from a census over
 # a clean tree, which is `check_pinned_mutations.rb`'s first run and
-# the reason CLAUDE.md asks for this example by name.
+# the reason docs/MEASURING.md asks for this example by name.
 it "is reading the spec tree, not an empty glob" do
   files = Dir.glob(File.join(SPEC_CONSTANTS_CORE_ROOT, "spec", "**", "*_spec.rb"))
 

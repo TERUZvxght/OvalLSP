@@ -60,18 +60,20 @@ looks most like "the extension does nothing": an extension present on
 disk but not registered with VS Code, which never loads and never logs.
 This project has been in that state.
 
-**What actually runs where, as of 0.2.0.** Layer 1 runs in CI on
+**What actually runs where, as of 0.3.2.** Layer 1 runs in CI on
 `ubuntu-latest`, against `core/bin/ovallsp` — the sources — because no
-workflow sets `OVALLSP_E2E_CORE_BIN`. Layer 2 is run by hand; no workflow
-invokes it. The macOS release workflow runs `scripts/vsix_semantic_smoke.rb`
-against the built VSIX, which is a narrower check than either layer. So
-the rows below are verified continuously on Linux against the sources,
-and on darwin-arm64 against the packaged Core only by the smoke check and
-by hand. Closing it needs no new infrastructure: `apple-silicon-release.yml`
-already runs on GitHub's own `macos-14` Apple Silicon runners, so the gap
-is layer 1 against the packaged Core in that job, which is what
-`OVALLSP_E2E_CORE_BIN` above is for. Doing it per published target is
-024.R4.
+workflow sets `OVALLSP_E2E_CORE_BIN`. The same CI runs the extension's
+integration suite against a packaged-layout Core on Linux (since 0.2.17),
+and on every push vendors the Core on an Apple Silicon runner and drives
+it through `scripts/vsix_semantic_smoke.rb` (since 0.3.2, the
+`Packaged Core (darwin-arm64)` job); the release workflow runs the same
+smoke against the built VSIX. Layer 2 is run by hand; no workflow invokes
+it. So the rows below are verified continuously on Linux against the
+sources, and on darwin-arm64 against a packaged Core only by the smoke
+check, which is narrower than either layer. Closing that needs no new
+infrastructure: the gap is layer 1 against the packaged Core on that
+runner, which is what `OVALLSP_E2E_CORE_BIN` above is for. Doing it per
+published target is 024.R4.
 
 `core/spec/e2e/capability_coverage_spec.rb` keeps this document and the
 suite in step: every row must have an example, every example a row.

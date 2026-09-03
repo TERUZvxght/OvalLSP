@@ -82,6 +82,6 @@ if __FILE__ == $PROGRAM_NAME
 
   problems.each { |p| warn("check-suites-ran: #{p}") }
   warn("check-suites-ran: a skipped suite is not a passing suite. Install the missing environment " \
-       "(CONTRIBUTING has the command) rather than reading the exit status.")
+       "(docs/DEVELOPMENT.md has the command) rather than reading the exit status.")
   exit 1
 end

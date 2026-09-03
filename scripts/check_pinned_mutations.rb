@@ -26,7 +26,7 @@ require_relative "utf8"
 # are put back -- in an `ensure`, and again from `at_exit`, and the
 # restoration is verified by comparing bytes before the next entry runs.
 # Nothing is ever deleted. Do not run this while anything else is
-# mutating the tree, for the reason `CLAUDE.md` gives for the hunk sweep.
+# mutating the tree, for the reason `docs/MEASURING.md` gives for the sweeps.
 
 require "fileutils"
 require "shellwords"
@@ -159,7 +159,7 @@ elsif pending.positive?
   failures << "#{label}\n    the example did not run -- #{pending} pending in " \
               "#{entry['spec']}. That says nothing about the mutation; it says this " \
               "environment cannot verify it. Install what that suite needs " \
-              "(CONTRIBUTING.md) rather than reading a green run as a pinned one."
+              "(docs/DEVELOPMENT.md) rather than reading a green run as a pinned one."
   elsif fails.zero? && status.success?
     failures << "#{label}\n    the example passed with the mutation applied, so it does not pin what it claims " \
                 "to. #{entry["spec"]} -- `#{entry["example"].to_s.strip}`"

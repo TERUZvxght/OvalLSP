@@ -20,7 +20,7 @@
 # **The work these verdicts are waiting for is review, not writing.**
 # `024.122` closed in 0.2.13: every non-`surfaces` site now carries its
 # argument. Those arguments are one author's, reviewed by nobody else --
-# `CLAUDE.md` says so, and says a `contained` that turns out to be wrong
+# `docs/CODE_DISCIPLINE.md` says so, and says a `contained` that turns out to be wrong
 # is an ordinary finding. This file is where to record that it was.
 #
 # Until 0.2.16 this header said the opposite: that the verdicts were a

@@ -12,7 +12,7 @@
 # a quoted `status: "fixed"` renders in the index as `"fixed"` while
 # every check here reads `fixed`.
 #
-# One text, one parser. `CLAUDE.md`'s countermeasure shape -- two
+# One text, one parser. `docs/REVIEW_LOOP.md`'s countermeasure shape -- two
 # scanners that had to agree, replaced by one both read.
 require_relative "../../../scripts/deferred_findings"
 
@@ -734,7 +734,7 @@ RSpec.describe "deferred findings metadata" do
   # on that occurrence belonging to an *open* entry. 0.2.14's retargeting
   # made the first one a resolved entry, and the example stopped
   # distinguishing anything while still passing its own description --
-  # `CLAUDE.md`'s "a fixture that cannot distinguish the two candidate
+  # `docs/CODE_DISCIPLINE.md`'s "a fixture that cannot distinguish the two candidate
   # behaviours" arriving in the spec written to catch a stale target.
   def entry_with(target:, status: "open")
     <<~MD

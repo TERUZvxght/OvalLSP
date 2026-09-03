@@ -62,7 +62,7 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
       // rewrote it. Two attempts at this spec's own timing, a settle and
       // then the retry, each passed once and failed the run after; the
       // third round on one place buys a countermeasure rather than a
-      // third guess at a duration (`CLAUDE.md`, `024.120`).
+      // third guess at a duration (`docs/REVIEW_LOOP.md`, `024.120`).
       //
       // `test-fixtures/sample-workspace/{db/migrate,sig,sorbet/rbi}/`
       // carry a `.gitkeep` for this. It is also what a real workspace
