@@ -62,7 +62,7 @@ module Ovallsp
     FileSummary = Data.define(:uri, :content_hash, :document_version, :declarations, :diagnostics, :source,
                                :read_sequence, :ancestor_facts, :alias_facts, :reference_candidates,
                                :generated_method_facts, :open_surface_owners, :module_function_names,
-                               :buffer_id) do
+                               :buffer_id, :pattern_bound_names) do
       # `module_function_names`: `[owner, name]` pairs this file wrote a
       # `module_function :name` for. A *fact*, not a rewrite, because the
       # method it names may be declared in a different file -- which is
@@ -71,6 +71,16 @@ module Ovallsp
       # so cross-file never worked and `Reopened.r_a` was reported as
       # missing (`024.114`). `WorkspaceIndex` applies these once every
       # file is in, the way it already does for `open_surface_owners`.
+      # `pattern_bound_names`: names this file's patterns bind and the
+      # occurrence list deliberately does *not* carry. An `_`-prefixed
+      # name inside a pattern is left unrecorded because a pattern may
+      # legally bind it twice and rewriting both ranges is a SyntaxError
+      # (`024.274`) -- but `Rename` still has to know something binds it,
+      # or `024.273`'s refusal is defeated by an ordinary assignment of
+      # the same name in the same scope and the rename leaves the pattern
+      # behind. Driven: the file still parses and answers 0 where it
+      # answered 5 (`024.296`).
+      #
       # `buffer_id`: which *buffer* the `document_version` counts within.
       # Nil for a disk read, which has no buffer and is ordered by
       # `read_sequence` instead.
@@ -83,11 +93,11 @@ module Ovallsp
       # the publish funnel and this layer kept it.
       def initialize(source: :buffer, read_sequence: 0, ancestor_facts: [], alias_facts: [], reference_candidates: [],
                       generated_method_facts: [], open_surface_owners: [], module_function_names: [],
-                      buffer_id: nil, **rest)
+                      buffer_id: nil, pattern_bound_names: [], **rest)
         super(source: source, read_sequence: read_sequence, ancestor_facts: ancestor_facts, alias_facts: alias_facts,
               reference_candidates: reference_candidates, generated_method_facts: generated_method_facts,
               open_surface_owners: open_surface_owners, module_function_names: module_function_names,
-              buffer_id: buffer_id, **rest)
+              buffer_id: buffer_id, pattern_bound_names: pattern_bound_names, **rest)
       end
     end
   end

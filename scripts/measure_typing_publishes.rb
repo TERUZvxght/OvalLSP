@@ -73,7 +73,16 @@ Open3.popen3({ "OVALLSP_DISABLE_CACHE" => "1" }, "bundle", "exec", "ruby", "-Ili
       break
     end
   end
-  Thread.new { stderr.each_line { |l| warn "core: #{l}" } }
+  # The pipes are closed from the main thread when the run ends, and
+  # this one is usually mid-`each_line` when that happens. Without the
+  # rescue every run printed an `IOError` backtrace *above its own
+  # numbers*, which is the last thing a measurement should do: a reader
+  # deciding whether to trust the figures met a stack trace first.
+  Thread.new do
+    stderr.each_line { |l| warn "core: #{l}" }
+  rescue IOError, EOFError
+    nil
+  end
 
   stdin.write(frame(jsonrpc: "2.0", id: 1, method: "initialize",
                     params: { rootUri: "file://#{ROOT}", capabilities: {} }))

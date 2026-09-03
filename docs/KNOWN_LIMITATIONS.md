@@ -241,24 +241,23 @@ answer is one it already has. <!-- documents: 024.20 -->
 
 ## Reports that are wrong today
 
-**A namespaced type reported incompatible with itself.** If your `sig/`
-declares a parameter inside a namespace — `module App; class Registry;
-def fetch: (Key key) -> Key` — and the Ruby that calls it is written
-inside that same namespace, the declared type arrives qualified and the
-inferred one arrives bare, and the argument-type check compares the two
-spellings as different classes. Driven over the `rbs` gem's own 89
-hand-written signatures, every argument-type report it produces is this
-one shape: ``expects RBS::TypeName here, but TypeName is given``, where
-the two names are the same class. Nothing is wrong with your
-code. <!-- documents: 024.224 -->
-
-
 The engine's standing policy is that a wrong report is worse than a
 missed one. These are the places it currently says something untrue —
 one of them as a colour, the rest as diagnostics. Every one is recorded
 and all are visible on ordinary code, so they are listed here rather
 than left for you to find.
 
+
+**One this list carried until 0.3.2 is gone.** A namespaced type was
+reported incompatible with itself — ``expects RBS::TypeName here, but
+TypeName is given``, where the two names are one class — and over the
+`rbs` gem's own hand-written signatures that was *every* argument-type
+report the engine produced. The cause was not the two spellings: when
+RBS declares a type whose ancestry it cannot build, the check was
+reading the failure as "this class has no ancestors" and concluding a
+mismatch from a question it could not ask. It declines now. Measured
+over rbs 4.2.0 with its own `sig/`: six reports before, none after,
+with the unrelated categories unchanged (024.224, fixed in 0.3.2).
 
 Two that this list used to carry are gone — fixed in earlier releases,
 not this one. **A `*_path`/`*_url` call is no longer reported as a
@@ -337,10 +336,10 @@ missed one", so each is narrow on purpose. What that costs a user:
   not reported at all, and where they *are* reported they have so far
   been wrong. Over Ruby's standard library, five Rails gems and minitest
   — 2,042 files — this check produces **zero** findings. Over the `rbs`
-  gem with its own RBS loaded, measured again in 0.2.18, it produces
-  **six**, and all six are the same false report: a namespaced type
-  called incompatible with itself (`RBS::Location` against `Location`,
-  which are one class). Before 0.2.0's last round of fixes two corpora
+  gem with its own RBS loaded — 109 files, 89 hand-written signatures,
+  and the only such corpus this check has been pointed at — it produced
+  **six** until 0.3.2, and all six were one false report, now fixed; it
+  produces **zero** there too. Before 0.2.0's last round of fixes two corpora
   produced 795 and 151, and every one of those was wrong too. **No
   measurement of this check has yet produced a true report on real
   code.** Treat it as something that will not catch a mistake in yours;
@@ -473,13 +472,6 @@ extension, with its runtime gems vendored — is driven through a full
 editor session on every push, alongside the repository copy. That covers
 the bundled-Core load path, which is where the packaged build has
 actually broken before.
-
-What it does not cover is the platform. That run is on Linux, so the
-**darwin-arm64** native extensions you actually install are still only
-exercised at publish time, by a smoke test that checks hover, go to
-definition and a clean shutdown. A defect specific to the macOS build is
-therefore still caught at publish rather than in
-review. <!-- documents: 024.283 -->
 
 ## What a version mismatch actually does
 
@@ -713,14 +705,6 @@ it.*
   `[1,2].siz` are silent, though completion at the same spot knows the
   type exactly. <!-- documents: 024.129 -->
 - A scope defined inside a concern's `included do` has no type. <!-- documents: 024.132 -->
-- **On Ruby 4.0 only**, `instance_variables_to_inspect` is reported
-  missing on your own class. Ruby 4.0 gives it to every object and the
-  bundled signatures do not declare it, so the check reads it as absent.
-  The three names with the same problem on 3.3 and 3.4 were fixed in
-  0.2.16; this one is not, because silencing it everywhere would also
-  silence a genuine typo of that name on the Ruby versions that do not
-  have it. Ruby 4.0 is best-effort — see the support
-  matrix. <!-- documents: 024.288 -->
 
 ## What a partial's local resolves to
 
@@ -737,11 +721,12 @@ does resolve. This is the commonest shape in a scaffolded app's views
 Four, and only the first is about the *label* rather than about which
 method was found:
 
-- **A return type RBS writes as `self`, `void` or `untyped` reads
-  `Unknown`**, and a method's own type variable leaks (`map() ->
-  Array[U]`). The engine has one word for "nothing can be concluded from
-  this" and uses it in a place meant to be read by a person, where the
-  word RBS actually wrote would be better (024.42). <!-- documents: 024.42 -->
+- **A method's own type variable leaks into the label**: `map()`
+  reads `-> Array[U]`, and `U` means nothing to a reader. Answering it
+  well means working out what the block returns, which is inference
+  rather than wording — unlike the `Unknown` half of this, fixed in
+  0.3.2, where the source had a better word to fall back
+  to (024.42). <!-- documents: 024.42 -->
 - **Inside a `module`, a call to a method only a stdlib ancestor
   declares gets no popup** — `puts(` written in a concern or a helper
   module, in an instance method rather than a `def self.`. A module's
@@ -829,20 +814,13 @@ local in a thousand files of real gem source and running what came out.
   the signature and its call sites by hand. Every other parameter —
   positional, optional, `*rest`, `**opts`, `&block`, and block
   parameters — is renamed with its uses.
-- **Renaming a local that a pattern also binds rewrites the rest and
-  leaves the pattern.** `in [_a, 1]` — or `in {a:}` for any name — is a
-  binding this extension does not record, and where the same name is
-  also assigned normally in that scope the rename goes ahead on the
-  occurrences it can see. The file still parses and still runs, and the
-  method answers something else:
-
-  ```ruby
-  def m(pair) = (_a = 0; case pair; in [_a, 1] then _a; end)   # => 5
-  def m(pair) = (bb = 0; case pair; in [_a, 1] then bb; end)   # => 0
-  ```
-
-  With no ordinary assignment of that name, the rename is refused
-  instead and nothing is edited. <!-- documents: 024.296 -->
+- **Renaming a local that a pattern also binds is refused**, and
+  nothing is edited. `in [_a, 1]` is a binding this extension does not
+  record — a pattern may legally bind an `_`-prefixed name twice, and
+  rewriting both places would not parse — so it cannot carry the rename
+  out and says so instead. Until 0.3.2 it went ahead on the occurrences
+  it could see, leaving the pattern behind: the file still ran, and the
+  method answered 0 where it had answered 5.
 
 ## In a view template, diagnostics say nothing about a method called on an `@ivar`
 
@@ -878,12 +856,6 @@ Agent: the list is discarded with the application it described and
 asked for again. Until 0.3.1 it was kept, and the old gems' method
 sets went on answering for the new ones — which did report wrongly. <!-- documents: 024.295 -->
 
-## A range of accepted argument counts is written with a singular noun
-
-**A method that takes between none and one argument, called with three,
-is reported as one that "takes 0..1 argument".** The count is a range
-and the noun follows its upper bound instead of the range. Nothing
-about which call is wrong, or why, changes — only the sentence. <!-- documents: 024.310 -->
 
 ## A class this editor has not indexed yet can be answered for by a gem's class of the same name
 

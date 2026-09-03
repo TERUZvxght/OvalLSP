@@ -614,8 +614,8 @@
   example: "records a multiple-assignment target"
 - why: "Declining an underscore target inside a pattern -- Ruby lets one pattern bind such a name twice, so two edits that are each the name exactly make the file stop parsing."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        @pattern_depth.positive? && name.to_s.start_with?(\"_\")\n"
-  to: "        false\n"
+  from: "        declined = @pattern_depth.positive? && name.to_s.start_with?(\"_\")\n"
+  to: "        declined = false\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "declines an underscore-prefixed target, which a pattern may repeat"
 - why: "Declining a value-omitted shorthand's pattern binding -- the range Prism reports for it is the hash key's and is spelled without the colon, so the range comparison passes it and Rename rewrites a pattern's key."
@@ -740,7 +740,7 @@
 # Call hierarchy (W5/W6), 0.3.0. Each of these was written, then
 # measured unpinned, then given a fixture that tells the two behaviours
 # apart -- the first fixture agreed with the code by accident.
-- why: "a call outside any method has no calling method. **Aimed at `enclosing_callable`'s containment test, because the two guards downstream cover each other**: mutating `next unless enclosing` alone, or the render's `or next` alone, leaves both W5 examples green -- each drops the group the other would have. Widening the containment makes every declaration in the file contain the call, which defeats both at once. One of the two downstream lines is redundant as the code stands, and that is recorded in docs/ISSUES.md."
+- why: "a call outside any method has no calling method. Aimed at `enclosing_callable`'s containment test because widening it defeats both downstream guards at once. **The claim that one of those two was redundant did not survive being driven** (`024.316`): `next unless enclosing` is what keeps `enclosing.symbol_id` from being asked of nil, and the render's `or next` guards the indexing thread replacing a summary between the two passes -- this method does not hold `@index_mutation_mutex`. Neither was spare; both were unreached. The file-scope half has its own example now, in spec/ovallsp/server_call_hierarchy_spec.rb."
   file: core/lib/ovallsp/server.rb
   from: "                          &.select { |d| range_contains?(d.location, location) }\n"
   to: "                          &.select { |d| true }\n"
@@ -955,3 +955,9 @@
   to: "          nil\n"
   spec: spec/ovallsp/struct_members_spec.rb
   example: "records a reader and a writer for each Struct member"
+- why: "A signature chain RBS declares and cannot build reads as a class with no ancestors; without the refusal, every argument-type report over rbs's own signatures is the class called incompatible with itself."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        return nil if chains.any? { |chain| Signatures::Environment.unavailable?(chain) }\n"
+  to: "        return nil if false\n"
+  spec: spec/ovallsp/diagnostics/unbuildable_signature_chain_spec.rb
+  example: "does not report the class against itself"

@@ -27,6 +27,32 @@ RSpec.describe Ovallsp::Semantic::ReferenceResolver do
 
   def sym(kind:, owner:, name:) = Ovallsp::Index::SymbolId.new(kind: kind, owner: owner, name: name, discriminator: nil)
 
+  # **`#resolve` is a filter_map, and until 0.3.2 nothing said so.** A
+  # candidate that resolves to nothing is dropped, so the result is
+  # shorter than the input and index `n` of one is not index `n` of the
+  # other. Six callers respect that today by shape rather than by having
+  # been told -- four pass a single-element array, two iterate -- and the
+  # first to zip the two lists would be wrong on the first declining
+  # candidate, in a workspace where something declines and nowhere else.
+  # `024.308`.
+  it "answers about the candidates it could resolve, not one entry per candidate" do
+    index_source("class User\nend\n", uri: "file:///user.rb")
+    # The uses live in a second file, so `User` is one candidate here
+    # rather than two: a declaration is a candidate as well.
+    document, summary = index_source("User.new\nDefinitelyNotDeclared.new\n", uri: "file:///uses.rb")
+    candidates = summary.reference_candidates.select { |c| c.kind == :constant }
+
+    # The control: both names are there to be asked about, so the shorter
+    # answer below is the resolver declining rather than the parser
+    # having found one of them.
+    expect(candidates.map(&:name)).to contain_exactly("User", "DefinitelyNotDeclared")
+
+    resolved = resolver.resolve(document, candidates, uri: "file:///uses.rb", generation: 1)
+
+    expect(resolved.length).to eq(1)
+    expect(resolved.first.symbol_id.name).to eq("::User")
+  end
+
   it "resolves a constant reference to the class it names" do
     document, summary = index_source("class User\nend\n\nUser.new\n")
 

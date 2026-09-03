@@ -31,6 +31,64 @@ RSpec.describe "Ovallsp::Server textDocument/prepareRename and textDocument/rena
     )
   end
 
+# **A pattern binds the name too, and the rename cannot see it.**
+#
+# An `_`-prefixed name inside a pattern is deliberately not recorded:
+# a pattern may legally bind such a name twice and rewriting both
+# ranges would produce `in [zz, zz]`, which is a SyntaxError
+# (`024.274`). `024.273`'s refusal covers the case where *no*
+# occurrence is a write — but an ordinary assignment of the same name
+# in the same scope supplies one, so the refusal does not fire and the
+# rename goes ahead on what it can see, leaving the pattern behind.
+#
+# The result parses and runs, and answers something else:
+#
+#     def m(pair) = (_a = 0; case pair; in [_a, 1] then _a; end)
+#     m([5, 1])   # => 5
+#     # after renaming `_a` to `zz`, the pattern still binds `_a`
+#     # and the body reads `zz`, which is 0.
+#
+# `024.296`. Refusing costs a rename the engine cannot do correctly;
+# doing it costs the user a working program.
+it "refuses to rename a local a pattern also binds" do
+  source = "def m(pair)\n  _a = 0\n  case pair\n  in [_a, 1]\n    _a\n  end\nend\n"
+  input =
+    did_open("file:///pattern.rb", source) +
+    frame(
+      jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+      params: { textDocument: { uri: "file:///pattern.rb" }, position: { line: 1, character: 2 },
+                newName: "zz" }
+    ) +
+    frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+  build_server(input).run
+  result = sent_messages.find { |m| m[:id] == 1 }&.[](:result)
+
+  expect(result).to be_nil, "the rename was planned, and it would leave the pattern binding `_a`"
+end
+
+# The control: the same shape without a pattern renames as it always
+# has. Without it, the example above passes on a server that refuses
+# every local rename.
+it "still renames a local that no pattern binds" do
+  source = "def m(x)\n  _a = 0\n  _a + x\nend\n"
+  input =
+    did_open("file:///plain.rb", source) +
+    frame(
+      jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+      params: { textDocument: { uri: "file:///plain.rb" }, position: { line: 1, character: 2 },
+                newName: "zz" }
+    ) +
+    frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+  build_server(input).run
+  result = sent_messages.find { |m| m[:id] == 1 }&.[](:result)
+
+  expect(result).not_to be_nil, "a local with no pattern binding must still be renameable"
+  edits = result.dig(:changes, :"file:///plain.rb") || result.dig(:changes, "file:///plain.rb")
+  expect(edits.length).to eq(2)
+end
+
   it "renames a method's declaration and every resolved call site across files" do
     input =
       did_open("file:///widget.rb", "class Widget\n  def build\n  end\nend\n") +

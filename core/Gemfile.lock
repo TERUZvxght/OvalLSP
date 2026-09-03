@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    ovallsp (0.3.1)
+    ovallsp (0.3.2)
       prism (>= 0.24)
       rbs (>= 3.0)
 

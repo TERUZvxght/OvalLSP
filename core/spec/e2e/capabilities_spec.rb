@@ -111,6 +111,38 @@ RSpec.describe "Extension capabilities", :e2e do
   # result, so an example can assert about the file the user would be
   # left holding rather than about the edit's shape. Applied last-first
   # so an earlier edit's offsets are still valid.
+# **Whether a `def` landed inside the class it was called on, rather
+# than merely parsing.**
+#
+# `024.309`: Q1's example asserted `Prism.parse(applied).success?` and
+# nothing else, and both candidate answers parse — a `def` after a
+# one-line class's `end` is valid Ruby that defines the method
+# somewhere else entirely. 0.3.0 found that by hand, after this example
+# had been green on both placements.
+#
+# Walks rather than greps, because the nested shape has an inner class
+# and a def in `Inner` must not count as a def in the outer one.
+def defines_method_in_class?(source, class_name, method_name)
+  parsed = Prism.parse(source)
+  return false unless parsed.success?
+
+  found = false
+  walk = lambda do |node, enclosing|
+    return unless node.is_a?(Prism::Node)
+
+    if node.is_a?(Prism::ClassNode)
+      inner = node.constant_path.slice
+      node.compact_child_nodes.each { |child| walk.call(child, inner) }
+      return
+    end
+
+    found = true if node.is_a?(Prism::DefNode) && node.name.to_s == method_name && enclosing == class_name
+    node.compact_child_nodes.each { |child| walk.call(child, enclosing) }
+  end
+  walk.call(parsed.value, nil)
+  found
+end
+
   def apply_edits(source, edits)
     lines = source.lines
     ordered = edits.sort_by { |e| [e[:range][:start][:line], e[:range][:start][:character]] }.reverse
@@ -929,6 +961,14 @@ RSpec.describe "Extension capabilities", :e2e do
         "heredoc_end" => "class QfHeredocEnd\n  def text\n    <<~BODY\n      end\n    BODY\n  end\nend\n" \
                          "class QfHeredocEndCaller\n  def go\n    QfHeredocEnd.new.absent_c\n  end\nend\n"
       }
+      # Which class each fix has to land in, and under what name. Parsing is
+      # not enough: a `def` after a one-line class's `end` parses and
+      # defines the method somewhere else (`024.309`).
+      targets = {
+        "one_line" => ["QfOneLine", "absent_a"],
+        "nested" => ["QfNested", "absent_b"],
+        "heredoc_end" => ["QfHeredocEnd", "absent_c"]
+      }
 
       driven = []
       shapes.each do |name, source|
@@ -946,6 +986,11 @@ RSpec.describe "Extension capabilities", :e2e do
           applied = apply_edits(source, edits)
           expect(Prism.parse(applied).success?).to be(true),
                                                    "the #{name} shape stopped parsing after the fix:\n#{applied}"
+
+          owner, method = targets.fetch(name)
+          expect(defines_method_in_class?(applied, owner, method)).to be(true),
+                                                                     "the #{name} shape parses, but `#{method}` is not " \
+                                                                     "inside `#{owner}`:\n#{applied}"
         end
       end
 
@@ -953,6 +998,30 @@ RSpec.describe "Extension capabilities", :e2e do
       # is skipped when the engine reports nothing to act on, which is
       # exactly what a regression here would look like.
       expect(driven).to match_array(shapes.keys)
+    end
+
+    # **The control for the assertion above, and the reason it is worth
+    # having.** Q1's example asserted only that the result parses, and
+    # both candidate answers do — so the example was green while the fix
+    # was landing the `def` after a one-line class rather than inside it.
+    # This is that discrimination, asserted directly: same source, same
+    # method, two placements, and the judge has to tell them apart or
+    # everything above it is asserting parseability again. `024.309`.
+    it "Q1: the placement judge tells inside the class from after it" do
+      inside = "class QfJudge < Object; def known; end\n  def added_zz; end\nend\n"
+      after = "class QfJudge < Object; def known; end; end\ndef added_zz; end\n"
+
+      expect(Prism.parse(inside).success?).to be(true)
+      expect(Prism.parse(after).success?).to be(true), "both placements must parse, or this proves nothing"
+
+      expect(defines_method_in_class?(inside, "QfJudge", "added_zz")).to be(true)
+      expect(defines_method_in_class?(after, "QfJudge", "added_zz")).to be(false)
+
+      # And it does not credit a def in a nested class to the outer one,
+      # which is the shape the `nested` fixture drives.
+      nested = "class QfJudgeOuter\n  class QfJudgeInner\n    def added_zz; end\n  end\nend\n"
+      expect(defines_method_in_class?(nested, "QfJudgeInner", "added_zz")).to be(true)
+      expect(defines_method_in_class?(nested, "QfJudgeOuter", "added_zz")).to be(false)
     end
 
     it "Q2: replaces an unknown route helper with the closest one the application has" do
@@ -2030,6 +2099,161 @@ RSpec.describe "Extension capabilities", :e2e do
     #
     # Predicted blind by two independent subagents given only the feature
     # list.
+    # **`024.307`: six shapes 0.3.0's review found by hand, none of which
+    # any fixture here could reach.** The suite that decides whether a
+    # capability row may say PASS used plain locals throughout, so a
+    # namespaced constant, an instance variable, a route helper, a name
+    # declared twice in one file, nested `def`s on one line and a call
+    # hierarchy asked at a call site were all outside what it could see.
+    # Each expectation below is what Ruby says the answer is, not what the
+    # engine happened to print.
+    it "F1: highlights an instance variable across the methods of one class" do
+      source = <<~RUBY
+        class IvarHighlightProbe
+          def write
+            @tally = 1
+            @tally += 2
+          end
+
+          def read
+            @tally
+          end
+        end
+      RUBY
+
+      with_file("app/models/ivar_highlight_probe.rb", source) do |uri|
+        # The caret is on `@tally` in `@tally = 1`, line 2. All three
+        # occurrences are the same variable -- an ivar is per-object, not
+        # per-method, which is exactly what makes it a different shape from
+        # the local `F1` already drives.
+        lines = @client.document_highlights(uri, 2, 4).map { |h| h[:range][:start][:line] }.sort
+
+        expect(lines).to eq([2, 3, 7])
+      end
+    end
+
+    it "F1: highlights a namespaced constant where it is written, and not its last segment alone" do
+      source = <<~RUBY
+        module HighlightNs
+          class Inner
+          end
+        end
+
+        class NsUser
+          def go
+            HighlightNs::Inner.new
+          end
+
+          def other
+            Inner = 1 if false
+          end
+        end
+      RUBY
+
+      with_file("app/models/ns_highlight_probe.rb", source) do |uri|
+        # The caret is on `Inner` inside `HighlightNs::Inner`, line 7.
+        # `NsUser`'s own `Inner` on line 11 is a different constant -- it
+        # is `NsUser::Inner`, not `HighlightNs::Inner` -- so a fixture
+        # where both answered the same could not tell the two behaviours
+        # apart.
+        lines = @client.document_highlights(uri, 7, 21).map { |h| h[:range][:start][:line] }.sort
+
+        expect(lines).not_to include(11), "the constant in another namespace is a different constant"
+      end
+    end
+
+    it "W5: prepares a call hierarchy from a call site, not only from a `def`" do
+      source = <<~RUBY
+        class CallSiteProbe
+          def callee; end
+
+          def caller_method
+            callee
+          end
+        end
+      RUBY
+
+      with_file("app/models/call_site_probe.rb", source) do |uri|
+        # The caret is on the *call* to `callee` on line 4, not on its
+        # `def`. Both are ways a user opens the hierarchy, and only the
+        # `def` was driven here.
+        items = @client.prepare_call_hierarchy(uri, 4, 4)
+
+        expect(items).not_to be_empty, "no hierarchy item for a call site"
+        expect(items.first[:name]).to include("callee")
+      end
+    end
+
+    it "F1: highlights a route helper's uses, which are calls with no `def` anywhere" do
+      source = <<~RUBY
+        class RouteHighlightController < ApplicationController
+          def show
+            redirect_to posts_path
+          end
+
+          def index
+            posts_path
+          end
+        end
+      RUBY
+
+      with_file("app/controllers/route_highlight_controller.rb", source) do |uri|
+        @client.wait_until_ready(agent: true)
+        # `posts_path` is drawn by `config/routes.rb` and defined in no
+        # file the workspace holds, so it is the shape where every
+        # occurrence is a call and none is a declaration.
+        lines = @client.document_highlights(uri, 2, 17).map { |h| h[:range][:start][:line] }.sort
+
+        expect(lines).to include(2), "the occurrence under the caret is not answered"
+      end
+    end
+
+    it "F1: keeps two same-named methods in one file apart" do
+      source = <<~RUBY
+        class TwiceProbe
+          def duplicated; end
+        end
+
+        class TwiceOther
+          def duplicated; end
+
+          def go
+            duplicated
+          end
+        end
+      RUBY
+
+      with_file("app/models/twice_probe.rb", source) do |uri|
+        # The caret is on the call inside `TwiceOther#go`, line 8. It
+        # binds to `TwiceOther#duplicated` on line 5 -- `TwiceProbe`'s is
+        # a different method that happens to share a name, and a fixture
+        # where the two answered alike could not tell them apart.
+        lines = @client.document_highlights(uri, 8, 4).map { |h| h[:range][:start][:line] }.sort
+
+        expect(lines).not_to include(1), "the same name in another class is a different method"
+      end
+    end
+
+    it "F1: answers inside a `def` written on the same line as another" do
+      source = <<~RUBY
+        class OneLineDefs
+          def first; tally = 1; tally; end
+          def second; tally = 9; tally; end
+        end
+      RUBY
+
+      with_file("app/models/one_line_defs.rb", source) do |uri|
+        # Two `def`s, each with its own `tally`, and the caret is on the
+        # first one's assignment. Line numbers cannot separate them here,
+        # which is what makes this shape different from `F1`'s original
+        # fixture.
+        lines = @client.document_highlights(uri, 1, 13).map { |h| h[:range][:start][:line] }.sort
+
+        expect(lines).to eq([1, 1]), "the two occurrences on line 1 are one binding"
+        expect(lines).not_to include(2), "`second`'s `tally` is a different local"
+      end
+    end
+
     it "F1: counts a method or block parameter's own binding site" do
       source = <<~RUBY
         class ParameterProbe

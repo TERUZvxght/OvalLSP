@@ -2326,6 +2326,13 @@ module Ovallsp
       ensure_reference_index_current
       grouped = Hash.new { |h, k| h[k] = [] }
       @reference_index.references(symbol_id, minimum_confidence: :high).each do |reference|
+        # **A call at file scope has no calling method**, and without this
+        # `enclosing.symbol_id` below is asked of nil. `024.316` recorded
+        # this line and the render's `or next` as redundant, on the
+        # measurement that mutating either alone left both W5 examples
+        # green. Driven, that meant neither was reached rather than either
+        # being spare: they guard different things, and the file-scope case
+        # now has an example.
         enclosing = enclosing_callable(reference.uri, reference.location)
         next unless enclosing
 
@@ -2333,6 +2340,14 @@ module Ovallsp
       end
 
       grouped.filter_map do |(caller_uri, caller_id), ranges|
+        # **Not the same guard as the one above, and not redundant with it.**
+        # `enclosing_callable` reads this same list, so within one pass the
+        # declaration is there by construction -- but `@file_summaries` is
+        # written under `@index_mutation_mutex` and this method does not hold
+        # it, so the indexing thread can replace the summary between the
+        # grouping pass and this one. What it guards is that interleaving,
+        # which no single-threaded example can reach; the pin above it covers
+        # the half that can.
         declaration = @file_summaries[caller_uri]&.declarations&.find { |d| d.symbol_id == caller_id } or next
 
         { from: call_hierarchy_item(caller_id, caller_uri, declaration.location, declaration.name_location),

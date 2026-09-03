@@ -28,6 +28,11 @@ module Ovallsp
               type_parameters: type_parameters, declared_return: declared_return)
       end
 
+      # What the model prints where it has nothing to say. Named rather
+      # than spelled twice: the branch below and the reason above have to
+      # agree about it.
+      UNKNOWN_WORD = Types::UNKNOWN.to_s
+
       # `024.42`. What a *reader* should see for this overload's return.
       #
       # `TypeConverter` maps `self`, `void`, `untyped`, `top` and
@@ -41,7 +46,15 @@ module Ovallsp
       # different questions, rather than one answer bent to serve both.
       # A producer that records nothing falls back to the type, so no
       # caller has to know which one built this overload.
-      # **Only where the conversion lost something.** `TypeConverter` maps
+      # **Only where the conversion lost something, at any depth.**
+      # A first version asked whether the *whole* return had become
+      # `Unknown`, which missed `Array#each`: RBS declares
+      # `::Enumerator[Elem, self]`, the outer type converts to a
+      # `Nominal` so the test was false, and inside the brackets `self`
+      # had become `Unknown` and `Elem` had been dropped. A reader saw
+      # `Enumerator[Unknown]` for a method the source describes exactly.
+      #
+      # `TypeConverter` maps
       # `self`, `void`, `untyped`, `top` and `bottom` all to
       # `Types::UNKNOWN`, and it is exactly there that the model has
       # nothing to say and the source's own word is the better answer.
@@ -52,7 +65,14 @@ module Ovallsp
       # says `String`. The first version of this did that, and three
       # examples caught it.
       def return_label
-        return_type == Types::UNKNOWN && declared_return ? declared_return : return_type.to_s
+        rendered = return_type.to_s
+        return rendered unless declared_return && rendered.include?(UNKNOWN_WORD)
+
+        # RBS's own words, spelled the way the rest of the tree spells a
+        # name. `::Enumerator[Elem, self]` is what the source says and
+        # `Enumerator[Elem, self]` is what every other reader here would
+        # print, so the root prefix goes and nothing else does.
+        declared_return.gsub("::", "")
       end
     end
 

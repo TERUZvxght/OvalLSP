@@ -195,6 +195,37 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v032">
+          <div class="tl-version">
+            <span class="v">0.3.2</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>0.3 系が負っていた宿題</h3>
+          <ul class="feature-list">
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>パターンマッチが束縛しているローカル変数の名前変更は、誤って実行されるのではなく拒否されます。</strong> これまでは、この拡張機能から見えている出現箇所だけを書き換え、パターン側を古い名前のまま残していました &mdash; ファイルは構文として通り、実行もでき、そして別の答えを返しました。</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>Ruby 4.0 で、Ruby 自身が定義しているメソッドを「そのクラスに無い」と報告することは、なくなりました。</strong> この種の名前の一覧は Ruby のマイナーバージョンごとに持ち、それぞれ実測しています。</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>名前空間つきの型が、自分自身と互換でないと報告されることは、なくなりました。</strong> 手書きシグネチャを持つプロジェクトに対しては、この拡張機能が出す argument-type の報告の<em>すべて</em>がこれで、どれもあなたのコードの話ではありませんでした。</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>macOS 向けパッケージが CI でビルドされ、駆動されます。</strong> Apple Silicon のランナー上で、公開ゲートと同じテストを通します。これまでのパッケージ実行はすべて Linux でしたが、公開しているのは <code>darwin-arm64</code> です。</span>
+                    </li>
+          </ul>
+          <p class="text-mute">
+            詳細は
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>
+            にあります。すべてのリリースはそこに完全な形で記録されています。
+          </p>
+        </article>
+
         <article class="tl-item" id="v031">
           <div class="tl-version">
             <span class="v">0.3.1</span>

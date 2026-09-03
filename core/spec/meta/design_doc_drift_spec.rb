@@ -130,9 +130,34 @@ RSpec.describe "design documents that restate something the code owns" do
   # Each example above compares two lists, and would pass on two empty
   # ones -- which is what a renamed heading or a reformatted block
   # produces. This asserts the extractors found something to compare.
+  # **Every place, not three of six.** The example's own name says "each
+  # place it reads", and it floored §6's block, the manifest's commands
+  # and its configuration properties -- leaving §3's activation JSON,
+  # §5's status-bar block and the strings scanned out of
+  # `clientPresentation.ts` with nothing under them. An extraction that
+  # silently returns nothing makes its comparison `[] == []`, which is
+  # the shape `024.151` is the register's largest instance of: a check
+  # made false with every check green.
   it "extracts a non-empty list from each place it reads" do
-    expect(block_in("docs/design/docs/07-vscode-extension.md", "## 6. Commands").split.length).to be >= 5
+    document = "docs/design/docs/07-vscode-extension.md"
+
+    expect(block_in(document, "## 6. Commands").split.length).to be >= 5
     expect(manifest.dig("contributes", "commands").length).to be >= 5
     expect(manifest.dig("contributes", "configuration", "properties").keys.length).to be >= 3
+
+    # §3: the activation block is JSON and must parse to a list with
+    # entries, or `#activationEvents` compares two empties.
+    activation = JSON.parse(block_in(document, "## 3. Activation")).fetch("activationEvents")
+    expect(activation.length).to be >= 1
+    expect(manifest.fetch("activationEvents").length).to be >= 1
+
+    # §5 and the file it is compared against. Both halves, because
+    # flooring one leaves the other free to answer nothing.
+    documented_statuses = block_in(document, "## 5. Status Bar").lines.map(&:strip).reject(&:empty?)
+    expect(documented_statuses.length).to be >= 3
+
+    presentation = self.class.read("vscode/src/clientPresentation.ts")
+    expect(presentation.length).to be > 500
+    expect(presentation.scan(/\$\([a-z-]+\)/).uniq.length).to be >= 2
   end
 end

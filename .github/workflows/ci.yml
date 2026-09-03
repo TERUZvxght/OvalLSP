@@ -369,9 +369,10 @@ jobs:
       # is otherwise easy to read as covering more: this runner is
       # `ubuntu-latest`, so `copy-core` vendors *Linux* native extensions.
       # darwin-arm64 packaging -- which is what `023.5` was specifically
-      # about -- is still verified only by `vsix_semantic_smoke.rb` at
-      # publish time and by hand, exactly as `docs/EXTENSION_CAPABILITIES.md`
-      # says.
+      # about -- is the `macos-packaged` job below, added in 0.3.2 for
+      # `024.283`. Before that it was verified only by
+      # `vsix_semantic_smoke.rb` at publish time and by hand, which is one
+      # run per release at the moment it is too late to be cheap.
       - name: Integration tests (packaged Core layout)
         working-directory: vscode
         shell: bash
@@ -393,6 +394,82 @@ jobs:
             echo "The packaged integration suite reported no passing examples (024.125, 024.69)." >&2
             exit 1
           fi
+
+  # `024.283`. The packaged-layout step above vendors *Linux* native
+  # extensions, because its runner is `ubuntu-latest` — and what is
+  # published is `darwin-arm64`. `023.5` was specifically a darwin-arm64
+  # packaging and update regression, so the half of `024.125`'s risk that
+  # survived its fix is the half nothing in CI touched.
+  #
+  # This runs the same vendoring on an Apple Silicon runner and drives the
+  # result through `vsix_semantic_smoke.rb` — the script the publish gate
+  # uses, which asks a real packaged Core for a hover, a documentSymbol
+  # and a definition, then checks it shuts down leaving no child behind.
+  # Until now that ran once per release, on the maintainer's own machine,
+  # at the moment it was too late to be cheap.
+  #
+  # **`vsce package` is deliberately not run**, for the reason the
+  # packaged-layout step gives: `package` is `copy-core` plus `compile`
+  # plus `vsce`, and only the first two decide what the native extensions
+  # are. What this adds over that step is the platform, not the archive.
+  macos-packaged:
+    name: Packaged Core (darwin-arm64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: core
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: vscode
+        run: npm ci
+
+      # Vendors Core and its runtime gems into `vscode/core`, compiling
+      # `prism` and `rbs` for this platform. That compilation is the thing
+      # under test.
+      - name: Vendor the Core for this platform
+        working-directory: vscode
+        run: npm run copy-core
+
+      # `copy-core` records what it vendored for. Checking it is what
+      # stops this job passing while having built for something else: a
+      # green run that vendored Linux would prove nothing and look
+      # identical to one that did the job. The keys are the ones
+      # `copy-core.js` writes — `rubyPlatform` is `arm64-darwin25` and
+      # `buildTarget` is `darwin-arm64`.
+      - name: The vendored payload is darwin-arm64
+        working-directory: vscode
+        run: |
+          manifest=core/PLATFORM_MANIFEST.json
+          test -f "$manifest" || { echo "no $manifest -- copy-core did not vendor" >&2; exit 1; }
+          cat "$manifest"
+          node -e '
+            const m = require("./core/PLATFORM_MANIFEST.json");
+            const platform = m.rubyPlatform || "";
+            const target = m.buildTarget || "";
+            if (!/darwin/.test(platform) || !/arm64|aarch64/.test(platform)) {
+              console.error("vendored for " + platform + ", not an arm64 darwin");
+              process.exit(1);
+            }
+            if (target !== "darwin-arm64") {
+              console.error("buildTarget is " + target + ", not darwin-arm64");
+              process.exit(1);
+            }
+            console.log("vendored for " + platform + " (" + target + ")");
+          '
+          test -d core/vendor/bundle || { echo "no vendored bundle" >&2; exit 1; }
+
+      # The publish gate's own smoke test, against the layout just built.
+      - name: Drive the packaged Core (vsix_semantic_smoke)
+        run: ruby scripts/vsix_semantic_smoke.rb "$GITHUB_WORKSPACE/vscode"
 
   # `046`'s C1. Every documentation path in tracked content resolves.
   # Nineteen citations across seventeen files named five task filenames

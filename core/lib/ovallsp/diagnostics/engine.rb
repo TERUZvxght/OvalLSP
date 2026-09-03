@@ -641,15 +641,28 @@ module Ovallsp
         # `Signatures::Environment#ancestors` resolves a *qualified* name:
         # `ancestors("Integer")` is empty while `ancestors("::Integer")` is
         # the real chain.
-        via_signatures = workspace.flat_map do |entry|
-          # `Environment#ancestors` already maps every name through
-          # `TypeConverter.simple_name`, so they arrive bare -- mapping
-          # them again here was the mirror of the no-op the comment above
-          # confesses to on the workspace side.
-          context.signatures&.ancestors(qualified_owner(entry)) || []
-        end
+        #
+        # `Environment#ancestors` already maps every name through
+        # `TypeConverter.simple_name`, so they arrive bare -- mapping them
+        # again here was the mirror of the no-op the comment above
+        # confesses to on the workspace side.
+        chains = workspace.map { |entry| context.signatures&.ancestors(qualified_owner(entry)) || [] }
 
-        (workspace + via_signatures).uniq
+        # `UNAVAILABLE` is RBS declaring a type whose ancestry it cannot
+        # build, and it is a frozen `[]` -- so adding it to the set is
+        # indistinguishable here from a type that really has no ancestors,
+        # and the comparison then asserts a mismatch from a question it
+        # could not ask. Same answer as the hole above, for the same
+        # reason: the reachable set is a lower bound, and the link that
+        # could not be built may well *be* the expected type.
+        #
+        # rbs's own `sig/typename.rbs` includes an interface rbs does not
+        # load for itself, so `::RBS::TypeName` is exactly this -- and all
+        # six of rbs 4.2.0's `argument-type` reports were the class being
+        # reported incompatible with itself (`024.224`).
+        return nil if chains.any? { |chain| Signatures::Environment.unavailable?(chain) }
+
+        (workspace + chains.flatten).uniq
       end
 
       # The last segment, which is what `TypeConverter` gives a signature's
@@ -692,9 +705,14 @@ module Ovallsp
       # wrong. The word is added only where the method actually declares
       # keywords; adding it everywhere would be a different wrong
       # message.
+      # **The noun follows the count, not the upper bound.** It used to ask
+      # `maximum == 1`, so a method accepting none or one read as taking
+      # "0..1 argument" -- singular over a range. Exactly one is the only
+      # count that is singular, and a range is never exactly one.
       def expected_arity(required, maximum, positional: false)
+        exactly_one = required == maximum && maximum == 1
         count = required == maximum ? required.to_s : "#{required}..#{maximum}"
-        "#{count}#{positional ? ' positional' : ''} argument#{maximum == 1 ? '' : 's'}"
+        "#{count}#{positional ? ' positional' : ''} argument#{exactly_one ? '' : 's'}"
       end
 
       # The one source declaration this call resolves to, or nil when the

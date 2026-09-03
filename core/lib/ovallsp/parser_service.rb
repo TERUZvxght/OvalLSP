@@ -64,6 +64,7 @@ module Ovallsp
         reference_candidates: visitor.reference_candidates,
         generated_method_facts: visitor.generated_method_facts,
         open_surface_owners: visitor.open_surface_owners.to_a,
+        pattern_bound_names: visitor.pattern_bound_names.uniq,
         module_function_names: visitor.module_function_names.to_a
       ).then { |summary| withdraw_forward_aliases(summary) }
     end
@@ -194,7 +195,7 @@ module Ovallsp
       ANCESTOR_RELATIONS = { include: :include, prepend: :prepend, extend: :extend }.freeze
 
       attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts,
-                  :open_surface_owners, :module_function_names
+                  :open_surface_owners, :module_function_names, :pattern_bound_names
 
       # Receiverless calls that can be written in a class body without
       # adding anything to that class's method surface. Membership is a
@@ -248,6 +249,7 @@ module Ovallsp
         super()
         @lines = lines
         @pattern_depth = 0
+        @pattern_bound_names = []
         @declarations = []
         @ancestor_facts = []
         @alias_facts = []
@@ -1233,8 +1235,13 @@ module Ovallsp
       # produce that pair, and 0.2.17 declined all of them alike -- which
       # cost documentHighlight and Find References an occurrence apiece for
       # a rule that does not reach them. `024.274`.
+      # **Declining to record it is not the same as forgetting it.** The
+      # occurrence is left out on purpose; the *name* is kept, because
+      # `Rename` has to refuse a rename it cannot carry out. `024.296`.
       def declined_underscore?(name)
-        @pattern_depth.positive? && name.to_s.start_with?("_")
+        declined = @pattern_depth.positive? && name.to_s.start_with?("_")
+        @pattern_bound_names << name.to_s if declined
+        declined
       end
 
       # `MatchRequiredNode` (`h => [a]`) and `MatchPredicateNode`
@@ -1800,12 +1807,12 @@ module Ovallsp
         return unless GENERATES_MEMBERS[bare] == value.name
 
         # `SymbolNode` only. `Struct.new("Named", :c)` names the struct
-    # with that String and takes `:c` as its one member, and
-    # `#symbol_name` reads a String literal too -- which recorded
-    # `Named` and `Named=` as members of it.
-    names = Array(value.arguments&.arguments)
-            .select { |argument| argument.is_a?(Prism::SymbolNode) }
-            .filter_map { |argument| symbol_name(argument) }
+        # with that String and takes `:c` as its one member, and
+        # `#symbol_name` reads a String literal too -- which recorded
+        # `Named` and `Named=` as members of it.
+        names = Array(value.arguments&.arguments)
+                .select { |argument| argument.is_a?(Prism::SymbolNode) }
+                .filter_map { |argument| symbol_name(argument) }
         return if names.empty?
 
         saved = @cref

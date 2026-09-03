@@ -87,11 +87,40 @@ def expect_root(server, to_be:)
                                              paths: { real: @real, link: @link })
 end
 
+  # **Every server this file starts is stopped before its tmpdir goes.**
+  #
+  # `initialize` starts the cold index on a background thread, and four
+  # examples here dispatch it directly rather than through `#run`, so
+  # nothing processed an `exit` and nothing joined those threads. The
+  # `around` block then removed the cache tmpdir underneath a thread
+  # still writing into it, and teardown failed with
+  # `Errno::ENOTEMPTY: Directory not empty @ dir_s_rmdir`. It surfaced on
+  # the Ruby 4.0 job, which schedules differently -- the race is not
+  # 4.0's, only its timing was.
+  #
+  # Registered here rather than at each example, because the next
+  # `dispatch` written in this file would have the same race and no
+  # reason to think about it.
+  def started(server)
+    (@servers ||= []) << server
+    server
+  end
+
+  after do
+    Array(@servers).each { |server| server.send(:shutdown_background_tasks) }
+  rescue StandardError
+    # Contained: this is teardown. A server that cannot be stopped has
+    # already told the example whatever it had to say, and the tmpdir
+    # removal is what fails loudly if it mattered.
+    nil
+  end
+
   def server_started_from(cwd, root_uri:)
     output = StringIO.new
     input = frame(jsonrpc: "2.0", id: 1, method: "initialize",
                   params: root_uri ? { rootUri: Ovallsp::UriUtil.from_path(root_uri) } : {})
     server = Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger, workspace_root: cwd)
+    started(server)
     server.run
     server
   end
@@ -145,6 +174,7 @@ end
     File.write(File.join(@real, "app", "widget.rb"), "class Widget\nend\nWidget.new.definitely_not_here\n")
     output = StringIO.new
     server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
+    started(server)
     # `dispatch` rather than `run`: `run` returns at EOF and shuts the
     # background tasks down, so the pass this example is about would never
     # get to publish.
@@ -197,6 +227,7 @@ end
   it "takes the first workspace folder when the client sends no rootUri" do
     output = StringIO.new
     server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
+    started(server)
     server.send(:dispatch, { method: "initialize", id: 1,
                              params: { rootUri: nil,
                                        workspaceFolders: [{ uri: Ovallsp::UriUtil.from_path(@link), name: "w" }] } })
@@ -221,6 +252,7 @@ end
   it "keeps its own cwd when the named root does not exist" do
     output = StringIO.new
     server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
+    started(server)
     server.send(:dispatch, { method: "initialize", id: 1,
                              params: { rootUri: Ovallsp::UriUtil.from_path(File.join(@parent, "gone")) } })
 
@@ -243,6 +275,7 @@ end
   it "rebuilds the signature environment when the root moves" do
     output = StringIO.new
     server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
+    started(server)
     before = server.instance_variable_get(:@signatures).generation
 
     server.send(:dispatch, { method: "initialize", id: 1,

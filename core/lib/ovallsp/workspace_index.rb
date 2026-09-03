@@ -39,6 +39,9 @@ module Ovallsp
       # unreadable macro in the same reopened class and removing one of
       # them must not close the surface the other still opens.
       @open_surface_owners = Hash.new(0)
+      # `024.296`. Counted per file exactly like the line above, so
+      # re-indexing a file removes its old contribution.
+      @pattern_bound_names = Hash.new(0)
       # `[owner, name]` pairs a `module_function :name` named, counted the
       # same way as `@open_surface_owners` so a file being re-indexed does
       # not lose another file's. Applied at read time rather than written
@@ -138,6 +141,7 @@ module Ovallsp
         # measures 80ms -> 3.0s -- which is the shape to re-measure if this
         # ever feels slow (024.15).
         summary.open_surface_owners.each { |key| @open_surface_owners[key] += 1 }
+        summary.pattern_bound_names.each { |name| @pattern_bound_names[name] += 1 }
         summary.module_function_names.each { |key| @module_function_names[key] += 1 }
         touched.uniq.each { |symbol_id| @by_symbol[symbol_id].sort_by!(&method(:entry_order)) }
         @generation += 1
@@ -375,6 +379,21 @@ module Ovallsp
     # where the surface is enumerable. Answers about the owner named, not
     # its ancestors; the caller walks the chain because that is where the
     # chain is known.
+    # **Whether a pattern somewhere binds this local's name.**
+    #
+    # The parser records the name and not the occurrence: an
+    # `_`-prefixed name inside a pattern may legally be bound twice and
+    # rewriting both ranges is a SyntaxError (`024.274`). `Rename` asks
+    # this because `024.273`'s refusal -- no occurrence is a write --
+    # is satisfied by an ordinary assignment of the same name in the
+    # same scope, and the rename then goes ahead and leaves the pattern
+    # behind (`024.296`).
+    def pattern_bound_name?(name)
+      return false if name.nil?
+
+      @mutex.synchronize { @pattern_bound_names[name.to_s].positive? }
+    end
+
     def open_surface?(owner, singleton: false)
       return false if owner.nil?
 
