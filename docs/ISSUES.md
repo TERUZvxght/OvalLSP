@@ -46,6 +46,26 @@ things, and the honest order is:
    `KNOWN_LIMITATIONS` in **both** languages, and the marker that pairs
    them.
 
+**Those four decisions are the command's arguments.** Once they are
+made, `ruby scripts/issues.rb promote <n> --kind K --target V --area A
+--direction D --user-visible yes|no [--note "…"]` takes the n-th item
+out of intake — `ruby scripts/issues.rb intake` numbers them —
+allocates a number never used before, writes the entry in the legend's
+shape, drops the bullet, and re-runs the register's three guards. It
+**refuses** each of the four rather than defaulting it: a default here
+is an assertion about the product made by a script, and `024.130` is
+what one of those costs. The line saying the item was never driven does
+not travel with it, because promoting it is the claim that it was.
+
+**Closing one is `ruby scripts/issues.rb close 024.N --released-in V`.**
+It sets the status, moves the entry to the archive, and re-indexes — and
+it **refuses while either language still publishes a paragraph for the
+finding**, printing both locations. `--drop-paragraphs` is permission
+for those sections to go, and then the whole `##` section goes rather
+than the marker: removing the marker alone leaves the limitation
+published and the guard that would report it quiet, which is the worse
+of the two outcomes and the harder one to notice.
+
 **Give it a reason written for it.** `DeferredFindings.repeated_paragraphs`
 fails on any paragraph three open entries share, because a closing pass
 once retargeted 54 entries with two pasted sentences between them
@@ -59,10 +79,12 @@ number first, and go by that rather than by the calendar.
 ## Intake
 
 Something noticed and not yet driven goes here, with where it was seen
-and what was seen. It leaves for the register once it has been driven
-and its kind, target and user-visibility are known — in that order, per
-"The rule" above. Nothing here has a number, because a number is a
-claim that the thing exists.
+and what was seen — `ruby scripts/issues.rb intake add "<title>"
+--where=W --detail=D`. It leaves for the register once it has been
+driven and its kind, target and user-visibility are known — in that
+order, per "The rule" above, and by its position in this list, which
+`ruby scripts/issues.rb intake` prints. Nothing here has a number,
+because a number is a claim that the thing exists.
 
 **Empty, and emptied deliberately.** The twenty-one items that had
 accumulated by 0.3.1 were driven and dispositioned in one pass:

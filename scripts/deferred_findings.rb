@@ -413,6 +413,16 @@ end
     document.scan(/^([^\n]*?)<!-- #{ANCHOR_PREFIX} #{Regexp.escape(number)}(?!\.?\d) *-->/)
   end
 
+  # The other direction: which findings a stretch of text claims to
+  # document. `#anchors` asks about one number and a caller removing a
+  # limitation has to ask about all of them -- whether the section it is
+  # about to delete is the published place for anything *else*.
+  #
+  # Built from the same two constants, deliberately. A second spelling of
+  # the marker is the shape `024.216` counted six of, in three
+  # incompatible grammars, each the only reader of its own result.
+  def anchored_numbers(text) = text.scan(/<!-- #{ANCHOR_PREFIX} (#{NUMBER}) *-->/).flatten
+
   # The capture is whatever the marker's own line holds in front of it: a
   # marker alone on a line, or opening one, anchors nothing.
   def documents?(document, number)

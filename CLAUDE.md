@@ -51,6 +51,18 @@ choice, not a maintainer ruling.
 for is a finding to record. A round reviews a fixed thing, and every
 addition between rounds resets it.
 
+**Two of those are mechanical, and are a command now.** `ruby
+scripts/review_round.rb start <method>` refuses the previous round's
+method, refuses to open on a tree that is not clean, records the index
+the round reads, and writes the round's heading and an empty findings
+table into the release's task document; `close` refuses when the index
+moved under the round, because a round that read two trees can conclude
+about neither. What it cannot see is an edit nobody staged — the
+round's own heading is one — so a clean `close` says nothing was
+*committed* under the round, not that nobody typed. The method rule and
+the fixed-thing rule are the two paragraphs above; the command is only
+the part of them a person had been holding in their head.
+
 **Departing from this rule is written down**, where the release is
 recorded. Shipping under the bound above is the rule, not a departure.
 

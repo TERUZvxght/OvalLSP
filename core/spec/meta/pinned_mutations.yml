@@ -961,3 +961,75 @@
   to: "        return nil if false\n"
   spec: spec/ovallsp/diagnostics/unbuildable_signature_chain_spec.rb
   example: "does not report the class against itself"
+- why: "A round may not repeat the previous round's method; without the refusal a closing round that closes nothing reads as closing the loop."
+  file: scripts/review_round.rb
+  from: "previous && previous[1] == method"
+  to: "false"
+  spec: spec/meta/review_round_spec.rb
+  example: "refuses the method the previous round used"
+- why: "A round opens only on a clean tree; without it the round's own recorded fingerprint is taken over work already in flight."
+  file: scripts/review_round.rb
+  from: "    unless dirty.strip.empty?\n"
+  to: "    unless true\n"
+  spec: spec/meta/review_round_spec.rb
+  example: "refuses a tree that is not clean, because a round reviews a fixed thing"
+- why: "`close` compares the index against the one the round opened on; without the comparison it closes every round, which is what a person's memory already did."
+  file: scripts/review_round.rb
+  from: "    if now != open[\"tree\"]\n"
+  to: "    if false\n"
+  spec: spec/meta/review_round_spec.rb
+  example: "refuses a round whose tree moved under it"
+- why: "`start` refuses while a round is open; without it the second start overwrites the first round's fingerprint and the first closes on a tree it never read."
+  file: scripts/review_round.rb
+  from: "    open = state\n    if open\n"
+  to: "    open = nil\n    if open\n"
+  spec: spec/meta/review_round_spec.rb
+  example: "refuses while a round is still open"
+- why: "The method is one of the four the cadence defines; without the check any word opens a round and the previous-method rule has nothing to compare."
+  file: scripts/review_round.rb
+  from: "unless METHODS.include?(method)"
+  to: "unless true"
+  spec: spec/meta/review_round_spec.rb
+  example: "refuses a method the loop does not define"
+- why: "A promoted defect states whether a user meets it; without the requirement the tool decides it, which is an assertion about the product made by a script."
+  file: scripts/issues.rb
+  from: "  value = opts[:user_visible] or\n    raise RefusedWrite, \"--user-visible yes|no is required on a #{kind}: say whether a user meets it\"\n"
+  to: "  value = opts[:user_visible] || \"yes\"\n"
+  spec: spec/meta/issues_tool_spec.rb
+  example: "refuses a defect that does not say whether a user meets it"
+- why: "`user-visible: no` states why; without the requirement the register gains an entry that its own guard refuses, a full suite run away from the command that wrote it."
+  file: scripts/issues.rb
+  from: "  if value == \"no\" && opts[:note].to_s.strip.empty?\n"
+  to: "  if false\n"
+  spec: spec/meta/issues_tool_spec.rb
+  example: "refuses `user-visible: no` with no reason, which the register's own guard demands"
+- why: "Closing an entry refuses while either language still publishes it; without the refusal a limitation the product no longer has stays published and its guard goes quiet."
+  file: scripts/issues.rb
+  from: "  unless sections.empty? || opts[:drop_paragraphs]\n"
+  to: "  unless true\n"
+  spec: spec/meta/issues_tool_spec.rb
+  example: "refuses while either language still publishes a paragraph for it"
+- why: "An entry is closed once; without the status check a resolved one is closed again and gains a second released-in, which the parser resolves by keeping the last."
+  file: scripts/issues.rb
+  from: "  entry = find(number) or raise RefusedWrite, \"no entry #{number}. `ruby scripts/issues.rb list` shows what there is\"\n  raise RefusedWrite, \"#{number} is #{entry.status}, not open\" unless entry.open?\n"
+  to: "  entry = find(number)\n"
+  spec: spec/meta/issues_tool_spec.rb
+  example: "refuses an entry that is already resolved"
+- why: "--drop-paragraphs actually removes both languages' sections; without the removal the flag is a permission that does nothing and the marker outlives the finding."
+  file: scripts/issues.rb
+  from: "  sections.each { |section| drop_section(number, section) }\n"
+  to: ""
+  spec: spec/meta/issues_tool_spec.rb
+  example: "closes it, and drops the section both languages published, when told to"
+- why: "The intake line saying the item was never driven is dropped on promotion; without the drop the entry publishes the opposite of what promoting it claims."
+  file: scripts/issues.rb
+  from: ".reject { |line| line.include?(INTAKE_UNVERIFIED) }"
+  to: ""
+  spec: spec/meta/issues_tool_spec.rb
+  example: "moves an intake item into the register under a number never used before"
+- why: "Promoting takes the item out of intake; without the removal the same issue stands in two places, one of them numbered."
+  file: scripts/issues.rb
+  from: "    lines.slice!(at, 1 + detail.length)\n"
+  to: ""
+  spec: spec/meta/issues_tool_spec.rb
+  example: "moves an intake item into the register under a number never used before"
