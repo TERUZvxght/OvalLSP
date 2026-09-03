@@ -16761,6 +16761,61 @@ is a description gap rather than a defect in the hint.
 
 **Fixed in 0.3.2.** `054` records that a block parameter gets a label, and that it is a consequence of the `write` flag rather than a separate decision.
 
+## 024.316 Two lines each drop a top-level call, and only both together are pinned
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: friction
+user-visible: no
+user-visible-note: >-
+  Redundancy inside one method. Neither line is wrong and the pair is
+  pinned honestly; what is unresolved is which of the two should
+  remain, and that is a call-hierarchy design question rather than a
+  review finding.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/server.rb`, `#incoming_calls_result`
+
+Measured: mutating `next unless enclosing` alone leaves both W5
+examples green, mutating the render's `or next` alone does too, and
+mutating both fails them. `pinned_mutations.yml` names the containment
+test the pair shares rather than claiming to pin a line.
+
+**Fixed in 0.3.2.** Resolved by driving the premise rather than by choosing a line to delete: neither is redundant. `next unless enclosing` is what keeps `enclosing.symbol_id` from being asked of nil for a call at file scope, and the render's `or next` guards the indexing thread replacing a summary between the two passes -- `#incoming_calls_result` does not hold `@index_mutation_mutex` while `#apply_file_summary` writes under it. "Mutating either alone leaves the examples green" meant neither was reached, not that either was spare. The file-scope half has an example now, verified by mutating the guard away; the interleaving half is stated at the site as one no single-threaded example can reach.
+
+## 024.317 Six of the documentation map's trigger rows have nothing enforcing them
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: friction
+user-visible: no
+user-visible-note: >-
+  A gap in the machinery rather than in the product. Its cost is
+  measured though: of the eight rows that were unenforced before
+  0.3.1, three had already drifted.
+target: 0.3.2
+```
+
+**Area:** `docs/DOCUMENTATION_MAP.md`, the trigger table
+
+Of twenty-one rows, six carry nothing in the "Checked by" column:
+a change reverted mid-release, a review round finding the same place
+twice, install steps and the extension id, anything about the Runtime
+Agent or workspace trust, which Ruby and Rails the product accepts,
+and thread and lock ownership.
+
+0.3.1 closed two of the eight that were open — the protocol document
+and release-branch pointers, both of which had drifted by the time a
+check was written for them, and a third drift (a guard hunting a
+retired branch spelling) was repaired in the same pass. That is three
+of eight found the first time anybody looked, which is the argument
+for closing the rest.
+
+**Fixed in 0.3.2.** Three of the six closed, and the three that remain are named rather than left as a count. The extension id is compared against `vscode/package.json`, which is the only place it is true; SECURITY gets the parity check PRIVACY has had, on structure and the reporting route rather than on prose; and the Ruby patch releases named as tested must agree across both support matrices and both Marketplace READMEs -- a set the matrices had three of and the READMEs two for a whole release. What is left is two rows that ask for a judgement no scanner can make (whether a revert left documentation behind, whether a review round found the same place twice) and one that could be mechanised in the rescue-verdicts shape but is a release of its own: every `Mutex.new` in `core/lib` accounted for in the architecture document. `024.320` carries that.
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

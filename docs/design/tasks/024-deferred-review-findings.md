@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**315 entries below** <!-- measured: register-entries = 315 -->,
+**316 entries below** <!-- measured: register-entries = 316 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -488,10 +488,11 @@ nobody can search is the recording habit without the benefit.
 | [`024.313`](024-deferred-review-findings-resolved.md#024313-four-comment-lines-and-a-chain-sit-at-the-wrong-indentation) | fixed | 0.3.2 | Four comment lines and a chain sit at the wrong indentation |
 | [`024.314`](024-deferred-review-findings-resolved.md#024314-a-comment-numbers-a-schema-bump-that-was-not-made) | fixed | 0.3.2 | A comment numbers a schema bump that was not made |
 | [`024.315`](024-deferred-review-findings-resolved.md#024315-inlay-hints-label-block-parameters-and-no-release-note-says-so) | fixed | 0.3.2 | Inlay hints label block parameters, and no release note says so |
-| [`024.316`](#024316-two-lines-each-drop-a-top-level-call-and-only-both-together-are-pinned) | open | 0.3.2 | Two lines each drop a top-level call, and only both together are pin… |
-| [`024.317`](#024317-six-of-the-documentation-map-s-trigger-rows-have-nothing-enforcing-them) | open | 0.3.2 | Six of the documentation map's trigger rows have nothing enforcing t… |
+| [`024.316`](024-deferred-review-findings-resolved.md#024316-two-lines-each-drop-a-top-level-call-and-only-both-together-are-pinned) | fixed | 0.3.2 | Two lines each drop a top-level call, and only both together are pin… |
+| [`024.317`](024-deferred-review-findings-resolved.md#024317-six-of-the-documentation-map-s-trigger-rows-have-nothing-enforcing-them) | fixed | 0.3.2 | Six of the documentation map's trigger rows have nothing enforcing t… |
 | [`024.318`](#024318-a-workspace-directory-shaped-like-a-gem-path-would-be-attributed-to-a-gem) | open | 0.4.0 | A workspace directory shaped like a gem path would be attributed to … |
 | [`024.319`](#024319-a-bare-name-no-signature-declares-is-still-read-as-the-one-gem-class-sharing-its-last-segment) | open | 0.4.0 | A bare name no signature declares is still read as the one gem class… |
+| [`024.320`](#024320-no-check-knows-which-lock-guards-what) | open | 0.4.0 | No check knows which lock guards what |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | 1.0.0 | Feature parity roadmap, measured against Pylance |
@@ -4926,55 +4927,6 @@ inside the Agent, which is a side effect the walk does not have today.
 Establishing that it is harmless is the work, and it is why this is
 not a patch.
 
-## 024.316 Two lines each drop a top-level call, and only both together are pinned
-
-```yaml
-status: open
-kind: friction
-user-visible: no
-user-visible-note: >-
-  Redundancy inside one method. Neither line is wrong and the pair is
-  pinned honestly; what is unresolved is which of the two should
-  remain, and that is a call-hierarchy design question rather than a
-  review finding.
-target: 0.3.2
-```
-
-**Area:** `core/lib/ovallsp/server.rb`, `#incoming_calls_result`
-
-Measured: mutating `next unless enclosing` alone leaves both W5
-examples green, mutating the render's `or next` alone does too, and
-mutating both fails them. `pinned_mutations.yml` names the containment
-test the pair shares rather than claiming to pin a line.
-
-## 024.317 Six of the documentation map's trigger rows have nothing enforcing them
-
-```yaml
-status: open
-kind: friction
-user-visible: no
-user-visible-note: >-
-  A gap in the machinery rather than in the product. Its cost is
-  measured though: of the eight rows that were unenforced before
-  0.3.1, three had already drifted.
-target: 0.3.2
-```
-
-**Area:** `docs/DOCUMENTATION_MAP.md`, the trigger table
-
-Of twenty-one rows, six carry nothing in the "Checked by" column:
-a change reverted mid-release, a review round finding the same place
-twice, install steps and the extension id, anything about the Runtime
-Agent or workspace trust, which Ruby and Rails the product accepts,
-and thread and lock ownership.
-
-0.3.1 closed two of the eight that were open — the protocol document
-and release-branch pointers, both of which had drifted by the time a
-check was written for them, and a third drift (a guard hunting a
-retired branch spelling) was repaired in the same pass. That is three
-of eight found the first time anybody looked, which is the argument
-for closing the rest.
-
 ## 024.318 A workspace directory shaped like a gem path would be attributed to a gem
 
 ```yaml
@@ -5024,6 +4976,43 @@ asked. Until it is driven, the shape is recorded and the rule is not
 narrowed further — every recovery rule strong enough to reunite two
 spellings of one class also unites two different classes, and 0.2.1
 lost a release to the version of this that was too strong.
+
+## 024.320 No check knows which lock guards what
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >-
+  Internal. It is filed because the thing it would guard -- which
+  mutex covers which state, and in what order they may be taken -- is
+  stated in one document and enforced by nobody, and a wrong answer
+  there is a data race rather than a stale sentence.
+target: 0.4.0
+```
+
+**Area:** `docs/design/docs/02-architecture.md`'s threading section,
+every `Mutex.new` in `core/lib`
+
+The last of the three rows in `docs/DOCUMENTATION_MAP.md` that could
+be mechanised and is not. `024.317` closed three of six; the other two
+ask for a judgement no scanner can make -- whether a revert left
+documentation behind, whether a review round found the same place the
+previous one did -- and this one does not.
+
+The shape is `rescue_verdicts.yml`'s, which works: enumerate the
+sites, require each to be accounted for, fail on one that is not.
+Every `Mutex.new` in `core/lib` would carry an entry naming what it
+guards and where it sits in the lock order, and a new one without an
+entry would fail. `0.3.2` found the value of that from the other
+direction: `#incoming_calls_result` reads `@file_summaries` without
+`@index_mutation_mutex`, which `#apply_file_summary` writes under, and
+nothing in the tree says so — it took reading both to find out, and
+the answer is now a comment that the next reader may or may not see.
+
+Not in 0.3.2 because the enumeration is the work, not the check: each
+mutex needs its guarded state written down and argued, which is what
+`024.122` cost for the rescues.
 
 ---
 

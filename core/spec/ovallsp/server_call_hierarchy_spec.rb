@@ -119,6 +119,29 @@ RSpec.describe "Ovallsp::Server call hierarchy" do
   # named the route stem, pointed at the top of the calling file, and
   # offered a jump to somewhere that is not the method. Section 0 ranks
   # no jump above a wrong one.
+# **A call at file scope has no caller to name, and the incoming side
+# drops it.** `024.316` recorded the two lines in
+# `#incoming_calls_result` as redundant because mutating either alone
+# left the W5 examples green. Driven, they are not: `next unless
+# enclosing` is what keeps `enclosing.symbol_id` from being asked of
+# nil, and the render's `or next` guards a different thing entirely --
+# `@file_summaries` is written under `@index_mutation_mutex` and this
+# method does not hold it, so the indexing thread can replace a
+# summary between the grouping pass and the rendering one. Neither is
+# redundant; both were unreached.
+#
+# This is the half a single-threaded example can reach.
+it "omits a call written at file scope, which no method encloses" do
+  files = [["file:///a.rb", "class TopLevelProbe\n  def target; end\n\n  def caller_method\n    TopLevelProbe.new.target\n  end\nend\n\nTopLevelProbe.new.target\n"]]
+
+  _item, callers = hierarchy(files, uri: "file:///a.rb", at: { line: 1, character: 6 }, direction: :incoming)
+
+  # The control: the call inside `caller_method` is answered, so the
+  # absence below is the file-scope call being dropped rather than the
+  # hierarchy answering nothing at all.
+  expect(callers.map(&:first)).to eq(["caller_method"])
+end
+
   it "omits a callee it cannot name a declaration for, and keeps the one it can" do
     files = [["file:///r.rb", "class C\n  def create\n    user_path(1)\n    helper\n  end\n\n  def helper\n  end\nend\n"]]
     registry = Ovallsp::Routes::RouteRegistry.from_route_facts(
