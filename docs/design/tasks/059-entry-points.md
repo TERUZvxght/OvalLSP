@@ -219,6 +219,51 @@ recorded with the tool rather than only in this document. It is intake
 item 4, added with `ruby scripts/issues.rb intake add` — which is how the
 `intake add` defect above was found.
 
+### Round 3 — `drive`
+
+Both commands run end to end on a scratch copy of the round-2 commit,
+turned into a throwaway repository. **No findings.**
+
+| # | Finding | Disposition |
+|---|---|---|
+| — | `start diff` on a copy with no `core/tmp` opened round 3 and wrote the heading; `close` without a commit closed it; `start attack`, a commit under it, `close` refused with exit 1 and forgot the round; `start reproduce` then opened round 5; `status` read the state. | Confirmed, no change. |
+| — | `intake` listed four items; `promote 1 …` wrote the entry in numeric position with the guards green and the sentence at "Three items above"; `close … --released-in=0.4.0` moved it to the archive; promoting the rest left the sentence at "No items above" and `intake` at "(nothing in intake)". `deferred_findings_spec`, `register_split_spec` and `issue_index_spec` passed on the result. | Confirmed, no change. |
+
+Round 3 is the one that mattered for the round-4 findings below: it is
+the run that emptied the copy's intake list, and the suite was then run
+against that copy.
+
+### Round 4 — `reproduce`
+
+The claims of the previous rounds re-derived. `rspec --dry-run` gives
+the recorded example count; `review_round_spec` passes; the mutation
+manifest verifies. **Two claims did not survive**, both about examples
+that depended on the state of a list this task's own tool exists to
+empty.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | MEDIUM — four examples in `core/spec/meta/issues_tool_spec.rb` copied the real `docs/ISSUES.md` and relied on its hand-written items being there. On a tree where `promote` has done its job the list is empty and all four fail, for a reason unrelated to what they test. | Fixed. The `before` block plants the list: one bullet in the shape `intake add` writes, one with the bold title wrapped across lines, and the sentence counting them. A fifth example reads the *real* document and asserts only what stays true whatever it holds — that it parses and no title comes back spanning lines. |
+| 2 | MEDIUM — the mutation on `count_word` was reported as pinning nothing: the example asserted only that the sentence matches `INTAKE_COUNT`, whose first group is `\S+`, so a count rendered as a digit satisfies it. | Fixed, and it was worse than reported. On the emptied list the example's loop ran **zero times**, so it asserted a sentence no `promote` had written — an assertion that could not fail, in the example named for a claim. It now refuses to run on a list of fewer than two, promotes them, and asserts the words: `**No items above;`. |
+
+Reproduced before either was touched, by emptying this tree's own intake
+list with a script and running the suite against it: the same four
+examples failed, at the lines the round named, and the applier reported
+that one mutation not caught. Both were then re-run in that same state
+after the fix — 24 examples, 0 failures, and
+
+    all 1 new mutation(s) caught by the example that names it
+
+— before the list was restored and the whole set re-run:
+
+    all 22 new mutation(s) caught by the example that names it
+
+**Two expectations were computing themselves from the subject** and were
+rewritten in passing: the count examples asked `Issues.count_word` for
+the word they then looked for, so a wrong `count_word` agreed with
+itself. They spell "Two", "Three" and "One item" out, the singular
+included.
+
 ## 残課題
 
 未処理の指摘はこの文書ではなく `024` に書く。

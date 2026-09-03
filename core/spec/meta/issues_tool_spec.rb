@@ -129,11 +129,56 @@ RSpec.describe "scripts/issues.rb" do
       %w[docs/ISSUES.md docs/KNOWN_LIMITATIONS.md docs/KNOWN_LIMITATIONS.ja.md].each do |relative|
         FileUtils.cp(File.join(repo, relative), File.join(root, relative))
       end
+      plant_intake_list
       # The delegated guards resolve their own root from `__dir__`, so a
       # copy of them here is a copy that reads *this* register. Without
       # it they would read the real one, report it current, and say
       # nothing about the file under test.
       FileUtils.cp_r(File.join(repo, "scripts"), root)
+    end
+
+    # **The list these examples read is planted, not inherited.**
+    #
+    # They used the copied document's own items, which held both bullet
+    # shapes on the day they were written — and `promote` exists to
+    # empty that list. On a tree where it has done its job the four
+    # examples about the list fail for a reason unrelated to what they
+    # test, and the one that promotes every item runs its loop zero
+    # times and asserts a sentence nothing wrote. So the shapes are
+    # planted here: one as `intake add` writes it, one as a person
+    # writes it with the bold title wrapped, and the sentence that
+    # counts them.
+    # Methods rather than constants: a constant written inside a
+    # `describe` block lands on `Object`, which `spec_constants_spec`
+    # refuses.
+    def hand_written_title = "A hand-written item whose bold title wraps across two lines"
+
+    def added_title = "An item in the shape `intake add` writes"
+
+    def plant_intake_list
+      source = File.read(issues_doc, encoding: "UTF-8")
+      policy, index = source.split(/^(?=## Index$)/, 2)
+      head = policy.split(/^(?=## Intake$)/, 2).first
+
+      File.write(issues_doc, "#{head}## Intake\n\n#{planted_items}\n" \
+                             "**Two items above; the rest was emptied deliberately.** What follows is\n" \
+                             "the table of what left without a number.\n\n#{index}")
+    end
+
+    # Two literal bullets rather than two `intake add` calls, because the
+    # second shape is precisely the one that command does not produce:
+    # the bold title runs past the end of its own line and the prose
+    # carries on from where it closes.
+    def planted_items
+      "- **#{added_title}**\n" \
+        "  - found by: a spec\n" \
+        "  - what was seen\n" \
+        "  - #{Issues::INTAKE_UNVERIFIED}\n" \
+        "\n" \
+        "- **A hand-written item whose bold title wraps\n" \
+        "  across two lines** Seen while reading the list: the title runs past\n" \
+        "  the end of its own line, and the prose carries on from where the\n" \
+        "  bold closes.\n"
     end
 
     def promote(position, *extra)
@@ -176,27 +221,35 @@ RSpec.describe "scripts/issues.rb" do
       # items in it as empty — which is what `promote <n>` counts
       # positions in.
       it "reads an item whose bold title wraps across lines" do
-        expect(intake_titles).not_to be_empty, "docs/ISSUES.md's own items were read as nothing"
-        expect(intake_titles).to all(satisfy { |title| !title.include?("\n") })
+        expect(intake_titles).to include(hand_written_title)
       end
 
       it "counts what `intake add` writes and what is written by hand as one list" do
-        before_add = intake_titles.length
         plant_intake("A thing that was noticed")
 
-        expect(before_add).to be > 0, "the hand-written items were counted as none"
-        expect(intake_titles.length).to eq(before_add + 1)
-        expect(intake_titles.last).to eq("A thing that was noticed")
+        expect(intake_titles).to eq([added_title, hand_written_title, "A thing that was noticed"])
       end
 
-      it "keeps the count sentence current when an item arrives" do
-        before_add = intake_titles.length
+      # **And the real document is still read**, because everything above
+      # reads a planted one. Not its contents — those are what `promote`
+      # exists to change — but that the list this tool is aimed at parses
+      # at all, and that no title comes back spanning lines.
+      it "reads the intake list of the document it is actually aimed at" do
+        titles = Issues.intake_items(File.readlines(File.join(repo, "docs", "ISSUES.md"), encoding: "UTF-8"))
+                       .map { |(_, title, _, _)| title }
 
+        expect(titles).to all(satisfy { |title| !title.include?("\n") && !title.strip.empty? })
+      end
+
+      # The words are written out rather than asked of `count_word`: an
+      # expectation the subject computes cannot fail when the subject is
+      # wrong. Two planted items, so one added makes three.
+      it "keeps the count sentence current when an item arrives" do
         plant_intake("A thing that was noticed")
 
         lines = File.readlines(issues_doc, encoding: "UTF-8")
         sentence = lines.index { |line| line.match?(Issues::INTAKE_COUNT) }
-        expect(lines.join).to match(/\*\*#{Issues.count_word(before_add + 1)} items? above;/i)
+        expect(lines.join).to include("**Three items above;")
         expect(Issues.intake_items(lines).map(&:first)).to all(be < sentence),
                                                           "an item was written below the sentence counting it"
 
@@ -220,7 +273,15 @@ RSpec.describe "scripts/issues.rb" do
       # sentence nothing could restate, and the count would go stale
       # silently. One shape, always findable, is the property worth more
       # than the nicer wording.
+      #
+      # **Asserted as the words.** Matching `INTAKE_COUNT` alone proves
+      # nothing about them: its first group is `\S+`, so a count rendered
+      # as a digit satisfies it, and so does anything else non-blank. The
+      # mutation manifest reported this example as pinning nothing, and
+      # was right twice over — on an emptied list the loop below also ran
+      # zero times, asserting a sentence no promote had written.
       it "says 'No items above' once the list empties, in a sentence still findable" do
+        expect(intake_titles.length).to be > 1, "the loop below would assert a sentence nothing wrote"
         intake_titles.length.times do
           expect(promote(1, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
         end
@@ -234,15 +295,16 @@ RSpec.describe "scripts/issues.rb" do
       # The list's own sentence says how many items stand above it, and a
       # count nobody updates is the class of claim this repository
       # re-derives rather than types.
+      # Two planted items, so one promoted leaves one — and the singular
+      # is part of the claim: "One items above" is what a count rendered
+      # without it would say.
       it "keeps the count sentence current when an item leaves" do
-        before_count = intake_titles.length
-        expect(File.read(issues_doc, encoding: "UTF-8")).to match(/\*\*\S+ items? above;/)
+        expect(File.read(issues_doc, encoding: "UTF-8")).to include("**Two items above;")
 
         expect(promote(1, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
 
-        expect(intake_titles.length).to eq(before_count - 1)
-        expect(File.read(issues_doc, encoding: "UTF-8"))
-          .to match(/\*\*#{Issues.count_word(before_count - 1)} items? above;/i)
+        expect(intake_titles.length).to eq(1)
+        expect(File.read(issues_doc, encoding: "UTF-8")).to include("**One item above;")
       end
     end
 
