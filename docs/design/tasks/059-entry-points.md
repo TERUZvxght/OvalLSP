@@ -508,6 +508,22 @@ three rounds is fixed here, each with an example watched failing first
 and a mutation the manifest applies. So this ships under that rule with
 nothing outstanding, rather than in spite of it.
 
+**The measurement.** All three driven on an archive copy of the fixed
+tree. Two acceptances leave one heading and two lines. `main` one commit
+ahead of `origin/main` refuses without offering a pull, and says to
+merge by pull request or give the commits up. `open 0.3.4` a second time
+— after committing what the first wrote, from a clean `main` — refuses
+with "`release/0.3.4` already exists, so 0.3.4 has been opened. Run: git
+checkout release/0.3.4", leaves the branch on `main`, and writes
+nothing.
+
+Driving D3 needed the first `open`'s output committed first: without
+that, `open` refuses on the dirty tree before it ever reaches the
+branch, which is the earlier guard doing its job and not the one under
+test. Worth writing down, because a drive that stops at the wrong
+refusal reports the right exit code for the wrong reason — the same
+mistake this task made twice in its own examples.
+
 The three are one shape between them, and it is worth naming because it
 is the shape a fourth round would most likely find again: **a gate that
 knows it must say no, and does not know what the person should do
