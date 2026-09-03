@@ -47,11 +47,22 @@ the register's legend carry more and stay where they are:
   `@AGENTS.md`. A first draft of this bullet cited two other strings, and
   a review round traced both to unrelated code. `@AGENTS.md` resolves
   inside the working directory, so the prompt does not apply to it.
-- **Not run: a live session.** The CLI on this machine is not logged in,
-  and logging it in is not something an agent does. The first session
-  opened in this tree after the merge is that test: its system prompt
-  either carries the card, or it carries the note that says the import
-  did not load — and the note says what to do.
+- **A live session, run once the maintainer had logged the CLI in.**
+  Claude Code 2.1.259, `claude -p` with `--model haiku --max-turns 1`,
+  from a wrapper that unsets the parent session's nested-session guard.
+  A scratch directory whose `CLAUDE.md` said only "Project note" answered
+  `NONE` to "what is the secret word in your project instructions"; the
+  same directory with an `@`-import of a note under `sub/` added to
+  `CLAUDE.md`, and the note holding a sentinel, answered the sentinel. Then this worktree itself,
+  asked to list the second-level headings of its project instructions
+  and nothing else, printed the card's seven headings verbatim, from
+  "Where the rules are" to "Branches, commits, releases": the content of
+  `AGENTS.md`, reached through `CLAUDE.md`'s one line. Until then this
+  bullet said the test had not been run, because the CLI was not logged
+  in and logging it in is not something an agent does; the maintainer's
+  own session could not stand in for it either, since a session loads
+  its instructions once, at start, and that one had started on the old
+  file.
 
 The two Cowork restrictions the documentation lists apply to user-scope
 files and to imports that resolve outside the working directory; a
