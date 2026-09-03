@@ -13,7 +13,7 @@ require "json"
 #   ruby scripts/review_round.rb status
 #   ruby scripts/review_round.rb close
 #
-# `CLAUDE.md`'s review cadence says a round closes when a reviewer that
+# `docs/REVIEW_LOOP.md`'s cadence says a round closes when a reviewer that
 # has not seen this change set, **using a method the previous round did
 # not use**, reports nothing -- and that **a round reviews a fixed
 # thing**, every addition between rounds resetting it. Both are checkable
@@ -38,7 +38,7 @@ module ReviewRound
   # `check_doc_links.rb` uses, and for the same reason.
   ROOT = ENV.fetch("OVALLSP_REVIEW_ROUND_ROOT", File.expand_path("..", __dir__))
 
-  # The four `CLAUDE.md` defines. Read the change set, run the product
+  # The four `docs/REVIEW_LOOP.md` defines. Read the change set, run the product
   # and compare answers, take one guarantee and try to break it,
   # re-derive the round's own claims.
   METHODS = %w[diff drive attack reproduce].freeze
@@ -177,7 +177,8 @@ module ReviewRound
       close            close it, or refuse because the index moved under it
 
     A round closes when a reviewer that has not seen this change set, using
-    a method the previous round did not use, reports nothing (CLAUDE.md).
+    a method the previous round did not use, reports nothing.
+    docs/REVIEW_LOOP.md has the cadence and what it is worth.
   TEXT
 
   def run(argv)

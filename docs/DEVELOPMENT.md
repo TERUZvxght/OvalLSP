@@ -118,11 +118,32 @@ edit with a reason.
 
 ## The register
 
-A register entry is written by hand, in the shape the register's legend
-gives. Its index, the move of a resolved entry to the archive and the
-generated half of `docs/ISSUES.md` come from the scripts that document
-names; `scripts/issues.rb` reads and retargets entries. A scripted edit
-of the file itself uses the block form below.
+`scripts/issues.rb` is the way in and the way out. It reads and retargets
+entries, and it opens and closes them:
+
+    ruby scripts/issues.rb intake                     # the untriaged list, numbered
+    ruby scripts/issues.rb promote <n> --kind K --target V \
+        --area A --direction D --user-visible yes|no [--note "…"]
+    ruby scripts/issues.rb close 024.N --released-in V [--drop-paragraphs]
+
+`promote` takes the n-th intake item, allocates a number never used
+before, writes the entry in the legend's shape, drops the bullet,
+restates the list's own count, and re-runs the register's three guards.
+`close` sets the status, moves the entry to the archive and re-indexes —
+and refuses while either language still publishes a paragraph for the
+finding, printing both locations. `--drop-paragraphs` removes the whole
+`##` section rather than the marker inside it, because a marker removed
+on its own leaves the limitation published and silences the guard that
+would have reported it. `docs/ISSUES.md` has the four decisions each
+option stands for, and why the command refuses rather than defaulting
+any of them.
+
+Every write goes through one primitive that is told what the edit should
+cost and refuses one that costs anything else. Editing the register by
+hand is still possible and is a worse idea than it looks: it is 25,000
+lines across two files, four enforced fields per entry, a number that may
+never be reused, and a generated index. A scripted edit of it uses the
+block form below.
 
 ## Edits that lose work
 

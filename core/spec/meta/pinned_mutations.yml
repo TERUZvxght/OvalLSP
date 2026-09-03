@@ -1029,7 +1029,19 @@
   example: "moves an intake item into the register under a number never used before"
 - why: "Promoting takes the item out of intake; without the removal the same issue stands in two places, one of them numbered."
   file: scripts/issues.rb
-  from: "    lines.slice!(at, 1 + detail.length)\n"
+  from: "    lines.slice!(at, lost)\n"
   to: ""
   spec: spec/meta/issues_tool_spec.rb
   example: "moves an intake item into the register under a number never used before"
+- why: "An intake item is its bullet plus the indented lines under it; without them a title wrapped across lines never closes and the item is invisible to the list `promote` counts positions in."
+  file: scripts/issues.rb
+  from: "    block = [lines[i]] + ((i + 1)...stop).take_while { |j| lines[j].match?(INTAKE_DETAIL) }.map { |j| lines[j] }\n"
+  to: "    block = [lines[i]]\n"
+  spec: spec/meta/issues_tool_spec.rb
+  example: "reads an item whose bold title wraps across lines"
+- why: "The intake list's own count is restated when an item leaves; without it the document states a number that was true before the command ran."
+  file: scripts/issues.rb
+  from: "  lines[at] = lines[at].sub(INTAKE_COUNT) { \"**#{count_word(count)} item#{count == 1 ? '' : 's'} above;\" }\n"
+  to: ""
+  spec: spec/meta/issues_tool_spec.rb
+  example: "keeps the count sentence current when an item leaves"

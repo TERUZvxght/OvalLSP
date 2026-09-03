@@ -136,13 +136,17 @@ RSpec.describe "scripts/issues.rb" do
       FileUtils.cp_r(File.join(repo, "scripts"), root)
     end
 
-    def promote(*extra)
-      Issues.run(["promote", "1", "--kind=friction", "--target=0.4.0",
+    def promote(position, *extra)
+      Issues.run(["promote", position.to_s, "--kind=friction", "--target=0.4.0",
                   "--area=`scripts/issues.rb`", "--direction=Give it a command.", *extra])
     end
 
+    # `docs/ISSUES.md` is copied whole, items and all, so a planted one
+    # goes to the end of a list that already has entries — and its
+    # position is what `promote` is given.
     def plant_intake(title)
       Issues.run(["intake", "add", title, "--where=a spec", "--detail=what was seen"])
+      intake_titles.length
     end
 
     # The intake list itself, not the document: a promoted entry's title
@@ -163,12 +167,49 @@ RSpec.describe "scripts/issues.rb" do
       end
     end
 
+    describe "the intake list" do
+      # **Two shapes are in the list today.** `intake add` writes the
+      # title on one line and the detail as sub-bullets; an item written
+      # by hand wraps the bold title across lines and continues in prose
+      # on the line that closes it. A reader that only understood the
+      # first saw none of the second, and reported an intake list with
+      # items in it as empty — which is what `promote <n>` counts
+      # positions in.
+      it "reads an item whose bold title wraps across lines" do
+        expect(intake_titles).not_to be_empty, "docs/ISSUES.md's own items were read as nothing"
+        expect(intake_titles).to all(satisfy { |title| !title.include?("\n") })
+      end
+
+      it "counts what `intake add` writes and what is written by hand as one list" do
+        before_add = intake_titles.length
+        plant_intake("A thing that was noticed")
+
+        expect(before_add).to be > 0, "the hand-written items were counted as none"
+        expect(intake_titles.length).to eq(before_add + 1)
+        expect(intake_titles.last).to eq("A thing that was noticed")
+      end
+
+      # The list's own sentence says how many items stand above it, and a
+      # count nobody updates is the class of claim this repository
+      # re-derives rather than types.
+      it "keeps the count sentence current when an item leaves" do
+        before_count = intake_titles.length
+        expect(File.read(issues_doc, encoding: "UTF-8")).to match(/\*\*\S+ items? above;/)
+
+        expect(promote(1, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
+
+        expect(intake_titles.length).to eq(before_count - 1)
+        expect(File.read(issues_doc, encoding: "UTF-8"))
+          .to match(/\*\*#{Issues.count_word(before_count - 1)} items? above;/i)
+      end
+    end
+
     describe "promote" do
       it "moves an intake item into the register under a number never used before" do
-        plant_intake("A thing that was noticed")
+        at = plant_intake("A thing that was noticed")
         allocated = Issues.next_number
 
-        expect(promote("--user-visible=no", "--note=Internal to this repository.")).to eq(0)
+        expect(promote(at, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
 
         entry = Issues.find(allocated)
         expect(entry).not_to be_nil, "no entry #{allocated} after promote"
@@ -177,24 +218,24 @@ RSpec.describe "scripts/issues.rb" do
         expect(entry.body).to include("what was seen")
         expect(entry.body).not_to include(Issues::INTAKE_UNVERIFIED),
                                   "promoting an item is the claim that it was driven"
-        expect(intake_titles).to be_empty
+        expect(intake_titles).not_to include("A thing that was noticed")
       end
 
       it "refuses a defect that does not say whether a user meets it" do
-        plant_intake("A wrong answer")
+        at = plant_intake("A wrong answer")
         before_refusal = Issues.next_number
 
-        expect(Issues.run(["promote", "1", "--kind=defect", "--target=0.4.0",
+        expect(Issues.run(["promote", at.to_s, "--kind=defect", "--target=0.4.0",
                            "--area=`scripts/issues.rb`", "--direction=Fix it."])).to eq(2)
         expect(Issues.next_number).to eq(before_refusal), "a refused promote still spent a number"
-        expect(intake_titles).to eq(["A wrong answer"])
+        expect(intake_titles).to include("A wrong answer")
       end
 
       it "refuses `user-visible: no` with no reason, which the register's own guard demands" do
-        plant_intake("A thing nobody meets")
+        at = plant_intake("A thing nobody meets")
 
-        expect(promote("--user-visible=no")).to eq(2)
-        expect(intake_titles).to eq(["A thing nobody meets"])
+        expect(promote(at, "--user-visible=no")).to eq(2)
+        expect(intake_titles).to include("A thing nobody meets")
       end
 
       # Everything else about this invocation is valid, so the only thing
@@ -202,8 +243,9 @@ RSpec.describe "scripts/issues.rb" do
       # passes on whichever refusal happens to come first, which is a
       # test of the option parser wearing this one's name.
       it "refuses a position the intake list does not have" do
-        expect(promote("--user-visible=no", "--note=Internal to this repository.")).to eq(2)
-        expect(intake_titles).to be_empty
+        past_the_end = intake_titles.length + 1
+
+        expect(promote(past_the_end, "--user-visible=no", "--note=Internal to this repository.")).to eq(2)
       end
 
       # **The control.** Every example above asserts a refusal, and a
@@ -211,17 +253,17 @@ RSpec.describe "scripts/issues.rb" do
       # one says the register is still a register afterwards: its own
       # three guards, run against the file the command wrote.
       it "leaves the register passing the guards it delegates to" do
-        plant_intake("A thing that was noticed")
+        at = plant_intake("A thing that was noticed")
 
-        expect(promote("--user-visible=no", "--note=Internal to this repository.")).to eq(0)
+        expect(promote(at, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
       end
     end
 
     describe "close" do
       def open_a_published_entry
-        plant_intake("A thing a user meets")
+        at = plant_intake("A thing a user meets")
         number = Issues.next_number
-        promote("--user-visible=yes")
+        promote(at, "--user-visible=yes")
         publish(number, "Something a user meets")
         number
       end
@@ -263,9 +305,9 @@ RSpec.describe "scripts/issues.rb" do
       # above: the refusal ones by refusing, and the closing one by
       # closing.
       it "closes an entry no language publishes without being told to drop anything" do
-        plant_intake("A thing nobody meets")
+        at = plant_intake("A thing nobody meets")
         number = Issues.next_number
-        promote("--user-visible=no", "--note=Internal to this repository.")
+        promote(at, "--user-visible=no", "--note=Internal to this repository.")
 
         expect(Issues.run(["close", number, "--released-in=0.4.0"])).to eq(0)
         expect(Issues.find(number).status).to eq("fixed")

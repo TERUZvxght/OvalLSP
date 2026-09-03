@@ -1,12 +1,13 @@
 # 059 — Ordered procedures become single entry points
 
 **Branch:** `worktree-agent-a5579789c19884cab`, an agent worktree cut
-from `main` at the commit that fixed the bodyless-heading check at
-end of file. It is not a `release/<version>` branch and claims no
+from `main` at the commit that fixed the bodyless-heading check at end
+of file, then merged with `main` again once 058's rulebook restructure
+landed there. It is not a `release/<version>` branch and claims no
 version: the work here is tooling, and whichever release takes it names
-it then. `CLAUDE.md`'s "Where a release's work lives" is the rule the
-naming answers to, and `scripts/check_release_pointers.rb` only asks
-about branches spelled `release/<x.y.z>`.
+it then. `AGENTS.md`'s branch line is the rule the naming answers to,
+and `scripts/check_release_pointers.rb` only asks about branches spelled
+`release/<x.y.z>`.
 
 ## Why
 
@@ -18,10 +19,10 @@ at that point, refuse and show it."*
 The checks already existed. What did not exist was an entry point. The
 order in which the four register decisions are made lives in
 `docs/ISSUES.md`'s prose; the rule that a review round may not repeat
-the previous round's method lives in `CLAUDE.md`; the fact that the
-previous round's method is written in a task document was known only to
-whoever had read it. Every one of those is a fact this tree already
-holds and nothing read.
+the previous round's method lives in `docs/REVIEW_LOOP.md`; the fact
+that the previous round's method is written in a task document was known
+only to whoever had read it. Every one of those is a fact this tree
+already holds and nothing read.
 
 ## What package A did
 
@@ -88,9 +89,17 @@ through a record instead of through a spec.
 - **`intake` now prints positions, and one enumeration answers both
   questions.** Listing the items and finding the n-th are the same
   question asked twice, and two scans of one text is the shape
-  `CLAUDE.md`'s countermeasure section prescribes replacing with one
-  both readers use. The cost of disagreeing here would be promoting an
-  item other than the one the list showed.
+  `docs/REVIEW_LOOP.md`'s countermeasure section prescribes replacing
+  with one both readers use. The cost of disagreeing here would be
+  promoting an item other than the one the list showed.
+- **An intake item is a bullet plus its indented continuations, and its
+  title is the first bolded run however many lines it takes.** The list
+  holds two shapes: what `intake add` writes, and what a person writes
+  by hand with the title wrapped across lines. The first reader here
+  understood only the first shape and read `docs/ISSUES.md`'s own three
+  items as none — a reader reporting exactly what a working one reports
+  when the list really is empty. Both shapes now read as one list, and
+  an example fails if the hand-written ones go missing again.
 - **`close`'s state is the register's, and `review_round`'s is a file in
   `core/tmp/`.** That directory is already ignored, for the same reason
   the rspec JSON report is: a fact about this working copy at this
@@ -101,32 +110,40 @@ through a record instead of through a spec.
   second thing to keep right. The cost is that a bad Area is reported by
   preflight rather than by the command.
 
-## What the brief said about this tree that is not true of it
+## The tree moved under this work, and where the documentation went
 
-Recorded rather than worked around, because the next reader of the brief
-needs it.
+Package A was written against `main` as it stood before 058's rulebook
+restructure merged — a tree with no `docs/DEVELOPMENT.md`,
+`docs/CODE_DISCIPLINE.md`, `docs/MEASURING.md` or `docs/REVIEW_LOOP.md`,
+where those rules lived in `CLAUDE.md` and the trigger table had a
+Japanese twin. The first pass therefore documented the round commands in
+`CLAUDE.md`'s review-cadence section and the trigger rows in both
+languages.
 
-- **The three rule documents the brief expects under `docs/` do not
-  exist on this branch.** It names a development guide, a
-  code-discipline document and a review-loop document. All three are new
-  on `worktree-057-rulebook-cleanup`, which has not merged — so they are
-  described here rather than named, because a citation of them would
-  resolve to nothing on this branch and
-  `scripts/check_doc_links.rb` is right to refuse one. (It said so on
-  the first draft of this paragraph, which named them.) The rules the
-  brief expected to find in them are in `CLAUDE.md` and `AGENTS.md`
-  here, so package A's documentation went to the files that do exist:
-  `docs/ISSUES.md` for the register commands, `CLAUDE.md`'s
-  review-cadence section for the round commands, and
-  `docs/DOCUMENTATION_MAP.md` + `.ja.md` for the trigger rows. When 057
-  lands, those two passages move with the sections they sit in.
-- **The intake list is empty, and carries no count sentence.** The brief
-  describes keeping "N items above" current; this tree says "Empty, and
-  emptied deliberately" and has no count to keep. Nothing was written to
-  maintain a sentence that does not exist.
-- **`core/spec/meta/agents_card_spec.rb` does not exist** either. It is
-  named in package B's document list; `agents_pointer_spec.rb` and
-  `agents_restates_spec.rb` are what guard `AGENTS.md` here.
+`origin/main` was then merged in, with the working code committed first
+so the merge could not reach it. Three files conflicted and were
+resolved as follows, and the content was carried across rather than
+re-decided:
+
+- `CLAUDE.md` — taken from `main`, which reduces it to an import of
+  `AGENTS.md`. The paragraph about the round commands moved to
+  `docs/REVIEW_LOOP.md`'s cadence section, where the rules it belongs to
+  now live.
+- `docs/DOCUMENTATION_MAP.ja.md` — `main` deletes it, and the deletion <!-- deleted -->
+  was accepted. Its two edited rows exist only in the English table now,
+  which is where 058 put the whole of it.
+- `docs/DOCUMENTATION_MAP.md` — taken from `main`, and the three row
+  edits re-applied on top of its rewritten rows.
+
+`docs/DEVELOPMENT.md`'s "The register" section arrived in that merge
+saying a register entry is written by hand. It is not, any more, and it
+was rewritten here to name the two commands — which is the one place a
+reader looking for "how do I open an entry" would land.
+
+Two smaller things the brief assumed and this tree only acquired in that
+merge: the intake list has items in it and a count sentence — both now
+read and maintained — and `core/spec/meta/agents_card_spec.rb` exists,
+replacing the pointer and restates specs the earlier tree had.
 
 ## What was watched failing, before it was written
 
@@ -136,6 +153,18 @@ needs it.
   passed throughout.
 - `core/spec/meta/review_round_spec.rb` — the whole file, on a
   `LoadError` for a script that did not exist.
+- After the merge, three more in `issues_tool_spec.rb` for the intake
+  list itself — the wrapped-title shape read as nothing, the two shapes
+  counted as one list, and the count sentence restated. All three failed
+  against the reader as it then stood, which is how the wrapped shape
+  was found at all.
+
+One of those first ten passed for the wrong reason and was repaired
+before the code was: "refuses a position the intake list does not have"
+was written with an invocation that was *also* missing
+`--user-visible`, so it was the option parser refusing, under this
+example's name. It now sends a valid invocation at a position past the
+end.
 
 **And each decision inside them is pinned separately**, because
 reverse-applying a hunk that adds a whole method only shows the method

@@ -363,11 +363,22 @@ ISSUES_DOC = File.join("docs", "ISSUES.md")
 # readers of one grammar written six ways (`024.216`).
 INTAKE_UNVERIFIED = "unverified: not yet driven against the tree"
 
-# A bullet in the intake list. The detail lines under it are indented,
-# which is what `intake add` writes and what tells one item from the
-# next.
-INTAKE_BULLET = /\A- \*\*(.+)\*\*\s*\z/
+# A bullet in the intake list, and the indented continuations under it.
+# The indentation is what tells one item from the next, and what tells
+# the last item from the paragraph that follows the list.
+INTAKE_BULLET = "- **"
 INTAKE_DETAIL = /\A[ \t]+\S/
+
+# The list's own count, which is a claim about the list.
+INTAKE_COUNT = /\*\*(\S+) (items?) above;/
+
+# Nought to twenty in words, because the sentence is written in words.
+# Beyond that the digits, which is what a sentence with twenty-one items
+# in it would say anyway.
+COUNT_WORDS = %w[No One Two Three Four Five Six Seven Eight Nine Ten Eleven Twelve Thirteen
+                 Fourteen Fifteen Sixteen Seventeen Eighteen Nineteen Twenty].freeze
+
+def count_word(count) = COUNT_WORDS[count] || count.to_s
 
 # An issue that has been *noticed*, not driven. It goes here and not in
 # the register, because every register field is enforced and an entry
@@ -408,28 +419,49 @@ def intake_section(lines)
   [at, stop]
 end
 
-# Every intake item as `[line index, title, detail lines]`, in the order
-# they are written.
+# Every intake item as `[line index, title, body lines, line count]`, in
+# the order they are written.
 #
 # **One enumeration, because `promote` takes a position in this list.**
 # Listing the items and finding the n-th are the same question asked
-# twice; two scans of one text is the shape `CLAUDE.md`'s countermeasure
-# section prescribes replacing with one both readers use, and here the
-# cost of disagreeing is promoting whichever item the other reader would
-# not have shown.
+# twice; two scans of one text is the shape `docs/REVIEW_LOOP.md`'s
+# countermeasure section prescribes replacing with one both readers use,
+# and here the cost of disagreeing is promoting whichever item the other
+# reader would not have shown.
+#
+# **Two shapes are in the list.** `intake add` writes the title on one
+# line and the detail as sub-bullets; an item written by hand wraps the
+# bold title across lines and carries on in prose from where it closes.
+# A reader that understood only the first read a list with items in it
+# as empty, which is the state this repository's checks call "reports
+# exactly what a working one reports when nothing is wrong".
 def intake_items(lines)
   at, stop = intake_section(lines)
   ((at + 1)...stop).filter_map do |i|
-    title = lines[i][INTAKE_BULLET, 1] or next
+    next unless lines[i].start_with?(INTAKE_BULLET)
 
-    detail = ((i + 1)...stop).take_while { |j| lines[j].match?(INTAKE_DETAIL) }.map { |j| lines[j] }
-    [i, title, detail]
+    block = [lines[i]] + ((i + 1)...stop).take_while { |j| lines[j].match?(INTAKE_DETAIL) }.map { |j| lines[j] }
+    [i, *split_intake(block), block.length]
   end
+end
+
+# `[title, body lines]`. The title is the first bolded run, however many
+# lines it takes; the body is everything after it, dedented.
+def split_intake(block)
+  text = block.join
+  closing = text.index("**", INTAKE_BULLET.length)
+  raise RefusedWrite, "an intake bullet never closes its title: #{block.first.strip}" if closing.nil?
+
+  title = text[INTAKE_BULLET.length...closing].gsub(/\s+/, " ").strip
+  body = text[(closing + 2)..].to_s.lines
+                              .map { |line| line.sub(/\A[ \t]+/) { "" } }
+                              .reject { |line| line.strip.empty? }
+  [title, body]
 end
 
 def intake_list
   items = intake_items(File.readlines(File.join(ROOT, ISSUES_DOC), encoding: "UTF-8"))
-  items.each_with_index { |(_, title, _), n| puts format("  %2d. %s", n + 1, title) }
+  items.each_with_index { |(_, title, _, _), n| puts format("  %2d. %s", n + 1, truncate(title, 92)) }
   puts items.empty? ? "  (nothing in intake)" : "\n#{items.length} untriaged. Promote one by its number."
   0
 end
@@ -465,12 +497,14 @@ def promote(position, opts)
   raise RefusedWrite, "the position is a number; `ruby scripts/issues.rb intake` lists them" if index.nil?
 
   issues_path = File.join(ROOT, ISSUES_DOC)
-  item = intake_items(File.readlines(issues_path, encoding: "UTF-8"))[index - 1] if index.positive?
+  source = File.readlines(issues_path, encoding: "UTF-8")
+  items = intake_items(source)
+  item = items[index - 1] if index.positive?
   raise RefusedWrite, "intake has no item #{index}. `ruby scripts/issues.rb intake` lists what there is" if item.nil?
 
-  _, title, detail = item
+  _, title, body, = item
   number = next_number
-  entry = entry_lines(number, title, kind, target, area, direction, visible, opts[:note], detail)
+  entry = entry_lines(number, title, kind, target, area, direction, visible, opts[:note], body)
 
   # The register first. If the second write refuses, the entry exists and
   # the item is still in intake -- visible, and repairable by deleting one
@@ -480,19 +514,47 @@ def promote(position, opts)
     lines + entry
   end
 
-  rewrite(issues_path, expect_delta: -(1 + detail.length), why: "promote #{number}") do |lines|
-    at, _, again = intake_items(lines)[index - 1]
-    raise RefusedWrite, "intake item #{index} moved while it was being promoted" unless again == detail
+  remaining = items.length - 1
+  lost = span_of(source, item)
+  rewrite(issues_path, expect_delta: -lost, why: "promote #{number}") do |lines|
+    at, again, = intake_items(lines)[index - 1]
+    raise RefusedWrite, "intake item #{index} moved while it was being promoted" unless again == title
 
-    lines.slice!(at, 1 + detail.length)
-    lines
+    lines.slice!(at, lost)
+    restate_count(lines, remaining)
   end
 
   puts "issues: #{number} #{title}"
   puts "  #{kind}, target #{target}#{visible ? ", user-visible: #{visible}" : ''}"
-  puts "  taken out of intake; #{ISSUES_DOC} no longer lists it."
+  puts "  out of intake, which now lists #{remaining} item(s)."
   puts "Publish its user-visible half in both KNOWN_LIMITATIONS before committing." if visible == "yes"
   reindex_and_check
+end
+
+# How many lines an item costs the document: its own, plus the blank
+# after it when that blank is the item's separator rather than the one
+# belonging to whatever follows. It is the item's when the item is also
+# preceded by a blank -- so removing the first item of a list keeps one
+# blank between the list and the paragraph above, and removing the last
+# keeps the blank that separates the list from what comes after.
+def span_of(lines, item)
+  at, _, _, span = item
+  return span unless lines[at + span]&.strip&.empty?
+
+  (at.zero? || lines[at - 1].strip.empty?) ? span + 1 : span
+end
+
+# The list's own "N items above" sentence, restated. A count nobody
+# updates is exactly the claim about this tree that `docs/MEASURING.md`
+# says is derived rather than typed -- and this one is derivable, so it
+# is derived. Block form, always: a replacement *string* expands
+# backreferences, and one of them pastes the whole preceding file in at
+# the anchor (`024.225`).
+def restate_count(lines, count)
+  at = lines.index { |line| line.match?(INTAKE_COUNT) } or return lines
+
+  lines[at] = lines[at].sub(INTAKE_COUNT) { "**#{count_word(count)} item#{count == 1 ? '' : 's'} above;" }
+  lines
 end
 
 # `roadmap` is a plan and carries no user-visible half -- the legend says

@@ -3,7 +3,7 @@
 require "fileutils"
 require_relative "../../../scripts/review_round"
 
-# `CLAUDE.md`'s review cadence is four rules and an ordering, and until
+# `docs/REVIEW_LOOP.md`'s cadence is four rules and an ordering, and until
 # this every one of them was a thing to remember: a round closes when a
 # reviewer *that has not seen this change set*, using a method *the
 # previous round did not use*, reports nothing.
@@ -95,8 +95,8 @@ RSpec.describe "scripts/review_round.rb" do
   describe "close" do
     # **The refusal this exists for.** A fix committed while the round is
     # open moves the index, so the reviewer's report is about a tree that
-    # no longer exists — which is the ordering `CLAUDE.md` states and
-    # nothing enforced.
+    # no longer exists — which is the ordering `docs/REVIEW_LOOP.md`
+    # states and nothing enforced.
     it "refuses a round whose tree moved under it" do
       ReviewRound.run(%w[start attack])
       commit_something("a-fix.rb")

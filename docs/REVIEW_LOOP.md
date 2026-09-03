@@ -17,6 +17,27 @@ of:
 Each round records which it used, in the release's task document. A
 closing round whose method repeats the previous round's closes nothing.
 
+**Two of those are mechanical, and are a command:**
+
+    ruby scripts/review_round.rb start <method>
+    ruby scripts/review_round.rb status
+    ruby scripts/review_round.rb close
+
+`start` refuses a method the list above does not name, refuses the method
+the previous round used — read from the task document, where it was
+written and nothing read it — refuses a tree that is not clean, and
+refuses while a round is already open. It then records the index the
+round reads, and writes the round's heading and an empty findings table
+into the highest-numbered task document on the branch. `close` refuses
+when the index moved under the round, because a round that read two
+trees can conclude about neither.
+
+What it cannot see is an edit nobody staged — the round's own heading is
+one — so a clean `close` says nothing was *committed* under the round,
+not that nobody typed. The rules are the two paragraphs around it; the
+command is only the part of them a person had been holding in their
+head.
+
 **After three rounds that find defects, ship with the open findings
 recorded** — each in `docs/ISSUES.md`'s intake, in the register once it
 has been driven, and a `KNOWN_LIMITATIONS` paragraph for any a user can
@@ -87,8 +108,9 @@ established this.
 
 - **Findings go into the task document as the round produces them** — a
   table of number, what it was, disposition — not after the fixes land.
-  Findings that lived only in a message were lost before they were
-  written down (`024.109`).
+  `review_round.rb start` writes that table's header, empty, so the place
+  to put them exists before the first one arrives. Findings that lived
+  only in a message were lost before they were written down (`024.109`).
 - **Anything the release does not fix** goes to `docs/ISSUES.md`'s
   intake, then to the register, by that document's rule.
 - **Promoting a finding** — splitting an entry, giving it a target,
