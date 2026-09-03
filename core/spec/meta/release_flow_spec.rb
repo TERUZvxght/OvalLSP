@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "digest"
 require "json"
 require_relative "../../../scripts/release"
 
@@ -38,6 +39,10 @@ RSpec.describe "scripts/release.rb" do
     write(register_path, "# Task 024\n\nA register with nothing open.\n")
     FileUtils.cp_r(File.join(RELEASE_FLOW_REPO, "scripts"), root)
     throwaway_repo(root, "a base")
+    # `git init` uses whatever `init.defaultBranch` says, and a release
+    # branches from `main` — so the fixture is on `main` whatever the
+    # machine's default is.
+    RepoFiles.run(root, "branch", "-M", "main", out: File::NULL, err: File::NULL)
     stub_const("Release::ROOT", root)
   end
 
@@ -50,6 +55,11 @@ RSpec.describe "scripts/release.rb" do
   end
 
   def branch(name) = RepoFiles.run(root, "checkout", "-q", "-b", name, out: File::NULL, err: File::NULL)
+
+  # `gate` refuses a dirty tree, so anything it is meant to read has to
+  # be committed first — which is what the release itself does between
+  # `bump` and `gate`.
+  def commit_all(message = "the fixture") = commit_throwaway(root, message)
 
   def run(*argv) = Release.run(argv)
 
@@ -67,7 +77,17 @@ RSpec.describe "scripts/release.rb" do
       expect(run("open", prepared)).to eq(2)
     end
 
-    it "refuses a tree that is not clean" do
+    # A release branch starts from what has shipped, which is `open`'s own
+    # refusal text about the tree. It said nothing about the branch, so
+    # `open` on a feature branch cut the release from that.
+    it "refuses to branch from anything but main" do
+      branch("feature-x")
+
+      expect(run("open", prepared)).to eq(2)
+      expect(RepoFiles.capture(root, %w[branch --show-current]).strip).to eq("feature-x")
+    end
+
+    it "refuses a tree that is not clean before it branches" do
       write("vscode/package.json", JSON.pretty_generate("name" => "ovallsp", "version" => "9.9.8", "x" => 1))
 
       expect(run("open", prepared)).to eq(2)
@@ -86,6 +106,17 @@ RSpec.describe "scripts/release.rb" do
       expect(File.read(record, encoding: "UTF-8")).to include("**Branch:** `release/#{prepared}`")
     end
 
+    # `NNN-`, zero padded. `agents_card_spec`'s task-file pattern,
+    # `docs/DOCUMENTATION_MAP.md`'s "highest-numbered NNN-*.md" and
+    # `check_release_pointers.rb`'s lexical sort all rest on the width:
+    # an unpadded `60-` sorts after `061-` for ever.
+    it "numbers the record it writes to three digits" do
+      run("open", prepared)
+
+      record = Dir.glob(File.join(root, "docs", "design", "tasks", "*#{prepared}*.md")).first
+      expect(File.basename(record)).to match(/\A\d{3}-/)
+    end
+
     it "writes a section for the version at the top of both changelogs" do
       run("open", prepared)
 
@@ -93,6 +124,14 @@ RSpec.describe "scripts/release.rb" do
         body = File.read(File.join(root, relative), encoding: "UTF-8")
         expect(Changelog.sections(body).first.version).to eq(prepared)
       end
+    end
+
+    # `bump` runs `check_site_links.rb`, which requires a roadmap section
+    # per shipped version - so a bump rewrote eight files and then refused
+    # for a page `open` had never mentioned. The requirement is said when
+    # the sections are, not after the edit.
+    it "names the roadmap pages alongside the changelog sections" do
+      expect { run("open", prepared) }.to output(/roadmap/i).to_stdout
     end
   end
 
@@ -122,12 +161,16 @@ RSpec.describe "scripts/release.rb" do
 
     it "names the entries still open against the version, rather than only counting them" do
       bump_version_files
+      open_entry
+      commit_all
 
       expect { run("gate") }.to output(/#{Regexp.escape(open_entry)}/).to_stderr
     end
 
     it "accepts one by number, with a reason, rather than skipping the check" do
       bump_version_files
+      open_entry
+      commit_all
       run("gate", "--accept", open_entry, "--reason", "It is a plan, and the release does not owe it.")
 
       accepted = File.read(File.join(root, "core", "tmp", "release-#{prepared}.json"), encoding: "UTF-8")
@@ -139,6 +182,8 @@ RSpec.describe "scripts/release.rb" do
     # this is a throwaway tree. The mutation manifest said so.
     it "refuses an --accept with no reason, and records nothing" do
       bump_version_files
+      open_entry
+      commit_all
 
       expect(run("gate", "--accept", open_entry)).to eq(2)
       expect(Release.state(prepared)["accepted"]).to be_nil
@@ -146,28 +191,59 @@ RSpec.describe "scripts/release.rb" do
 
     # The fourth of the four steps `docs/RELEASE_CHECKLIST.md` used to
     # ask a person to do by hand: grep the previous version across the
-    # repository and fix anything still naming it that is not history.
-    it "names a file still carrying the version before it" do
+    # repository and read what still names it.
+    it "lists a file still carrying the version before it" do
       bump_version_files
       published_artifacts
       write("vscode/README.md", "Install Preview 9.9.8 from the Marketplace.\n")
+      commit_all
 
-      expect { run("gate") }.to output(%r{vscode/README\.md}).to_stderr
+      expect { run("gate") }.to output(%r{vscode/README\.md}).to_stdout
     end
 
-    # **The control**, and it is the half that decides whether the check
-    # is worth having: a release's own record, its artifact table and the
-    # changelogs name every version this project has cut, and always
-    # will. A check that reported those would be reported as noise and
-    # switched off.
+    # **It lists; it does not refuse.** "Not history" was a human
+    # judgement in the manual step, and as "anywhere but four paths" it
+    # is wrong on this tree: the roadmap pages must carry a section per
+    # shipped version -- `check_site_links.rb`, which `bump` itself runs,
+    # requires it -- so bump demanded what gate forbade. A refusal with
+    # five false positives a release is the check `024.150` says gets
+    # switched off. Same shape as preflight's `ci:` line: report, do not
+    # gate.
+    it "does not refuse the roadmap for naming the version that shipped" do
+      bump_version_files
+      published_artifacts
+      write("site/roadmap.html", "<h2>9.9.8</h2>\n")
+      commit_all
+
+      expect { run("gate") }.to output(%r{site/roadmap\.html}).to_stdout
+      expect(Release.stale_version_mentions(prepared)).to include("site/roadmap.html")
+    end
+
+    # **The control for the listing.** Without it, a scan that found
+    # nothing anywhere would satisfy the example above by reporting the
+    # planted file and nothing else would be evidence it can read a tree.
     it "says nothing about the places a past version belongs" do
       bump_version_files
       published_artifacts
       write(unspellable("docs", "design", "tasks", "057-an-older-release.md"), "0.0.0 and 9.9.8 are history.\n")
-      write("vscode/CHANGELOG.md", "# Changelog\n\n## #{prepared} - new\n\n- **A thing.** It changed.\n\n" \
-                                   "### Details\n\nWhy.\n\n## 9.9.8 - shipped\n\n- **Old.** It changed.\n")
+      commit_all
 
-      expect { run("gate") }.not_to output(/still names 9\.9\.8/).to_stderr
+      expect(Release.stale_version_mentions(prepared))
+        .not_to include(a_string_matching(%r{docs/design/tasks/}))
+    end
+
+    # **A dirty tree is refused.** `gate` fingerprints the index and ran
+    # preflight over the working tree, so following `bump`'s own advice
+    # -- "nothing is committed ... then: gate" -- gated one tree, had
+    # `release.sh` refuse the dirty one at publish, and then had
+    # `publish` refuse because committing had moved the index. Fifteen
+    # minutes of preflight, twice.
+    it "refuses a tree that is not clean, naming what is uncommitted" do
+      bump_version_files
+      published_artifacts
+      write("a-new-file.txt", "uncommitted\n")
+
+      expect { run("gate") }.to output(/a-new-file\.txt/).to_stderr
     end
   end
 
@@ -192,6 +268,59 @@ RSpec.describe "scripts/release.rb" do
     end
   end
 
+  # **What a patch may not do.** `docs/PUBLISHING.md`'s standing
+  # permission is for a patch, and a patch is a release where no
+  # capability row moves — so that is what the word has to mean here, or
+  # the permission covers something nobody checked.
+  describe "the capability rows a patch may not move" do
+    before do
+      write("docs/EXTENSION_CAPABILITIES.md", capability_table("PASS"))
+      commit_all("capabilities")
+      RepoFiles.run(root, "tag", "v9.9.8", out: File::NULL)
+      branch("release/9.9.9")
+    end
+
+    def capability_table(status)
+      "# Capabilities\n\n| # | What the user does | What must happen | Status |\n|---|---|---|---|\n" \
+        "| B1 | Opens a file | Core answers | #{status} |\n| B2 | Waits | status reaches ready | PASS |\n"
+    end
+
+    it "reads the rows a tag carries" do
+      expect(Release.capability_rows(Release.show("v9.9.8", "docs/EXTENSION_CAPABILITIES.md")))
+        .to eq("B1" => "PASS", "B2" => "PASS")
+    end
+
+    it "reports a status a patch moved" do
+      write("docs/EXTENSION_CAPABILITIES.md", capability_table("FAIL"))
+
+      expect(Release.moved_capability_rows("9.9.9", "9.9.8")).to include(a_string_matching(/B1/))
+    end
+
+    it "reports a row a patch added" do
+      write("docs/EXTENSION_CAPABILITIES.md", "#{capability_table('PASS')}| B3 | Something new | It happens | PASS |\n")
+
+      expect(Release.moved_capability_rows("9.9.9", "9.9.8")).to include(a_string_matching(/B3/))
+    end
+
+    # And the gate itself, not only the comparison behind it: a patch
+    # that moved a row is refused, which is what makes
+    # `docs/PUBLISHING.md`'s standing permission about the thing it
+    # names.
+    it "refuses the bump of a patch that moved one" do
+      write("docs/EXTENSION_CAPABILITIES.md", capability_table("FAIL"))
+      published_artifacts
+
+      expect { Release.refuse_unshaped_release("9.9.9") }.to raise_error(Release::Refused, /B1/)
+    end
+
+    # **The control.** Every example above asserts something is
+    # reported, and a comparison that reported every row would satisfy
+    # all of them.
+    it "says nothing when the table did not move" do
+      expect(Release.moved_capability_rows("9.9.9", "9.9.8")).to be_empty
+    end
+  end
+
   describe "record" do
     it "refuses when no artifact for the version has been built" do
       branch("release/#{prepared}")
@@ -199,6 +328,37 @@ RSpec.describe "scripts/release.rb" do
 
       expect(run("record")).to eq(2)
     end
+
+    # **The hash is compared before the tag exists.** It tagged and wrote
+    # the row first, so a mismatch between what was built and what the
+    # Marketplace serves was discovered after the release had been
+    # recorded as good.
+    it "refuses when what was served does not match what was built" do
+      branch("release/#{prepared}")
+      bump_version_files
+      build_a_vsix
+
+      expect(run("record", "--served", "b" * 64)).to eq(2)
+      expect(RepoFiles.capture(root, %w[tag --list]).strip).to eq("")
+    end
+
+    it "records the row and tags when the two agree" do
+      branch("release/#{prepared}")
+      bump_version_files
+      digest = build_a_vsix
+      write("docs/RELEASE_ARTIFACTS.md",
+            "# Artifacts\n\n## Published\n\n| Version | SHA-256 | Channel |\n|---|---|---|\n")
+
+      expect(run("record", "--served", digest)).to eq(0)
+      expect(File.read(File.join(root, "docs", "RELEASE_ARTIFACTS.md"), encoding: "UTF-8")).to include(digest)
+      expect(RepoFiles.capture(root, %w[tag --list]).strip).to eq("v#{prepared}")
+    end
+  end
+
+  def build_a_vsix
+    path = File.join(root, "vscode", "ovallsp-#{prepared}.vsix")
+    File.write(path, "not really a zip, but it hashes\n")
+    Digest::SHA256.file(path).hexdigest
   end
 
   # An entry targeting the version being prepared, written through the

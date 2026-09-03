@@ -10,6 +10,7 @@ require "digest"
 require "fileutils"
 require "json"
 require "open3"
+require "tmpdir"
 
 # The release, one command per step, each refusing when the step before
 # it left no evidence.
@@ -109,6 +110,7 @@ module Release
       raise Refused, "the tree is not clean, and a release branch starts from what has shipped:\n" \
                      "#{dirty}\n  Commit or stash it, then run this again."
     end
+    refuse_off_main
 
     git("checkout", "-q", "-b", "release/#{version}")
     document = write_record(version)
@@ -118,6 +120,12 @@ module Release
     puts "release: on release/#{version}."
     puts "  #{document} records it, and names the branch."
     puts "  both changelogs carry a #{version} section with #{entries.length} bullet(s) to write."
+    # Said here rather than by `bump`'s failure: `check_site_links.rb`
+    # requires a roadmap section per shipped version, and `bump` runs it
+    # *after* rewriting eight files. The requirement belongs with the
+    # other things to write, not after the edit.
+    puts "  site/roadmap.html and site/ja/roadmap.html each need a #{version} section before `bump`,"
+    puts "  and docs/ROADMAP.md + .ja.md are what they are counted against."
     if entries.empty?
       puts "  no open entry targets #{version} yet. `ruby scripts/issues.rb list --target=#{version}` stays the list."
     else
@@ -132,7 +140,12 @@ module Release
   def write_record(version)
     numbers = Dir.glob(File.join(ROOT, "docs", "design", "tasks", "*.md"))
                  .filter_map { |path| File.basename(path)[/\A(\d+)/, 1]&.to_i }
-    relative = File.join("docs", "design", "tasks", "#{numbers.max.to_i + 1}-#{version}-what-this-release-is-for.md")
+    # `%03d`: the width is what `agents_card_spec`'s task-file pattern,
+    # the map's "highest-numbered NNN-*.md" and
+    # `check_release_pointers.rb`'s lexical sort all rest on. An
+    # unpadded `60-` sorts after `061-` for ever.
+    next_number = format("%03d", numbers.max.to_i + 1)
+    relative = File.join("docs", "design", "tasks", "#{next_number}-#{version}-what-this-release-is-for.md")
 
     File.write(File.join(ROOT, relative), <<~MD)
       # #{version} — what this release is for
@@ -148,6 +161,25 @@ module Release
       未処理の指摘はこの文書ではなく `024` に書く。
     MD
     relative
+  end
+
+  # A release is cut from what has shipped. `open`'s own refusal says so
+  # about the tree and said nothing about the branch, so `open` on a
+  # feature branch cut the release from that branch's work.
+  def refuse_off_main
+    here = branch
+    return if here == "main"
+    return if git("rev-parse", "HEAD").strip == git("rev-parse", "origin/main").strip
+
+    raise Refused, "this is `#{here}`, and a release branches from `main`.\n" \
+                   "  Run: git checkout main && git pull"
+  rescue Refused
+    raise
+  rescue StandardError
+    # No `origin/main` to compare against is not permission to branch
+    # from anywhere; it is one fewer way to say yes.
+    raise Refused, "this is `#{here}`, and a release branches from `main`.\n" \
+                   "  Run: git checkout main"
   end
 
   def targeted(version)
@@ -173,11 +205,13 @@ module Release
     end
   end
 
+  # No rescue. `targeted` has just parsed the same register, so a failure
+  # here is a failure there too -- the branch could only have turned
+  # every title into "TODO" and let the release carry on, which is the
+  # swallowed failure `docs/DEVELOPMENT.md` refuses.
   def entry_titles(version, entries)
     bodies = DeferredFindings.bodies(DeferredFindings.register(ROOT)).to_h
     entries.keys.map { |number| [number, bodies[number].to_s.lines.first.to_s.strip] }
-  rescue StandardError
-    entries.keys.map { |number| [number, "TODO"] }
   end
 
   # --- bump ----------------------------------------------------------
@@ -200,7 +234,8 @@ module Release
 
     remember(version, "bumped" => true)
     puts "release: every version file now says #{version}."
-    puts "  nothing is committed. Read `git diff`, then: ruby scripts/release.rb gate"
+    puts "  nothing is committed. Read `git diff`, commit the bump, then: ruby scripts/release.rb gate"
+    puts "  (gate refuses a dirty tree, so that what it gates is what publish sends.)"
     0
   end
 
@@ -208,7 +243,7 @@ module Release
   # a user-visible defect unrouted. Both questions are asked of the
   # documents that own them rather than answered here.
   def refuse_unshaped_release(version)
-    return if patch?(version)
+    return refuse_moved_capabilities(version) if patch?(version)
 
     unrouted = DeferredFindings.open_entries(DeferredFindings.register(ROOT)).select do |_, fields|
       fields["kind"] == "defect" && fields["user-visible"] == "yes" && fields["target"].to_s.empty?
@@ -221,6 +256,51 @@ module Release
   end
 
   def patch?(version) = version.split(".").last != "0"
+
+  # **What makes a patch a patch.** `docs/PUBLISHING.md` grants a patch
+  # the standing permission to ship without asking, and defines one as a
+  # release where no capability row moves. Nothing checked that, so the
+  # permission covered a release nobody had compared.
+  #
+  # Compared against the previous tag's copy of the document, which is
+  # what "moved" means: added rows, removed rows, and changed statuses.
+  def refuse_moved_capabilities(version)
+    previous = previous_version(version) or return
+    moved = moved_capability_rows(version, previous)
+    return if moved.empty?
+
+    raise Refused, "#{version} is a patch, and a patch moves no capability row. Against v#{previous}:\n" \
+                   "#{moved.map { |line| "  #{line}" }.join("\n")}\n" \
+                   "  Cut a minor instead, or put the row back."
+  end
+
+  def moved_capability_rows(version, previous)
+    was = capability_rows(show("v#{previous}", CAPABILITY_DOC))
+    now = capability_rows(File.read(File.join(ROOT, CAPABILITY_DOC), encoding: "UTF-8"))
+
+    (was.keys | now.keys).filter_map do |id|
+      next if was[id] == now[id]
+
+      "#{id}: #{was.fetch(id, '(not there)')} -> #{now.fetch(id, '(gone)')}"
+    end
+  end
+
+  CAPABILITY_DOC = File.join("docs", "EXTENSION_CAPABILITIES.md")
+
+  # `| id | what the user does | what must happen | status |`, as
+  # `{id => status}`. The same two fields `capability_coverage_spec`
+  # reads, from one pattern rather than that file's two -- a third
+  # grammar for this table is what `024.216` counted six of.
+  CAPABILITY_ROW = /^\| ([A-Z]+\d+) \|[^|]*\|[^|]*\| ([^|]+) \|/
+
+  def capability_rows(markdown) = markdown.scan(CAPABILITY_ROW).to_h { |id, status| [id, status.strip] }
+
+  def show(ref, path)
+    out = RepoFiles.capture(ROOT, ["show", "#{ref}:#{path}"])
+    raise Refused, "cannot read #{path} at #{ref}: #{out.strip}" unless $?.success?
+
+    out
+  end
 
   def set_versions(version)
     core = File.join(ROOT, "core", "lib", "ovallsp", "version.rb")
@@ -252,8 +332,13 @@ module Release
                      "  Run: ruby scripts/release.rb bump"
     end
 
+    unless dirty.empty?
+      raise Refused, "the tree is not clean, and what is gated must be what is published:\n" \
+                     "#{dirty}\n  Commit the bump, then run this again."
+    end
+
     refuse_open_entries(version)
-    refuse_stale_version_mentions(version)
+    report_stale_version_mentions(version)
     delegate("gitleaks", "detect", "--config", ".gitleaks.toml",
              why: "gitleaks found something. Nothing is published from a tree it refuses.")
     delegate("ruby", "scripts/preflight.rb", why: "preflight failed. Its own output says which check.")
@@ -291,19 +376,36 @@ module Release
   # to do by hand.
   HISTORY = ["docs/design/tasks/", "docs/RELEASE_ARTIFACTS.md", Changelog::EN, Changelog::JA].freeze
 
-  def refuse_stale_version_mentions(version)
+  # **It lists; it does not refuse**, and that is the whole of what this
+  # check can honestly be.
+  #
+  # "Not history" was a judgement in the manual step. As "anywhere but
+  # these four paths" it is wrong on this tree: the roadmap pages must
+  # carry a section per shipped version, and `check_site_links.rb` --
+  # which `bump` itself runs -- requires it, so refusing here made `bump`
+  # demand what `gate` forbade. Driven on 0.3.4 it named five files and
+  # every one was history. A refusal with that error rate is the check
+  # `024.150` records being switched off; the same shape as preflight's
+  # non-gating `ci:` line is what is left, and it is worth having.
+  def report_stale_version_mentions(version)
     previous = previous_version(version) or return
 
-    stale = RepoFiles.list(ROOT).reject { |path| path.start_with?(*HISTORY) }.select do |path|
+    stale = stale_version_mentions(version)
+    return if stale.empty?
+
+    puts "release: #{stale.length} file(s) name #{previous}, which has shipped. Each is either history"
+    puts "  or a sentence nobody updated — read them; this does not decide which:"
+    stale.each { |path| puts "  #{path}" }
+  end
+
+  def stale_version_mentions(version)
+    previous = previous_version(version) or return []
+
+    RepoFiles.list(ROOT).reject { |path| path.start_with?(*HISTORY) }.select do |path|
       full = File.join(ROOT, path)
       File.file?(full) && !File.binread(full).include?("\0") &&
         File.read(full, encoding: "UTF-8").include?(previous)
     end
-    return if stale.empty?
-
-    warn "release: #{stale.length} file(s) still name #{previous}, which has shipped:"
-    stale.each { |path| warn "  #{path} still names #{previous}" }
-    raise Refused, "update each, or move the sentence into the release record where a past version belongs."
   end
 
   # The highest version below this one that `docs/RELEASE_ARTIFACTS.md`
@@ -353,7 +455,12 @@ module Release
 
   # --- record --------------------------------------------------------
 
-  def record
+  # **The comparison happens before the tag exists.** This tagged and
+  # wrote the row first, so a disagreement between what was built and
+  # what the Marketplace serves was found after the release had been
+  # recorded as good — and a tag is the one thing here that must not be
+  # rewritten, because the Marketplace artifacts reference its SHA.
+  def record(served: nil)
     version = require_release_branch
     vsix = Dir.glob(File.join(ROOT, "vscode", "*#{version}*.vsix")).first
     unless vsix
@@ -361,12 +468,36 @@ module Release
     end
 
     digest = Digest::SHA256.file(vsix).hexdigest
+    published = served || fetch_published_digest(version)
+    unless published == digest
+      raise Refused, "what was built and what is served do not match:\n" \
+                     "  built  #{digest}  (#{File.basename(vsix)})\n  served #{published}\n" \
+                     "  Nothing is tagged. docs/RELEASE_ARTIFACTS.md has the command that fetches it by hand."
+    end
+
     append_artifact_row(version, digest)
     git("tag", "v#{version}")
-    puts "release: recorded #{File.basename(vsix)} as #{digest}, and tagged v#{version}."
-    puts "  Compare it against what the Marketplace serves — docs/RELEASE_ARTIFACTS.md has the command —"
-    puts "  then commit the row. Nothing is pushed."
+    puts "release: #{File.basename(vsix)} is #{digest}, and that is what the Marketplace serves."
+    puts "  The row is in docs/RELEASE_ARTIFACTS.md and v#{version} is tagged. Commit the row."
+    puts "  Nothing is pushed."
     0
+  end
+
+  # The Marketplace serves the VSIX **gzipped**, which is the one step
+  # that makes a naive `curl | shasum` disagree; `--compressed` is what
+  # `docs/RELEASE_ARTIFACTS.md` records. `--served` is the same answer
+  # obtained by hand, for a machine with no network.
+  MARKETPLACE = "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/teruz/" \
+                "vsextensions/ovallsp/%<version>s/vspackage?targetPlatform=darwin-arm64"
+
+  def fetch_published_digest(version)
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "published.vsix")
+      delegate("curl", "-sSL", "--compressed", "-o", path, format(MARKETPLACE, version: version),
+               why: "the published artifact could not be fetched. Pass --served <sha256> instead, " \
+                    "using the command in docs/RELEASE_ARTIFACTS.md.")
+      Digest::SHA256.file(path).hexdigest
+    end
   end
 
   def append_artifact_row(version, digest)
@@ -419,7 +550,7 @@ module Release
       bump                       every version file, once the changelog and counts are ready
       gate [--accept N --reason] gitleaks and preflight, once nothing is open against it
       publish                    hand over to vscode/scripts/release.sh, once gated
-      record                     the artifact's hash and the tag, once published
+      record [--served <sha256>] the artifact's hash and the tag, once it matches
 
     Every step refuses when the one before it left no evidence, and every
     refusal names the command that clears it. docs/PUBLISHING.md has the
@@ -434,7 +565,7 @@ module Release
     when "bump" then bump
     when "gate" then gate(accept: option(argv, "--accept"), reason: option(argv, "--reason"))
     when "publish" then publish
-    when "record" then record
+    when "record" then record(served: option(argv, "--served"))
     else
       warn USAGE
       2

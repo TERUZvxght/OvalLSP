@@ -258,12 +258,27 @@ CHECKS = [
     while read -r _localref localsha _remoteref remotesha; do
       [ "$localsha" = "$zero" ] && continue
       if [ "$remotesha" = "$zero" ]; then
-        range="$range $localsha"
+        entry="$localsha"
       else
-        range="$range $remotesha..$localsha"
+        entry="$remotesha..$localsha"
       fi
+      # No leading space. `--log-opts " <sha>"` is split by gitleaks and
+      # git is handed an empty argument, which it rejects -- and gitleaks
+      # 8.30.1 reports "0 commits scanned, no leaks found" and exits 0.
+      # The scan that did not run is indistinguishable from a clean one.
+      if [ -z "$range" ]; then range="$entry"; else range="$range $entry"; fi
     done
     [ -z "$range" ] && exit 0
+
+    # And the range has to be one git resolves. Same reason: an error
+    # from git reaches this hook as a clean scan, so it is asked here
+    # where the answer is still readable.
+    # shellcheck disable=SC2086
+    if ! git rev-list --quiet $range >/dev/null 2>&1; then
+      echo "pre-push: git cannot resolve the outgoing range ($range), so nothing would be scanned." >&2
+      echo "pre-push: fetch the remote and try again." >&2
+      exit 1
+    fi
 
     if ! command -v gitleaks >/dev/null 2>&1; then
       echo "pre-push: gitleaks is not installed, so the secret scan cannot run." >&2
@@ -276,7 +291,8 @@ CHECKS = [
       exit 1
     fi
 
-    if ! ruby scripts/check_home_paths.rb --messages; then
+    # shellcheck disable=SC2086
+    if ! ruby scripts/check_home_paths.rb --messages "$range"; then
       echo "pre-push: a commit or tag message carries a real home path -- the channel a tree" >&2
       echo "pre-push: scan cannot see. Rewrite the message before pushing." >&2
       exit 1

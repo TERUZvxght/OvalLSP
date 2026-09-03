@@ -12,6 +12,8 @@
 # Not tagged :e2e: it reads two files and needs no Rails, so it runs
 # everywhere the suite runs, including where the capability suite itself
 # has to skip.
+require_relative "../../../scripts/release"
+
 RSpec.describe "capability document coverage" do
   CAPABILITY_DOC = File.expand_path("../../../docs/EXTENSION_CAPABILITIES.md", __dir__)
   CAPABILITY_DOC_JA = File.expand_path("../../../docs/EXTENSION_CAPABILITIES.ja.md", __dir__)
@@ -37,7 +39,13 @@ RSpec.describe "capability document coverage" do
   # locale-dependent read has already broken this project once.
   def read_utf8(path) = File.read(path, encoding: "UTF-8")
 
-  let(:documented) { read_utf8(CAPABILITY_DOC).scan(/^\| ([A-Z]+\d+) \|/).flatten }
+  # Through `Release.capability_rows`, which reads the id and the status
+  # from one pattern. This file had two scans of the same table and
+  # `release.rb`'s patch rule would have been a third -- the arrangement
+  # `024.216` counted six of, each reader the only reader of its own
+  # result. The two questions are different; the grammar is one.
+  let(:rows) { Release.capability_rows(read_utf8(CAPABILITY_DOC)) }
+  let(:documented) { rows.keys }
   let(:verified) do
     read_utf8(CAPABILITY_SPEC).scan(/it "([A-Z]+\d+)(?:\/([A-Z]+\d+))?:/).flatten.compact
   end
@@ -53,9 +61,14 @@ RSpec.describe "capability document coverage" do
   end
 
   it "lists no capability whose status is neither PASS nor an explicit gap" do
-    statuses = read_utf8(CAPABILITY_DOC).scan(/^\| [BHCDGSTW]\d+ \|[^|]*\|[^|]*\| ([^|]+) \|/).flatten.map(&:strip)
+    expect(rows.values.uniq).to all(match(/\A(PASS|NOT YET)\z/))
+  end
 
-    expect(statuses.uniq).to all(match(/\A(PASS|NOT YET)\z/))
+  # The reader has to have read something: an empty table satisfies every
+  # example above, and a pattern that stopped matching looks exactly like
+  # a document with nothing in it (`024.148`).
+  it "read the table it is asking about" do
+    expect(rows.length).to be > 20
   end
 
   # The Japanese pair is a translation, not a second source of truth: it

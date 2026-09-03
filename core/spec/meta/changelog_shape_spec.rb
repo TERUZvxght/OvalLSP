@@ -2,6 +2,7 @@
 
 require "json"
 require_relative "../../../scripts/changelog"
+require_relative "../../../scripts/check_changelog"
 
 # **The shape of a release's changelog entry, against inputs the real
 # files do not contain.**
@@ -86,8 +87,40 @@ RSpec.describe "the shape of a changelog entry" do
       .to include(a_string_matching(/詳細/))
   end
 
+  # **A file that opens straight on a release heading.** The split drops
+  # everything before the first heading, and a text with nothing before
+  # it has no such chunk -- so dropping one unconditionally threw the
+  # newest section away. Latent while both real files open with a title,
+  # which is exactly the kind of thing that stops being true once.
+  it "reads a section from a text that begins with one" do
+    body = "## #{prepared} - what changed\n\n- **Item 1.** What a reader would meet.\n\n### Details\n\nWhy.\n"
+
+    expect(Changelog.sections(body).map(&:version)).to eq([prepared])
+  end
+
   it "reports a file with no release section at all" do
     expect(complain("# Changelog\n\nNothing yet.\n", japanese)).not_to be_empty
+  end
+
+  # **The release being prepared is what the branch says**, when there is
+  # a release branch. `check_changelog.rb` with no `--version` is what
+  # preflight runs, and it compared the newest section with
+  # `vscode/package.json` -- so from `open` until `bump`, every commit on
+  # `release/<v>` failed preflight for writing the entry it was told to
+  # write. The branch is the evidence of what is being prepared; the
+  # package manifest is the evidence of what was last built.
+  describe "which version the newest section is measured against" do
+    it "takes it from a release branch, which knows before the manifest does" do
+      expect(CheckChangelog.expected_version(nil, "release/#{prepared}", older)).to eq(prepared)
+    end
+
+    it "takes it from the manifest anywhere else" do
+      expect(CheckChangelog.expected_version(nil, "main", older)).to eq(older)
+    end
+
+    it "lets --version override both, for a release prepared off a branch that does not say" do
+      expect(CheckChangelog.expected_version(prepared, "main", older)).to eq(prepared)
+    end
   end
 
   # **And the real files, at the version this build ships as.** The

@@ -3,6 +3,7 @@
 
 require_relative "utf8"
 require_relative "changelog"
+require_relative "repo_files"
 
 require "json"
 require "optparse"
@@ -38,6 +39,24 @@ module CheckChangelog
 
   def read(relative) = File.read(File.join(ROOT, relative), encoding: "UTF-8")
 
+  def branch
+    out = RepoFiles.capture(ROOT, %w[branch --show-current])
+    $?.success? ? out.strip : ""
+  end
+
+  # **Which version the newest section is measured against.**
+  #
+  # `--version` when given; otherwise the branch, when the branch names a
+  # release; otherwise the manifest. The branch knows before the manifest
+  # does — that is the whole gap between `open` and `bump`, and this
+  # check, running from preflight, failed every commit in it for writing
+  # the entry `open` had just told the writer to write.
+  #
+  # Pure, so the three cases can be driven without a repository.
+  def expected_version(given, branch_name, packaged)
+    given || branch_name.to_s[%r{\Arelease/(\d+\.\d+\.\d+)\z}, 1] || packaged
+  end
+
   def run(argv)
     expected = nil
     parser = OptionParser.new do |o|
@@ -45,7 +64,7 @@ module CheckChangelog
       o.on("--version VERSION", "the release being prepared, if it is not the packaged one") { |v| expected = v }
     end
     parser.parse(argv)
-    expected ||= packaged_version
+    expected = expected_version(expected, branch, packaged_version)
 
     complaints = Changelog.complaints(read(Changelog::EN), read(Changelog::JA), expected)
     if complaints.empty?

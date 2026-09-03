@@ -333,10 +333,12 @@ the previous version, had no implementation anywhere and is the one
 genuinely new check here.
 
 What is **not** driven, and deliberately: `bump`'s npm and bundler runs,
-`publish`'s handover to `release.sh`, `record`'s fetch from the
-Marketplace. `release_flow_spec` drives the refusals in front of each of
-them, so none is reached with its precondition unmet, and none of the
-actions themselves is performed by an example.
+`publish`'s handover to `release.sh`, and `record`'s fetch from the
+Marketplace — which is why `record` also takes `--served <sha256>`, the
+same answer obtained by hand, and that path *is* driven both ways.
+`release_flow_spec` drives the refusals in front of each of the three, so
+none is reached with its precondition unmet, and none of the actions
+themselves is performed by an example.
 
 ## What the mutation manifest caught in package B
 
@@ -357,6 +359,42 @@ reported as pinning nothing:
 ## 残課題
 
 未処理の指摘はこの文書ではなく `024` に書く。
+
+### Round 5 — `drive`
+
+Both scripts run end to end on a throwaway copy, and the pre-push hook
+against a bare remote with the real gitleaks 8.30.1. Thirteen findings,
+four of them enough to stop a release passing the tool at all.
+
+| # | Finding | Disposition |
+|---|---|---|
+| B1 | HIGH — the pre-push hook scanned nothing and passed. `range` was built with a leading space, gitleaks split it, git got an empty argument, and gitleaks reported `0 commits scanned / no leaks found` and exited 0. A planted `ghp_` token pushed clean. The spec's stub ignored its argv, so it could not see this. | Fixed. The range is built without a leading space, and the hook refuses a range `git rev-list` cannot resolve — gitleaks exits 0 on a git error, so an unresolvable range reads exactly like a clean scan. The stub now records its argv and an example asserts the `--log-opts` value is one git accepts. |
+| B2 | HIGH — preflight was red for the whole release window. `check_changelog.rb` with no `--version` compared the newest section with `vscode/package.json`, so every commit between `open` and `bump` failed for writing the entry `open` had just asked for. | Fixed. The branch is the evidence of what is being prepared: on `release/<v>` the expected version is `<v>`, otherwise the manifest, and `--version` overrides both. Three examples, one per case. |
+| B3 | HIGH — `gate`'s stale-version scan could never pass. It refused on five files, all history, and one class of them — the roadmap pages — is *required* by `check_site_links.rb`, which `bump` itself runs: bump demanded what gate forbade. | Fixed by making it list, not refuse. "Not history" was a human judgement in the manual step; as "anywhere but four paths" it is wrong on this tree, and a refusal with five false positives a release is `024.150`'s check that gets switched off. Same shape as preflight's non-gating `ci:` line. |
+| B4 | HIGH — `open` wrote `60-…`, not `060-…`. The width is what `agents_card_spec`'s pattern, the map's "highest-numbered `NNN-*.md`" and `check_release_pointers.rb`'s lexical sort rest on; `061-` would have sorted before `60-` for ever. | Fixed with `%03d`. |
+| B5 | MEDIUM — `open` did not require `main`, so on a feature branch it cut the release from that branch's work — while its own refusal text says a release starts from what has shipped. | Fixed. It refuses unless the branch is `main` or HEAD equals `origin/main`, naming `git checkout main`. A missing `origin/main` is one fewer way to say yes, not permission. |
+| B6 | MEDIUM — `gate` fingerprinted the index but ran preflight over the working tree and accepted a dirty one, and `bump` said "nothing is committed … then: gate". Followed literally: gate passes, `release.sh` refuses the dirty tree, committing moves the index, publish refuses, gate runs again. | Fixed. `gate` refuses a dirty tree naming the files, so `gated` is HEAD's tree and `publish`'s comparison is about commits; `bump` now says to commit first and why. |
+| B7 | MEDIUM — the patch rule was not implemented, and the method's comment claimed it was. | Implemented. `bump` compares `docs/EXTENSION_CAPABILITIES.md` against the previous tag's copy and refuses a patch that added, removed or restatused a row. The reader is one pattern, and `capability_coverage_spec`'s two scans of the same table now read it — a third grammar for it was the thing to avoid, not a second checker. |
+| B8 | MEDIUM — `record` tagged and wrote the row before anything compared the built artifact with what is served. | Fixed. The comparison comes first and nothing is tagged without it; `--served <sha256>` takes the answer obtained by hand, and without it `curl -sSL --compressed` fetches. A tag is the one thing here that must not be rewritten. |
+| B9 | MEDIUM — the hook's message scan read `git log --all`, so a bad message on any unpushed branch refused every push of every other. | Fixed. `--messages` takes an optional range; ci.yml keeps the whole-history form by passing nothing. One implementation, two callers. |
+| B10 | MEDIUM — `bump` rewrote eight files and then refused for a roadmap section `open` had never mentioned. | Fixed. `open` names the roadmap pages alongside the changelog sections. |
+| B11 | LOW — `Changelog.sections` dropped the first chunk unconditionally, so a text opening on a release heading lost its newest section. | Fixed: it keeps the chunks that carry a heading. |
+| B12 | LOW — the checklist said `gate` passes `--version`; `bump` does. And `059` implied `record`'s fetch existed. | Both sentences corrected. |
+| B13 | LOW — `entry_titles` rescued everything into "TODO". | Fixed: the rescue is gone. `targeted` has just parsed the same register, so the branch could only have hidden a real failure. |
+
+**The measurement.** Re-running both drive scripts against the fixed
+tree, with the real gitleaks 8.30.1: the release drive reaches `gate`'s
+own checks instead of stopping at a false refusal, `open` writes
+`060-0.3.4-…`, `check_changelog.rb` between `open` and `bump` is green,
+and the stale-version list prints the five history files without
+refusing. The push drive refuses a planted `ghp_` token — exit 1, from
+gitleaks, over a range git resolved — where before the fix it exited 0
+having scanned nothing.
+
+Forty-six mutations are pinned for this task now. One of round 5's was
+reported as pinning nothing: the patch-rule mutation disabled the gate
+while its example called the comparison behind it directly, so an
+example that drives the gate was added.
 
 ## What is still owed
 

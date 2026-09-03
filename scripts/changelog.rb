@@ -47,8 +47,12 @@ module Changelog
 
   module_function
 
+  # **Chunks that are sections**, rather than "everything but the first".
+  # A file opening straight on a release heading has no preamble chunk,
+  # so dropping one unconditionally threw its newest section away --
+  # latent only because both real files open with a title.
   def sections(markdown)
-    markdown.split(SPLIT).drop(1).map do |block|
+    markdown.split(SPLIT).select { |block| block.match?(HEADING) }.map do |block|
       summary, details = block.split(/^(?=### )/, 2)
       Section.new(version: block[HEADING, 1], heading: block.lines.first.to_s.strip,
                   summary: summary.to_s, details: details.to_s)

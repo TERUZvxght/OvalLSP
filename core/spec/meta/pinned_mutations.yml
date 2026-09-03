@@ -323,8 +323,8 @@
   example: "reads a file with stray bytes rather than dropping it from the scan"
 - why: "the annotated-tag half of the message scan -- 024.190, a hand-written body pushed to the public remote that neither the tree scan nor the commit scan nor gitleaks reads."
   file: scripts/check_home_paths.rb
-  from: "    commit_offences + tag_offences\n"
-  to: "    commit_offences\n"
+  from: "    commit_offences(range) + tag_offences\n"
+  to: "    commit_offences(range)\n"
   spec: spec/meta/home_path_guard_spec.rb
   example: "reports the tag half under --messages, not only when asked directly"
 - why: "utf8's internal encoding -- 024.208, the half of the locale fix nothing pinned: without it an inherited RUBYOPT -E transcodes every read and a UTF-8 needle stops comparing."
@@ -1125,10 +1125,10 @@
   example: "sees a trigger file changed and not yet committed"
 - why: "A release branch starts from a clean tree; without the refusal `open` branches over work in flight and carries it into the release."
   file: scripts/release.rb
-  from: "    unless dirty.empty?\n"
-  to: "    unless true\n"
+  from: "    unless dirty.empty?\n      raise Refused, \"the tree is not clean, and a release branch starts from what has shipped:\\n\" \\\n"
+  to: "    unless true\n      raise Refused, \"the tree is not clean, and a release branch starts from what has shipped:\\n\" \\\n"
   spec: spec/meta/release_flow_spec.rb
-  example: "refuses a tree that is not clean"
+  example: "refuses a tree that is not clean before it branches"
 - why: "`--accept` states why the release does not owe the entry; without the requirement an entry is skipped rather than accepted, and nothing records the decision."
   file: scripts/release.rb
   from: "    raise Refused, \"--accept #{number} needs --reason: say why #{version} does not owe it.\" if reason.to_s.strip.empty?\n"
@@ -1143,7 +1143,67 @@
   example: "refuses when the index moved after it was gated"
 - why: "The version before this one may not stand outside the four places history belongs; this was the fourth manual step the checklist asked a person to do."
   file: scripts/release.rb
-  from: "    return if stale.empty?\n"
-  to: "    return if true\n"
+  from: "  def stale_version_mentions(version)\n"
+  to: "  def stale_version_mentions(version)\n    return []\n"
   spec: spec/meta/release_flow_spec.rb
-  example: "names a file still carrying the version before it"
+  example: "lists a file still carrying the version before it"
+- why: "The pre-push range is built without a leading space; with one, gitleaks splits it, git gets an empty argument, and 8.30.1 reports `0 commits scanned, no leaks found` and exits 0."
+  file: scripts/preflight.rb
+  from: "      if [ -z \"$range\" ]; then range=\"$entry\"; else range=\"$range $entry\"; fi\n"
+  to: "      range=\"$range $entry\"\n"
+  spec: spec/meta/prepush_hook_spec.rb
+  example: "hands gitleaks a range git can read"
+- why: "The hook refuses a range git cannot resolve; gitleaks exits 0 on a git error, so a range naming nothing reads exactly like a clean scan."
+  file: scripts/preflight.rb
+  from: "    if ! git rev-list --quiet $range >/dev/null 2>&1; then\n"
+  to: "    if false; then\n"
+  spec: spec/meta/prepush_hook_spec.rb
+  example: "refuses a range git cannot resolve rather than scanning nothing"
+- why: "The message scan reads the outgoing range, not every local ref; without it a bad message on any unpushed branch refuses every push of every other one."
+  file: scripts/check_home_paths.rb
+  from: "    selector = range.to_s.empty? ? [\"--all\"] : range.to_s.split\n"
+  to: "    selector = [\"--all\"]\n"
+  spec: spec/meta/prepush_hook_spec.rb
+  example: "ignores a bad message on a branch this push does not carry"
+- why: "The release being prepared is what the branch says; measuring against the manifest instead failed preflight on every commit between open and bump."
+  file: scripts/check_changelog.rb
+  from: "    given || branch_name.to_s[%r{\\Arelease/(\\d+\\.\\d+\\.\\d+)\\z}, 1] || packaged\n"
+  to: "    given || packaged\n"
+  spec: spec/meta/changelog_shape_spec.rb
+  example: "takes it from a release branch, which knows before the manifest does"
+- why: "A section is a chunk that carries a heading; dropping the first chunk unconditionally throws away the newest section of a text that opens on one."
+  file: scripts/changelog.rb
+  from: "    markdown.split(SPLIT).select { |block| block.match?(HEADING) }.map do |block|\n"
+  to: "    markdown.split(SPLIT).drop(1).map do |block|\n"
+  spec: spec/meta/changelog_shape_spec.rb
+  example: "reads a section from a text that begins with one"
+- why: "The record's number is zero-padded to three digits; unpadded, `60-` sorts after `061-` for ever in every reader that sorts these lexically."
+  file: scripts/release.rb
+  from: "    next_number = format(\"%03d\", numbers.max.to_i + 1)\n"
+  to: "    next_number = (numbers.max.to_i + 1).to_s\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "numbers the record it writes to three digits"
+- why: "A release branches from main; without the refusal `open` cuts it from whatever branch it was run on, which is the work that has not shipped."
+  file: scripts/release.rb
+  from: "    refuse_off_main\n"
+  to: ""
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses to branch from anything but main"
+- why: "`gate` refuses a dirty tree, so what it gates is what publish sends; without it gate fingerprints the index, release.sh refuses the dirty tree, and committing then invalidates the gate."
+  file: scripts/release.rb
+  from: "    unless dirty.empty?\n      raise Refused, \"the tree is not clean, and what is gated must be what is published:\\n\" \\\n"
+  to: "    unless true\n      raise Refused, \"the tree is not clean, and what is gated must be what is published:\\n\" \\\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses a tree that is not clean, naming what is uncommitted"
+- why: "A patch moves no capability row, which is what docs/PUBLISHING.md's standing permission is granted for; nothing compared the table against the previous tag."
+  file: scripts/release.rb
+  from: "    return refuse_moved_capabilities(version) if patch?(version)\n"
+  to: "    return if patch?(version)\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses the bump of a patch that moved one"
+- why: "The built artifact is compared with what is served before anything is tagged; a tag is the one thing here that must not be rewritten."
+  file: scripts/release.rb
+  from: "    unless published == digest\n"
+  to: "    unless true\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses when what was served does not match what was built"
