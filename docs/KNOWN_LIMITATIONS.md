@@ -474,13 +474,6 @@ editor session on every push, alongside the repository copy. That covers
 the bundled-Core load path, which is where the packaged build has
 actually broken before.
 
-What it does not cover is the platform. That run is on Linux, so the
-**darwin-arm64** native extensions you actually install are still only
-exercised at publish time, by a smoke test that checks hover, go to
-definition and a clean shutdown. A defect specific to the macOS build is
-therefore still caught at publish rather than in
-review. <!-- documents: 024.283 -->
-
 ## What a version mismatch actually does
 
 **It tells you, and then carries on** — for the mismatches found *after*

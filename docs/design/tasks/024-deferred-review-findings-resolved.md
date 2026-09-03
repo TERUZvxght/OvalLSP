@@ -16225,6 +16225,49 @@ old ones.
 `preflight` runs nothing under `vscode/` and cannot see a red CI, which
 is the state this session worked in for a day. `024.284`.
 
+## 024.283 The packaged Core is driven only on Linux, so the macOS build is still smoke-tested
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: yes
+target: 0.3.2
+```
+
+**Area:** `.github/workflows/ci.yml`
+
+The residue of `024.125`. That entry is closed because the packaged
+*layout* — the Core inside the extension, runtime gems vendored — is now
+driven through a full editor session on every push. The runner is
+`ubuntu-latest`, so what is driven has **Linux** native extensions.
+
+The VSIX that is published is `darwin-arm64`, and its native extensions
+are still exercised only by `vsix_semantic_smoke.rb` at publish time and
+by hand. `023.5` was specifically a darwin-arm64 packaging and update
+regression, so this is the half of `024.125`'s risk that survives its
+fix, not a hypothetical.
+
+Published in `KNOWN_LIMITATIONS` in both languages, which is what
+`024.125`'s paragraph became rather than being deleted: the section it
+had was correct about a gap and wrong about which one.
+
+**Direction.** A macOS runner for the packaged integration job is the
+obvious answer and is not free — `macos-latest` minutes are billed at a
+multiple of Linux, and this job downloads VS Code and vendors gems. It
+is also entangled with `024.R4`, which is about publishing more than one
+platform at all: if a second target is ever published, this job has to
+run per target rather than once, and deciding that first avoids building
+the one-target version twice. Targeted at 0.3.0 for that reason rather
+than because the risk is small.
+
+
+**Retargeted to 0.3.2 in 0.3.0's closing sweep.** Driving the
+packaged Core on the platform it is published for is a gap against
+what `024.125` already claimed.
+
+**Fixed in 0.3.2.** A `macos-packaged` job runs `copy-core` on an Apple Silicon runner -- compiling prism and rbs for darwin-arm64, which is the thing that was never built in CI -- checks `PLATFORM_MANIFEST.json` says so rather than trusting the runner, and drives the result through `vsix_semantic_smoke.rb`, the publish gate's own test. The manifest check is what stops a green run that vendored Linux from looking identical to one that did the job. Driven locally before being written: the smoke test refused a relative path, because `require_relative` resolves against the script rather than the caller, so it now expands the argument -- `release.sh` always passed an absolute one and nothing else had ever called it.
+
 ## 024.284 Nothing local can see that CI is red, and preflight does not run the extension
 
 ```yaml

@@ -455,7 +455,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.280`](024-deferred-review-findings-resolved.md#024280-renaming-a-local-bound-by-a-regexp-named-capture-leaves-the-capture-silently) | fixed | 0.2.18 | Renaming a local bound by a regexp named capture leaves the capture,… |
 | [`024.281`](024-deferred-review-findings-resolved.md#024281-the-erb-integration-test-asserted-an-answer-the-engine-correctly-declines) | fixed | 0.2.17 | The `.erb` integration test asserted an answer the engine correctly … |
 | [`024.282`](024-deferred-review-findings-resolved.md#024282-ci-was-red-on-main-for-a-week-and-nothing-in-the-tree-said-so) | fixed | 0.2.17 | CI was red on `main` for a week and nothing in the tree said so |
-| [`024.283`](#024283-the-packaged-core-is-driven-only-on-linux-so-the-macos-build-is-still-smoke-tested) | open | 0.3.2 | The packaged Core is driven only on Linux, so the macOS build is sti… |
+| [`024.283`](024-deferred-review-findings-resolved.md#024283-the-packaged-core-is-driven-only-on-linux-so-the-macos-build-is-still-smoke-tested) | fixed | 0.3.2 | The packaged Core is driven only on Linux, so the macOS build is sti… |
 | [`024.284`](024-deferred-review-findings-resolved.md#024284-nothing-local-can-see-that-ci-is-red-and-preflight-does-not-run-the-extension) | fixed | 0.2.18 | Nothing local can see that CI is red, and preflight does not run the… |
 | [`024.285`](024-deferred-review-findings-resolved.md#024285-three-interpreter-sessions-resolved-against-whatever-the-machine-had-installed) | fixed | 0.2.17 | Three interpreter sessions resolved against whatever the machine had… |
 | [`024.286`](024-deferred-review-findings-resolved.md#024286-a-session-recorded-on-one-ruby-was-compared-against-another-so-the-3-3-job-called-true-answers-wrong) | fixed | 0.2.17 | A session recorded on one Ruby was compared against another, so the … |
@@ -4161,45 +4161,6 @@ ordinary work in whatever release that is.
 
 
 **Retargeted to 0.3.2.** An assertion that fails sometimes is either a defect in the product or a defect in the test, and leaving it unscheduled is how it stays neither. 0.3.0 attached a self-recording report to the assertion, so the next reproduction carries the value nobody has seen; 0.3.2 is when that evidence is read, and if it has still not fired the entry is a candidate for closure as unreproducible rather than for another wait.
-## 024.283 The packaged Core is driven only on Linux, so the macOS build is still smoke-tested
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.2
-```
-
-**Area:** `.github/workflows/ci.yml`
-
-The residue of `024.125`. That entry is closed because the packaged
-*layout* — the Core inside the extension, runtime gems vendored — is now
-driven through a full editor session on every push. The runner is
-`ubuntu-latest`, so what is driven has **Linux** native extensions.
-
-The VSIX that is published is `darwin-arm64`, and its native extensions
-are still exercised only by `vsix_semantic_smoke.rb` at publish time and
-by hand. `023.5` was specifically a darwin-arm64 packaging and update
-regression, so this is the half of `024.125`'s risk that survives its
-fix, not a hypothetical.
-
-Published in `KNOWN_LIMITATIONS` in both languages, which is what
-`024.125`'s paragraph became rather than being deleted: the section it
-had was correct about a gap and wrong about which one.
-
-**Direction.** A macOS runner for the packaged integration job is the
-obvious answer and is not free — `macos-latest` minutes are billed at a
-multiple of Linux, and this job downloads VS Code and vendors gems. It
-is also entangled with `024.R4`, which is about publishing more than one
-platform at all: if a second target is ever published, this job has to
-run per target rather than once, and deciding that first avoids building
-the one-target version twice. Targeted at 0.3.0 for that reason rather
-than because the risk is small.
-
-
-**Retargeted to 0.3.2 in 0.3.0's closing sweep.** Driving the
-packaged Core on the platform it is published for is a gap against
-what `024.125` already claimed.
 ## 024.289 A class that includes an unread module is not checked at class level, so a typo there is silent
 
 ```yaml

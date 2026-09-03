@@ -91,6 +91,12 @@ def check_stderr_for_forbidden_content!(stderr_output)
 end
 
 extension_root = ARGV[0] or fail!("usage: vsix_semantic_smoke.rb <unpacked-vsix-extension-dir>")
+# **Absolute, because `require_relative` below resolves against this
+# file and not against the caller's directory.** Given `vscode` it
+# looked for `scripts/vscode/core/lib/...` and failed with a LoadError
+# that names a path nobody passed. `release.sh` always passes an
+# absolute path, so this only bit the first caller that did not.
+extension_root = File.expand_path(extension_root)
 core_root = File.join(extension_root, "core")
 core_bin = File.join(core_root, "bin", "ovallsp")
 bundle_environment_lib = File.join(core_root, "lib", "ovallsp", "bundle_environment.rb")
