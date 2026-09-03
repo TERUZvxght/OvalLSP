@@ -372,7 +372,7 @@ four of them enough to stop a release passing the tool at all.
 | B2 | HIGH — preflight was red for the whole release window. `check_changelog.rb` with no `--version` compared the newest section with `vscode/package.json`, so every commit between `open` and `bump` failed for writing the entry `open` had just asked for. | Fixed. The branch is the evidence of what is being prepared: on `release/<v>` the expected version is `<v>`, otherwise the manifest, and `--version` overrides both. Three examples, one per case. |
 | B3 | HIGH — `gate`'s stale-version scan could never pass. It refused on five files, all history, and one class of them — the roadmap pages — is *required* by `check_site_links.rb`, which `bump` itself runs: bump demanded what gate forbade. | Fixed by making it list, not refuse. "Not history" was a human judgement in the manual step; as "anywhere but four paths" it is wrong on this tree, and a refusal with five false positives a release is `024.150`'s check that gets switched off. Same shape as preflight's non-gating `ci:` line. |
 | B4 | HIGH — `open` wrote `60-…`, not `060-…`. The width is what `agents_card_spec`'s pattern, the map's "highest-numbered `NNN-*.md`" and `check_release_pointers.rb`'s lexical sort rest on; `061-` would have sorted before `60-` for ever. | Fixed with `%03d`. |
-| B5 | MEDIUM — `open` did not require `main`, so on a feature branch it cut the release from that branch's work — while its own refusal text says a release starts from what has shipped. | Fixed. It refuses unless the branch is `main` or HEAD equals `origin/main`, naming `git checkout main`. A missing `origin/main` is one fewer way to say yes, not permission. |
+| B5 | MEDIUM — `open` did not require `main`, so on a feature branch it cut the release from that branch's work — while its own refusal text says a release starts from what has shipped. | Fixed. It refuses unless the branch is `main` or HEAD equals `origin/main`, naming `git checkout main`; a missing `origin/main` is one fewer way to say yes, not permission. The rule is about the commit, not the name — a branch sitting on exactly what has shipped *is* what has shipped, which is why the drive's `feature-x` is allowed and a branch with commits of its own is not. |
 | B6 | MEDIUM — `gate` fingerprinted the index but ran preflight over the working tree and accepted a dirty one, and `bump` said "nothing is committed … then: gate". Followed literally: gate passes, `release.sh` refuses the dirty tree, committing moves the index, publish refuses, gate runs again. | Fixed. `gate` refuses a dirty tree naming the files, so `gated` is HEAD's tree and `publish`'s comparison is about commits; `bump` now says to commit first and why. |
 | B7 | MEDIUM — the patch rule was not implemented, and the method's comment claimed it was. | Implemented. `bump` compares `docs/EXTENSION_CAPABILITIES.md` against the previous tag's copy and refuses a patch that added, removed or restatused a row. The reader is one pattern, and `capability_coverage_spec`'s two scans of the same table now read it — a third grammar for it was the thing to avoid, not a second checker. |
 | B8 | MEDIUM — `record` tagged and wrote the row before anything compared the built artifact with what is served. | Fixed. The comparison comes first and nothing is tagged without it; `--served <sha256>` takes the answer obtained by hand, and without it `curl -sSL --compressed` fetches. A tag is the one thing here that must not be rewritten. |
@@ -382,19 +382,55 @@ four of them enough to stop a release passing the tool at all.
 | B12 | LOW — the checklist said `gate` passes `--version`; `bump` does. And `059` implied `record`'s fetch existed. | Both sentences corrected. |
 | B13 | LOW — `entry_titles` rescued everything into "TODO". | Fixed: the rescue is gone. `targeted` has just parsed the same register, so the branch could only have hidden a real failure. |
 
-**The measurement.** Re-running both drive scripts against the fixed
-tree, with the real gitleaks 8.30.1: the release drive reaches `gate`'s
-own checks instead of stopping at a false refusal, `open` writes
-`060-0.3.4-…`, `check_changelog.rb` between `open` and `bump` is green,
-and the stale-version list prints the five history files without
-refusing. The push drive refuses a planted `ghp_` token — exit 1, from
-gitleaks, over a range git resolved — where before the fix it exited 0
-having scanned nothing.
+**The measurement, run on both sides.** Both drive scripts, against the
+tree before the fixes (`6a106bd`) and after, with the real gitleaks
+8.30.1.
+
+The pre-push hook, before:
+
+    ERR [git] fatal: ambiguous argument '': unknown revision or path...
+    INF 0 commits scanned.
+
+on every push, clean or not. After, the same pushes scan 1, 3, 1 and 2
+commits, and a push carrying a real token is refused:
+
+    INF 2 commits scanned.
+    WRN leaks found: 1
+    pre-push: gitleaks reported something in the outgoing range. Nothing was pushed.
+
+with the branch absent from the remote afterwards.
+
+**One correction to the finding.** The token the drive plants —
+`ghp_` followed by the alphabet and the digits in order — is not a leak
+gitleaks reports, under this repository's config *or* under gitleaks'
+own default: the rule carries an entropy floor and a sequential string
+does not clear it. So "a commit containing a planted `ghp_` token pushed
+with exit 0" was two separate things, and only one of them was the
+hook's: it really did scan nothing, and that is fixed and shown above;
+the token really is not a finding. The refusal above is against a
+random one. A drive whose plant the tool does not recognise reports what
+a working tool reports, which is this task's own recurring shape
+arriving in the reproduction rather than in the code.
+
+The release drive, after: `open` writes `060-0.3.4-…`,
+`check_changelog.rb` between `open` and `bump` is green where it was
+red, `open` names the roadmap pages, and the stale-version list prints
+the five history files without refusing.
+
+**And the drive found one more, which is fixed here too**: `bump`
+refused with a bare `fatal: invalid object name 'v0.3.3'` in a clone
+with no tags. A refusal that does not name what clears it is the thing
+this round is about; it names `git fetch --tags` now, and refuses rather
+than passing, because a comparison that cannot be made is not one that
+found nothing.
 
 Forty-six mutations are pinned for this task now. One of round 5's was
 reported as pinning nothing: the patch-rule mutation disabled the gate
 while its example called the comparison behind it directly, so an
-example that drives the gate was added.
+example that drives the gate was added. The branch rule gained two more
+examples for the same reason — the drive's feature branch sits exactly
+on `origin/main`, so allowing it is correct, and nothing had pinned the
+case where the branch has actually moved.
 
 ## What is still owed
 
