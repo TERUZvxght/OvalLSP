@@ -532,7 +532,7 @@ clears it" as a rule, and these are the three places the rule was
 applied to the common case and not to the edge — a second run, a branch
 in the other direction, a second acceptance. The countermeasure is not
 another rule; it is that each of those refusals now has an example
-asserting the *message*, not the exit code, which is what round 5's C-2
+asserting the *message*, not the exit code, which is what round 5's B5
 and round 6's C2 also ended up needing.
 
 ## What is still owed
