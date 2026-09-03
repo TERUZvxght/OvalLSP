@@ -33,7 +33,7 @@ module Ovallsp
   # Three independent reimplementations of one three-line contract, two of
   # them wrong, is the architecture allowing the class of bug rather than
   # any one site being careless -- so the contract lives here once and
-  # every site calls it (CLAUDE.md: "fix the underlying design, not the
+  # every site calls it (docs/CODE_DISCIPLINE.md: "fix the underlying design, not the
   # symptom"; "when a review finding implies the architecture allows this
   # class of bug, fix the architecture").
   module ChildProcess
@@ -63,7 +63,7 @@ module Ovallsp
     # holds a specific child's pid. Refused rather than trusted, because
     # trusting every call site to be right is the arrangement that let a
     # spec's fabricated `"/x"` delete `/Applications` -- the lesson
-    # recorded in CLAUDE.md is to contain the dangerous operation where it
+    # recorded in docs/CODE_DISCIPLINE.md is to contain the dangerous operation where it
     # happens. A spec fabricating `0` as a plausible pid is what found
     # this one, by killing the rspec process.
     #

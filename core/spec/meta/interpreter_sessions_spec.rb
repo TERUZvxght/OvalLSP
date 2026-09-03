@@ -2,9 +2,9 @@
 
 require "open3"
 
-# `024.220`. `CLAUDE.md` requires a claim about Ruby's semantics to be taken
-# from Ruby, run, and pasted "so the next reader can see what the expectation
-# rests on rather than trusting that somebody checked". The rule works. What it
+# `024.220`. `docs/CODE_DISCIPLINE.md` requires a claim about Ruby's semantics to be
+# taken from Ruby, run, and pasted, so the next reader can see what the
+# expectation rests on rather than trusting that somebody checked. The rule works. What it
 # produced was 72 sessions of inert text: a mis-transcribed result, a session
 # edited out of agreement with the code beside it, and a session that stops
 # being true on a later Ruby all read exactly like a correct one.

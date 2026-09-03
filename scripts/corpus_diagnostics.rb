@@ -34,7 +34,7 @@ require_relative "repo_files"
 # two `corpus-sha256` lines must be identical and the two `revision`
 # lines must not be -- which is, between them, every one of the five
 # false results `026` records. One measurement at a time, in the
-# foreground, per `CLAUDE.md`.
+# foreground, per `docs/MEASURING.md`.
 #
 # `--expect-control=unresolved-constant:9550` states before the run what
 # a category the change cannot affect must come out at, and fails the run
@@ -86,7 +86,7 @@ require "ovallsp"
 # one of them (`024.166`): `026-0.2.1-review-loop.md`'s table has
 # **three** -- a diff computed from a file still being written, a diff
 # between two *different* corpora, and a `cd` that persisted so both
-# sides ran from the same worktree -- and `CLAUDE.md` carries the other
+# sides ran from the same worktree -- and `docs/MEASURING.md` carries the other
 # two from 0.2.1's last day, both from backgrounding: two processes
 # writing the same output files, and a rewritten script that left both
 # sides in the baseline tree. Not one would have been caught by
@@ -95,7 +95,7 @@ require "ovallsp"
 #
 # So the run states what it is, on **stderr** -- the stream being diffed
 # is stdout and must stay exactly as it was. Print the thing you are
-# asserting, which is `CLAUDE.md`'s rule; this makes it automatic rather
+# asserting, which is `docs/MEASURING.md`'s rule; this makes it automatic rather
 # than remembered.
 def provenance(key, value) = warn("corpus-diagnostics: #{key}=#{value}")
 

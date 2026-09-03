@@ -339,7 +339,7 @@ module Ovallsp
     # question by the one caller that has a nesting to give -- and 0.2.10
     # shipped a `nesting:` parameter on `#resolve_type_name` as well,
     # which no caller ever passed. An unreachable branch is a defect in
-    # its own right (CLAUDE.md), and it was carrying the comment that
+    # its own right (docs/CODE_DISCIPLINE.md), and it was carrying the comment that
     # argued it was not 024.47. Removed; this is where the rule lives.
     def nested_type_name(name, nesting: [])
       @mutex.synchronize { nested_type_symbol_locked(name, nesting)&.name }

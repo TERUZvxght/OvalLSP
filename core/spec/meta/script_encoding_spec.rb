@@ -15,7 +15,7 @@ require "tmpdir"
 # raises `invalid byte sequence in US-ASCII`.
 #
 # This tree is substantially non-ASCII: the Japanese documents, the
-# Japanese halves of KNOWN_LIMITATIONS, SUPPORT_MATRIX and CONTRIBUTING,
+# Japanese halves of KNOWN_LIMITATIONS and SUPPORT_MATRIX,
 # and the Japanese failure messages the suite prints. So a script here
 # meets it as soon as anyone runs it outside an interactive shell.
 #
@@ -29,7 +29,7 @@ require "tmpdir"
 # (Task 023.8, running the release gate under a locale-less shell),
 # `preflight.rb`, `documented_counts.rb`, and a hand-run probe. Each fix
 # was correct, local, and no help at all to the fifth call site.
-# `CLAUDE.md`'s rule says the third occurrence buys a countermeasure
+# `docs/REVIEW_LOOP.md`'s rule says the third occurrence buys a countermeasure
 # rather than a third fix; this is the fourth.
 RSpec.describe "scripts and the invoking shell's locale" do
   SCRIPT_ENCODING_ROOT = File.expand_path("../../..", __dir__)

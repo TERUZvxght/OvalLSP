@@ -709,7 +709,7 @@ RSpec.describe Ovallsp::ParserService do
   # Contained here, where the recursion is, rather than at each caller:
   # `Server#dispatch`, the cold indexer and `scripts/corpus_diagnostics.rb`
   # each had their own rescue and each was individually plausible, which
-  # is the shape CLAUDE.md's containment rule is about.
+  # is the shape docs/CODE_DISCIPLINE.md's containment rule is about.
   #
   # Measured before choosing the depth: a `.succ` chain fails at 2104,
   # nested hashes at 1147, nested `if` at 1145. 0 of 4582 `.rb` files

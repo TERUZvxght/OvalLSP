@@ -198,7 +198,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
   #
   # Found by the hunk-by-hunk sweep, not by review: the decrement in
   # `WorkspaceIndex#remove_file_locked` could be reverted with the whole
-  # suite still green, which CLAUDE.md counts as a defect in its own
+  # suite still green, which docs/CODE_DISCIPLINE.md counts as a defect in its own
   # right. `#replace_file` removes and re-adds, so re-indexing an edited
   # file runs the same path.
   it "closes the surface again when the macro is edited away" do

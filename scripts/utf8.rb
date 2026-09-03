@@ -2,7 +2,7 @@
 
 # Every script in this directory reads this tree, and this tree is
 # substantially non-ASCII: the Japanese documents, the Japanese halves of
-# `KNOWN_LIMITATIONS`, `SUPPORT_MATRIX` and `CONTRIBUTING`, and the
+# `KNOWN_LIMITATIONS` and `SUPPORT_MATRIX`, and the
 # Japanese failure messages the suite prints.
 #
 # Ruby hands back a String in `Encoding.default_external`, which is

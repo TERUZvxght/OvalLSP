@@ -31,7 +31,7 @@ require "rbconfig"
 #   bundle exec ruby ../scripts/measure_arity_recall.rb lib
 #
 # The generated probe goes in a `Dir.mktmpdir`, never into the tree being
-# measured: `CLAUDE.md`'s rule about fabricated paths and destructive
+# measured: `docs/CODE_DISCIPLINE.md`'s rule about fabricated paths and destructive
 # code applies to generated files too, and a probe left behind would be
 # indexed by the next run as if it were the subject's own code.
 module ArityRecall

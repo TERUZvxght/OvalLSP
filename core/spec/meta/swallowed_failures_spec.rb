@@ -8,8 +8,8 @@ require "tmpdir"
 #
 # That is the whole mechanism, and it is deliberately not "no rescue may
 # swallow". A rule saying that would have had 111 exceptions on the day
-# it was written, which is the arrangement `CLAUDE.md`'s preamble warns
-# about. What this enforces is that **the decision is made**: writing a
+# it was written, which is the arrangement section 0.6 warns
+# about: a rule serving itself rather than the goal. What this enforces is that **the decision is made**: writing a
 # rescue means writing down what happens to the failure, in a file a
 # reviewer reads.
 #

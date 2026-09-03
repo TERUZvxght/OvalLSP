@@ -1963,7 +1963,7 @@ RSpec.describe Ovallsp::LocalInferencer do
 
   # One fixture per parameter shape the seed has to cover. `posts` had one
   # and the other three did not, and this is the "adds a whole method
-  # wholesale" hunk CLAUDE.md warns the sweep is blind to: reverting it
+  # wholesale" hunk docs/CODE_DISCIPLINE.md warns the sweep is blind to: reverting it
   # proves only that the method exists.
   {
     "an optional parameter" => ["def go(alpha = 1)\n  \nend\n", "alpha"],

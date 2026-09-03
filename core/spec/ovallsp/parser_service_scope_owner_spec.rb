@@ -21,7 +21,7 @@
 # deliberately. Every existing spec covering this code used a top-level
 # `Widget`/`User`, where the last segment and the qualified name are the
 # same string and both branches answer identically -- so the line was
-# unpinned, in CLAUDE.md's sense, and reverting the fix left the suite
+# unpinned, in docs/CODE_DISCIPLINE.md's sense, and reverting the fix left the suite
 # green.
 RSpec.describe "Ovallsp::ParserService: a scope's Relation names the owner it belongs to" do
   def relation_arg_for(source, method_name)

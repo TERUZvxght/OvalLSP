@@ -471,7 +471,7 @@ puts "check-doc-links: unnameable-documents=#{unnameable.length}" \
 
 # It fails rather than reporting, because the sentence below is the whole
 # output of this check and it cannot be said about a file that was not
-# read. `CLAUDE.md`'s test for a swallowed failure is not "is this
+# read. `docs/CODE_DISCIPLINE.md`'s test for a swallowed failure is not "is this
 # failure important" but "does the fallback let a caller assert
 # something" -- and here the caller asserts *every* path resolves.
 unless unreadable.empty?

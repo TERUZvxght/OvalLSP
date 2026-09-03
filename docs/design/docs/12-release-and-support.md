@@ -129,6 +129,8 @@ enum・scope・delegate)の型推論、RBS/RBI連携、opt-inのruntime型観測
 
 ## Changelog / migration guide
 
-このプロジェクトは現時点で1.0未リリース。`docs/RELEASE_CHECKLIST.md`の
-全項目が判定可能になった時点で1.0候補とする。1.0以降のCHANGELOGは
-`CHANGELOG.md`(リリース準備の一環として新設予定)で管理する。
+このプロジェクトは現時点で1.0未リリース。1.0.0の条件は
+`docs/design/docs/01-product-requirements.md`の0節と`docs/PUBLISHING.md`が
+定める。CHANGELOGは`vscode/CHANGELOG.md`と`.ja.md`にあり(0.1.x以降)、
+`docs/PUBLISHING.md`の定めるとおり両changelogがrelease noteで、GitHub
+Releaseは1.0.0まで作らない。

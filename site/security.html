@@ -280,6 +280,32 @@
     </div>
   </section>
 
+<section class="section" id="incident">
+  <div class="wrap wrap--narrow prose">
+    <span class="eyebrow">A past incident</span>
+    <h2>Source checkouts between 2026-08-05 and 2026-08-11</h2>
+    <p>
+      <strong>If you cloned or checked out the repository in that window and ran the Core test
+      suite, it deleted directories outside the repository.</strong> A cache-pruning example
+      passed a fabricated absolute path to code that removes directories; the sweep resolved to
+      the filesystem root, kept the most recently modified entry and removed the rest, so on
+      macOS <code>/Applications</code> was emptied of anything not protected by SIP. Every error
+      was swallowed by the method under test, so the run reported success.
+    </p>
+    <p>
+      Affected commits are <code>28a041c</code> (2026-08-05) through the fix; tag
+      <code>v0.2.1</code> contains them. Reinstall from Time Machine or from the applications'
+      own installers — nothing in the repository can recover them.
+    </p>
+    <p>
+      <strong>The published extension was never affected.</strong> The test suite is excluded
+      from the VSIX, and the one production caller derives both paths from the same cache root,
+      so the sweep could not leave it. Only running the repository's test suite from a source
+      checkout could reach it.
+    </p>
+  </div>
+</section>
+
   <section class="section" id="reporting">
     <div class="wrap wrap--narrow prose">
       <span class="eyebrow">Reporting</span>
@@ -351,8 +377,6 @@
         <ul>
           <li><a href="https://github.com/TERUZvxght/OvalLSP">GitHub</a></li>
           <li><a href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Marketplace</a></li>
-          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.md">Support</a></li>
-          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CODE_OF_CONDUCT.md">Code of conduct</a></li>
         </ul>
       </div>
     </div>

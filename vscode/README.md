@@ -249,7 +249,11 @@ model above.
 
 ## Support
 
-See [SUPPORT.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.md).
+External issues and pull requests are not accepted during the Preview; the
+repository's [README](https://github.com/TERUZvxght/OvalLSP/blob/main/README.md)
+says why, and 1.0.0 is where that changes. The Troubleshooting section
+above covers the common cases, and security reports go through
+[SECURITY.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.md).
 
 ## License
 

@@ -246,6 +246,24 @@
     </div>
   </section>
 
+<section class="section" id="incident">
+  <div class="wrap wrap--narrow prose">
+    <span class="eyebrow">過去の事故</span>
+    <h2>2026-08-05 から 08-11 の間のソース checkout</h2>
+    <p>
+      <strong>この期間にリポジトリを clone または checkout して Core のテストスイートを実行した場合、リポジトリ外のディレクトリが削除されています。</strong>
+      キャッシュ削除のテスト例が、ディレクトリを削除するコードへ捏造した絶対パスを渡していました。掃除対象がファイルシステムのルートに解決され、最終更新が最も新しい 1 つを残して他を削除したため、macOS では
+      <code>/Applications</code> が SIP 保護されていないものを失いました。テスト対象のメソッドがすべての例外を握り潰すため、実行結果は green と報告されていました。
+    </p>
+    <p>
+      該当コミットは <code>28a041c</code>（2026-08-05）から修正までで、タグ <code>v0.2.1</code> はこれを含みます。Time Machine か各アプリのインストーラから入れ直してください。リポジトリ側で復旧できるものはありません。
+    </p>
+    <p>
+      <strong>公開済みの拡張機能は影響を受けていません。</strong> テストスイートは VSIX から除外されており、本番の唯一の呼び出し元は 2 つのパスを同じキャッシュ root から導出するため、掃除がそこから出ることはできません。到達しうるのは、ソース checkout からリポジトリのテストスイートを走らせた場合だけです。
+    </p>
+  </div>
+</section>
+
   <section class="section" id="reporting">
     <div class="wrap wrap--narrow prose">
       <span class="eyebrow">報告</span>
@@ -315,8 +333,6 @@
         <ul>
           <li><a href="https://github.com/TERUZvxght/OvalLSP">GitHub</a></li>
           <li><a href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Marketplace</a></li>
-          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md">サポート</a></li>
-          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CODE_OF_CONDUCT.ja.md">行動規範</a></li>
         </ul>
       </div>
     </div>

@@ -321,7 +321,7 @@ RSpec.describe Ovallsp::Signatures::RbiParser do
 
     # `empty_slots` is reached by every sig over a parameter-less def, and
     # nothing asserted what it contains -- reverting the whole method only
-    # proved the method existed (CLAUDE.md's named blind spot).
+    # proved the method existed (docs/CODE_DISCIPLINE.md's named blind spot).
     it "gives a sig over a parameter-less def no argument slots at all" do
       overload = overload_for(<<~RBI)
         class Foo

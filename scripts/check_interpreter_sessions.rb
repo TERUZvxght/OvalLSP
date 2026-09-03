@@ -16,9 +16,9 @@ require "ripper"
 #   ruby scripts/check_interpreter_sessions.rb --count    # just the totals
 #   ruby scripts/check_interpreter_sessions.rb --file P   # one file
 #
-# `CLAUDE.md` requires a claim about Ruby's semantics to be taken from Ruby,
-# run, and pasted "so the next reader can see what the expectation rests on
-# rather than trusting that somebody checked". The rule works -- several defects
+# `docs/CODE_DISCIPLINE.md` requires a claim about Ruby's semantics to be taken from
+# Ruby, run, and pasted, so the next reader can see what the expectation
+# rests on rather than trusting that somebody checked. The rule works -- several defects
 # were found by obeying it, and one, `0.2.8`'s `class << self` spec, was found
 # only because somebody asked the interpreter instead of believing the spec.
 #

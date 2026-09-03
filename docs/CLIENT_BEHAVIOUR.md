@@ -1,11 +1,10 @@
 # What this project relies on the editor and its client to do
 
-[日本語版](CLIENT_BEHAVIOUR.ja.md)
-
 Every behaviour OvalLSP depends on from **outside this tree** — VS Code,
 `vscode-languageclient`, the LSP specification — with the place that
 shows it. Nothing else in the tree restates one of these; they point
-here.
+here, and so does `AGENTS.md`'s "Writing code" line about where an
+expected value comes from.
 
 ## Why this file exists
 
