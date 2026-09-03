@@ -329,7 +329,7 @@ than restate it, and carry the SHA-256 from
 
 The repository does not accept issues or pull requests during the
 Preview, and the contributor-facing documents — a contributing guide, a
-code of conduct, a support page — were removed in 057 rather than kept
+code of conduct, a support page — were removed in 058 rather than kept
 stale. Reopening is a 1.0.0 item, `024.R10` in the register: the documents
 come back when there is a stable product for a contributor to work
 against, and the process documents' Japanese translations are judged again

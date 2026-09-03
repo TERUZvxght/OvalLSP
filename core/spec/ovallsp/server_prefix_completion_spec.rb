@@ -443,10 +443,13 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     end
   end
 
-  # Completion after `@` was built during 0.2.1's review loop and is
-  # deferred to 0.3.0 with its capability row. What stays is the rule
-  # below: a sigil is not a bare identifier, and the workspace sources
-  # must not answer one.
+  # Completion after `@` was built during 0.2.1's review loop and was
+  # deferred to 0.3.0 with its capability row. It answers there now
+  # (`C15`), and `@` is no longer a bound prefix -- the sigil is part of
+  # the prefix instead, which is why the `@use` row above still cannot
+  # reach `UserProfile`. What stays, for the sigils that are still bound,
+  # is the rule those rows pin: a sigil is not a bare identifier, and the
+  # workspace sources must not answer one.
 
   # `def` the keyword, not the three letters: `predef` is an ordinary
   # method call, and suppressing the workspace source for every

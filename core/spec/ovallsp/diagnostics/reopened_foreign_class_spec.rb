@@ -75,12 +75,19 @@ RSpec.describe "a workspace that reopens a class it did not originate" do
   # reported, so the chain gained a link rather than losing its edge."
   #
   # `squish` and `blank?` are activesupport's, and this engine does not
-  # index what gems define. That is `024.R7`, already scheduled for
-  # 0.3.0. Reopening is a proxy for "this project probably loads gems
+  # index what gems define. That was read as `024.R7`'s, scheduled for
+  # 0.3.0 — and `024.R7` shipped there without answering it. Measured
+  # against the release's own Rails fixture, the index held 2,078 gem
+  # classes and no core ones (`String instanceMethods=0`), because
+  # `Agent#gem_index_result` reports a module only where
+  # `const_source_location` puts it under a gem path, and a core class is
+  # not there. `024.290` records it.
+  #
+  # Reopening is a proxy for "this project probably loads gems
   # that patch core classes", and a proxy that cannot tell activesupport
-  # from `def self.foo` is not one to ship. See `024.13`.
+  # from `def self.foo` is not one to ship. See `024.13`, open at 0.4.0.
   it "says nothing about the original's methods it cannot enumerate" do
-    pending("the only fix found silences real typos; see 024.13 and 024.R7")
+    pending("the only fix found silences real typos; see 024.13")
     expect(findings([["core_ext.rb", REOPENING], ["app.rb", USES]])).to be_empty
   end
 

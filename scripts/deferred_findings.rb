@@ -185,8 +185,29 @@ end
     end
   end
 
+  # **Every open entry that is not a plan**, whatever its kind. This read
+  # `open_defects`, which filters `kind == "defect"`, so an open
+  # `friction` entry declaring `user-visible: yes` was never required to
+  # be published -- and seven of them were. `024.290` sat undocumented by
+  # this guard's reckoning while `docs/ISSUES.md`, generated down a path
+  # that does not filter, published "None. Every open user-visible entry
+  # carries a marker": two generated views of one register, disagreeing.
+  #
+  # `024.173` found and fixed this exact filter in
+  # `#open_entries_targeting_a_shipped_release` and did not reach here.
+  # That is the same place twice, so the repair is shaped to not need a
+  # third: the exclusion is stated as "not a roadmap entry" rather than
+  # "is a defect or a friction", so a kind added later is *included* by
+  # default and fails towards being checked.
+  #
+  # `roadmap` is excluded because a plan is not a limitation and carries
+  # no `user-visible` field -- measured: the three open roadmap entries
+  # are the only open entries with that field absent, and the
+  # nil-permissive rule below would otherwise demand a limitation
+  # paragraph for each.
   def undocumented(markdown, *documents)
-    open_defects(markdown).reject { |_, fields| fields["user-visible"] == "no" }
+    open_entries(markdown).reject { |_, fields| fields["kind"] == "roadmap" }
+                          .reject { |_, fields| fields["user-visible"] == "no" }
                           .keys
                           .reject { |number| documents.all? { |doc| documents?(doc, number) } }
   end

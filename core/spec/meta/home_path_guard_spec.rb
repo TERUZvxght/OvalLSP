@@ -5,7 +5,7 @@ require "tmpdir"
 require_relative "../../../scripts/check_home_paths"
 
 # 0.2.3's countermeasure for a class the norm alone failed to hold twice.
-# The rule -- in `docs/DEVELOPMENT.md` since 057, `CLAUDE.md` before -- says local absolute
+# The rule -- in `docs/DEVELOPMENT.md` since 058, `CLAUDE.md` before -- says local absolute
 # paths must not be committed, and it names Git metadata and copied
 # command output as disclosure paths rather than only source files. It
 # was missed anyway, twice: 0.2.1's record named a scaffolded application

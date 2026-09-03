@@ -6,6 +6,54 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.3.3 — the record said one thing and the product did another
+
+Nothing you can notice changes in the extension itself. This release
+exists because the project's own record had drifted away from what the
+product does — most visibly on the public site, which had been telling
+visitors that work delivered in 0.3.0 was still to come.
+
+- **The roadmap page showed 0.3.0 as unshipped**, with every item marked
+  as a plan, on a page that already listed 0.3.1 and 0.3.2 as shipped.
+  It has said so since the day 0.3.0 merged.
+- **The front page said indexing what the gems define "is planned for
+  0.3.0".** That shipped *in* 0.3.0. The same page also understated what
+  is still missing, which is now stated: the check still declines about
+  any class whose body carries `before_action`, `helper_method` or
+  `rescue_from`, and in a Rails application that is nearly every
+  controller.
+- **A limitation this page retired in 0.3.2 is back, narrowed.** 0.3.2
+  reported that a namespaced type reported incompatible with itself was
+  fixed. Half of it was. If your `sig/` declares a class that no Ruby
+  file in your workspace declares, you can still meet it.
+- **The Marketplace description published a policy that had been
+  retired**, about how a Ruby 4.0-only failure is handled.
+- **Two limitation sections had lost their text** and kept their
+  headings, so each went on asserting a defect the product does not have.
+
+### Details
+
+**How this was found, and why it needed finding.** The question asked was
+whether anything was still marked as belonging to a shipped version and
+left undone. The first answer was "nothing", and it was reached by asking
+one tool four times — a tool that compares version strings exactly, so
+four questions covered four of the thirty-five versions at or below
+0.3.2. Enumerating instead: forty-five open items, every one of them
+targeted at 0.4.0 or 1.0.0. The work really was done. The record of it
+was wrong in about forty-five places, and the public site was the worst
+of them because it is the copy a stranger reads first.
+
+**Two of the defects were third instances, so they are now checked
+mechanically rather than fixed again.** A limitation whose text is
+deleted leaves its heading behind, and the guard meant to catch a
+retired limitation cannot see it — the marker it looks for lives in the
+deleted text. And the guard that requires a limitation to be published
+was only asking about one of the three kinds of finding this project
+records, so seven others were never required to be published at all.
+
+**Nothing in the engine changed.** The only edits to the Core Server are
+comments.
+
 ## 0.3.2 — a rename that changed what your program does
 
 Renaming a local variable that a pattern match also binds rewrote the

@@ -83,7 +83,7 @@
     <div class="wrap">
       <div class="hero-copy">
         <div class="badge-row">
-          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.3.2</span>
+          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.3.3</span>
           <span class="badge">VS Code 拡張機能</span>
           <span class="badge">MIT</span>
         </div>
@@ -360,7 +360,7 @@
             </tr>
             <tr>
               <td>インレイヒント（推論された型・引数名）</td>
-              <td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">未検証</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">1.0.0</span></td></tr>
+              <td class="col-status"><span class="mark mark--yes">検証済み</span></td><td class="col-status"><span class="mark mark--warn">未検証</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">1.0.0</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -368,7 +368,7 @@
       <div class="legend">
         <div><span class="mark mark--yes">検証済み</span> 壊れたら落ちるテストがある</div>
         <div><span class="mark mark--warn">未検証</span> 動く可能性は高いが、何も保証しない</div>
-        <div><span class="mark mark--plan">0.3.0</span> 未実装 — 予定されているリリース</div>
+        <div><span class="mark mark--plan">0.4.0</span> 未実装 — 予定されているリリース</div>
         <div><span class="mark mark--none">該当なし</span> ここでは供給できない Rails 由来のデータが必要</div>
       </div>
 
@@ -499,11 +499,11 @@
           </p>
         </div>
         <div class="callout callout--warn reveal">
-          <h4>gem 由来のメソッドはまだインデックスしていない</h4>
+          <h4>gem の索引は起動のたびに作り直される</h4>
           <p>
             未知メソッドのチェックは、レシーバの継承関係がすべて判明している場合にのみ発火します。
-            gem を継承するクラス — <code>ApplicationController</code>、つまり大半のコントローラやジョブ — では黙ります。これを解消するのが gem の定義のインデックス化であり、
-            <a href="roadmap.html#v030">0.3.0</a> に予定されています。
+            gem が定義しているものは <a href="roadmap.html#v030">0.3.0</a> でインデックス化したので、gem を継承するクラス — <code>ApplicationController</code>、つまり大半のコントローラやジョブ — でも黙らなくなりました。
+            ただしその索引は起動のたびに動作中のアプリケーションへ問い合わせるため、チェックは毎セッション数秒だけ遅れて効き始めます。さらに、この拡張がモデル化していないマクロ — <code>before_action</code>、<code>helper_method</code>、<code>rescue_from</code> — をクラス本体が持つ場合は、いまも報告を控えます。Rails アプリケーションでは、ほぼすべてのコントローラがこれに当たります。
           </p>
         </div>
         <div class="callout callout--info reveal">
@@ -576,15 +576,15 @@
 
       <div class="grid grid--4">
         <a class="card card--hover reveal" href="roadmap.html#v020" style="text-decoration:none">
-          <h3 class="mono" style="color:var(--ruby-bright)">0.2.0</h3>
+          <h3 class="mono">0.2.0 <span class="mark mark--yes">公開済み</span></h3>
           <p><strong>最初の 1 文字からの補完</strong>、プロジェクト全体の診断、ホバーのドキュメント表示、セマンティックハイライト、引数の型、未代入 <code>@ivar</code>。</p>
         </a>
         <a class="card card--hover reveal" href="roadmap.html#v030" style="text-decoration:none">
-          <h3 class="mono">0.3.0</h3>
+          <h3 class="mono">0.3.0 <span class="mark mark--yes">公開済み</span></h3>
           <p><strong>gem が定義しているものを知る</strong>。加えてインレイヒント、クイックフィックス、型定義へのジャンプ、コール階層。</p>
         </a>
         <a class="card card--hover reveal" href="roadmap.html#v040" style="text-decoration:none">
-          <h3 class="mono">0.4.0</h3>
+          <h3 class="mono" style="color:var(--ruby-bright)">0.4.0</h3>
           <p><strong>細部の調整</strong>。チェックごとの重大度設定と、<code>require</code> の自動挿入。</p>
         </a>
         <a class="card card--hover reveal" href="roadmap.html#v100" style="text-decoration:none">

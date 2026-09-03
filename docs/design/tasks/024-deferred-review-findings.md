@@ -190,7 +190,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.6`](024-deferred-review-findings-resolved.md#0246-the-seen-uris-spec-s-comment-overclaims) | fixed | 0.1.10 | The `seen_uris` spec's comment overclaims |
 | [`024.8`](024-deferred-review-findings-resolved.md#0248-ownership-retirement-on-exited-known-size-0-is-unpinned) | fixed | 0.1.10 | Ownership retirement on `exited() && known.size === 0` is unpinned |
 | [`024.10`](024-deferred-review-findings-resolved.md#02410-four-extension-ts-behaviours-cannot-be-unit-tested) | fixed | 0.1.10 | Four `extension.ts` behaviours cannot be unit-tested |
-| [`024.13`](#02413-a-reopened-core-class-looks-closed-in-both-directions-0-3-x) | open | 0.4.0 | A reopened core class looks closed, in both directions (0.3.x) |
+| [`024.13`](#02413-a-reopened-core-class-looks-closed-in-both-directions) | open | 0.4.0 | A reopened core class looks closed, in both directions |
 | [`024.14`](024-deferred-review-findings-resolved.md#02414-workspace-wide-diagnostics-do-not-fire-against-the-real-rails-fixture) | fixed | 0.2.1 | Workspace-wide diagnostics do not fire against the real Rails fixture |
 | [`024.15`](024-deferred-review-findings-resolved.md#02415-the-index-s-answers-depend-on-which-file-was-edited-last) | fixed | 0.1.13 | The index's answers depend on which file was edited last |
 | [`024.16`](024-deferred-review-findings-resolved.md#02416-the-capability-e2e-suite-can-skip-in-full-while-ci-stays-green) | fixed | 0.1.13 | The capability E2E suite can skip in full while CI stays green |
@@ -281,7 +281,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.103`](024-deferred-review-findings-resolved.md#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | fixed | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
 | [`024.104`](024-deferred-review-findings-resolved.md#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | fixed | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
 | [`024.105`](024-deferred-review-findings-resolved.md#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
-| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.4.0 | `module_function` and `extend self` produce nothing |
+| [`024.106`](#024106-a-module-s-singleton-calls-go-unchecked-module-function-and-extend-self-producing-nothing-is-withdrawn) | open | 0.4.0 | A module's singleton calls go unchecked — `module_function` and `ext… |
 | [`024.107`](024-deferred-review-findings-resolved.md#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](024-deferred-review-findings-resolved.md#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](024-deferred-review-findings-resolved.md#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | fixed | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
@@ -326,7 +326,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.148`](024-deferred-review-findings-resolved.md#024148-the-check-for-did-the-suite-actually-run-could-not-fail-in-the-case-it-existed-for) | fixed | 0.2.14 | The check for "did the suite actually run" could not fail in the cas… |
 | [`024.149`](024-deferred-review-findings-resolved.md#024149-a-review-harness-that-reports-nothing-found-when-its-own-post-processing-crashed) | fixed | 0.2.14 | A review harness that reports "nothing found" when its own post-proc… |
 | [`024.150`](024-deferred-review-findings-resolved.md#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | fixed | 0.2.18 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
-| [`024.151`](024-deferred-review-findings-resolved.md#024151-a-check-can-be-disabled-and-no-check-notices) | fixed | 0.3.2 | A check can be disabled, and no check notices |
+| [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices-closed-on-one-instalment-in-0-3-2-reopened) | open | 0.4.0 | A check can be disabled, and no check notices — closed on one instal… |
 | [`024.152`](024-deferred-review-findings-resolved.md#024152-a-leak-check-counted-every-descriptor-in-the-process-and-flaked-under-load) | fixed | 0.2.14 | A leak check counted every descriptor in the process, and flaked und… |
 | [`024.153`](024-deferred-review-findings-resolved.md#024153-a-quarter-of-the-open-work-is-in-no-release-and-0-3-0-has-become-where-the-rest-goes) | fixed | 0.2.15 | A quarter of the open work is in no release, and 0.3.0 has become wh… |
 | [`024.154`](024-deferred-review-findings-resolved.md#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | fixed | 0.2.18 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
@@ -398,7 +398,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.220`](024-deferred-review-findings-resolved.md#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | fixed | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
 | [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.4.0 | A block whose receiver cannot be vouched for contains a `private` th… |
 | [`024.223`](024-deferred-review-findings-resolved.md#024223-one-unresolvable-include-in-a-project-s-own-rbs-turns-its-whole-class-into-false-reports) | fixed | 0.2.15 | One unresolvable `include` in a project's own RBS turns its whole cl… |
-| [`024.224`](024-deferred-review-findings-resolved.md#024224-a-namespaced-type-is-reported-incompatible-with-itself) | fixed | 0.3.2 | A namespaced type is reported incompatible with itself |
+| [`024.224`](#024224-a-type-declared-only-in-sig-is-reported-incompatible-with-itself-the-half-0-3-2-did-not-fix) | open | 0.4.0 | A type declared only in `sig/` is reported incompatible with itself … |
 | [`024.225`](024-deferred-review-findings-resolved.md#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | fixed | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
 | [`024.226`](024-deferred-review-findings-resolved.md#024226-an-argument-written-as-a-paren-less-call-is-judged-by-its-own-last-argument) | fixed | 0.2.15 | An argument written as a paren-less call is judged by its own last a… |
 | [`024.227`](024-deferred-review-findings-resolved.md#024227-every-outline-symbol-s-selectionrange-was-its-whole-declaration) | fixed | 0.2.15 | Every outline symbol's `selectionRange` was its whole declaration |
@@ -506,7 +506,7 @@ nobody can search is the recording habit without the benefit.
 
 ---
 
-## 024.13 A reopened core class looks closed, in both directions (0.3.x)
+## 024.13 A reopened core class looks closed, in both directions
 
 ```yaml
 status: open
@@ -691,6 +691,32 @@ Without an Agent the answer has to come from somewhere else, and
 building that somewhere is capability, which `docs/PUBLISHING.md`
 puts outside a patch. Moved to 0.4.0. The published limitation stands
 unchanged in both languages, because what it describes is still true.
+
+## 0.3.3: the version marker in the title is dropped, having been false for four retargets
+
+The heading carried a bare `(0.3.x)` from 0.1.9, when this entry had no
+yaml block at all and that parenthetical was its only schedule
+statement — written while the Direction above still read "Scheduled with
+`024.R7`", then a 0.3.0 item. The target has since moved to 0.2.16, then
+0.3.0, then 0.3.2, then 0.4.0, each move argued in the sections above,
+and the title moved with none of them. 0.3.0, 0.3.1 and 0.3.2 have all
+shipped, so an open entry was titled with a closed release family and the
+generated Index rendered the entry's status, its `target: 0.4.0` and a
+contradicting `(0.3.x)` in one row.
+
+**Dropped rather than re-spelled as the current target.** This file's
+legend says the yaml block "is the entry's status — the prose beneath it
+adds narrative and does not restate it", and a version in the heading is
+a second place that has to agree with it. It is also a place no check can
+see: `open_entries_targeting_a_shipped_release` reads the yaml `target:`
+and never the parsed title, so a heading naming a shipped release does
+the exact thing that guard forbids through the one channel it cannot
+read. That is why it survived four retargets.
+
+Nothing about the work changes. What is left is the decline described
+above, `target: 0.4.0` stands, and `docs/KNOWN_LIMITATIONS.md` and its
+`.ja` twin cite this entry by number rather than by title, so the marker
+never reached a user.
 
 ## 024.18 The unassigned-`@ivar` check cannot enumerate what it needs to
 
@@ -1417,10 +1443,15 @@ status: open
 kind: defect
 user-visible: yes
 user-visible-note: >
-  The premise changed in 0.2.15. On a workspace that states types the
-  way the check accepts, it is not silent -- it reports, and on the one
-  such corpus measured every report is false. That is `024.224`, and
-  the question this entry frames cannot be answered until it is fixed.
+  Corrected in 0.3.3. This note read, in the present tense, that on a
+  workspace stating types the way the check accepts it "is not silent
+  -- it reports", that every report was false, and that the question
+  could not be answered until `024.224` was fixed. 0.3.2 settled that
+  premise and the entry's own closing section says so: re-measured over
+  rbs 4.2.0 with its own sig/ the check produces zero, with
+  unresolved-constant at 369 as the control. The entry stays open for
+  the different reason that section gives -- a check that has never
+  produced a true report has not been shown capable of one.
 target: 0.4.0
 ```
 
@@ -1573,7 +1604,10 @@ This entry could not be answered while `024.224` stood: its own
 silent, every report was false, and the question "what is this check's
 yield" cannot be asked of an output that is entirely one defect.
 
-`024.224` is fixed. Re-measured over rbs 4.2.0 with its own `sig/`, the
+`024.224`'s unbuildable-chain half is fixed -- the half that was
+producing every report on this corpus. (The entry itself is open again,
+narrowed to a shape no measured corpus shows; `024.224`.) Re-measured
+over rbs 4.2.0 with its own `sig/`, the
 check now produces **zero** there, with `unresolved-constant` unchanged
 at 369 as the control. So the honest statement of its measured yield is
 the one this entry's title makes: **nothing, on every corpus it has been
@@ -2470,11 +2504,13 @@ because every one of them reads the literal's name bare.
 What changes in 0.3.2 is the company it kept. This entry and
 `024.224` were both recorded as needing the same direction — a type
 that carries the identity of what produced it, rather than encoding it
-in a name every reader has to normalise back. `024.224` turned out not
-to need it: its cause was a swallowed `UNAVAILABLE`, and one guard
-fixed it. So the argument for that change now rests on this entry
-alone, and it should be made or declined on this entry's own evidence
-rather than on a second case that has evaporated.
+in a name every reader has to normalise back. `024.224`'s *reported* half turned out
+not to need it: its cause was a swallowed `UNAVAILABLE`, and one guard
+fixed it. What survives in `024.224` — a type declared only in `sig/` —
+is still argued there as wanting the identity carried, so the two are
+not as separate as this paragraph said in 0.3.2. Corrected in 0.3.3:
+the pairing is weaker than it was, not evaporated, and each should be
+weighed on its own evidence.
 
 Moved to 0.4.0, where it can be weighed as one change to a type every
 component reads rather than as a shared prerequisite.
@@ -3196,7 +3232,7 @@ in a Rails index view. It needs the E2E harness.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** Four surfaces
 agreeing at one position means three of them answering where they now
 do not.
-## 024.106 `module_function` and `extend self` produce nothing
+## 024.106 A module's singleton calls go unchecked — `module_function` and `extend self` producing nothing is withdrawn
 
 ```yaml
 status: open
@@ -3258,6 +3294,27 @@ module's singleton receiver where it answers `true` for a class.
 times in this release, and it is a silence rather than a wrong
 answer -- so it waits for the ancestor-reading change that entry
 asks for, rather than being pushed at from a third direction.
+
+## 0.3.3: the title is amended to the half that survives
+
+The heading read "`module_function` and `extend self` produce nothing"
+until here, which is the half 0.3.0's measurement withdrew — and it is
+the string the generated Index renders and `docs/ISSUES.md` publishes, so
+the register's searchable surface asserted a completion failure the
+product does not have while `docs/KNOWN_LIMITATIONS.md` and its `.ja`
+twin told users the opposite. That is the shape `024.130` records, caught
+before the split rather than after it.
+
+The surviving half is not about either idiom the old title named: it
+reproduces on a module whose singleton methods are written plainly, and
+`core/spec/ovallsp/parser_module_function_spec.rb` pins the withdrawn
+half as fixed while its own comment marks the second one open. So the
+title is rewritten to that half rather than given a suffix, which is what
+`024.131` did with the same problem.
+
+Amended, not deleted: the paragraphs above are the finding as it was
+raised and the measurement that halved it, and both are why the entry is
+still open.
 
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** The completion half
 does not reproduce; the diagnostic half is a module's singleton
@@ -3744,6 +3801,237 @@ that was struck out rather than left to be quoted forward. Moved to
 0.4.0: what is left needs a workspace big enough to show it, which is
 an experiment to set up rather than a fix to write.
 
+## 024.151 A check can be disabled, and no check notices — closed on one instalment in 0.3.2, reopened
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Internal, and it is the largest single class this project has
+  recorded: 55 confirmed instances from one review round. Nothing a
+  user meets; everything this project uses to decide whether a change
+  is sound.
+target: 0.4.0
+```
+
+### 0.2.18: the two checks that had no reachability assertion at all
+
+Surveyed rather than assumed. Of the seven `scripts/check_*.rb`, five
+have a spec that asserts how much they read — `doc_links` and
+`site_links` six ways, `home_paths` and `suites_ran` two,
+`interpreter_sessions` its `sessions=` count, which this session added
+for exactly this reason. **Two had none: `check_pinned_mutations` and
+`check_swallowed_failures`.**
+
+Both now do, and the two gaps are not the same size, which took driving
+to find out:
+
+- **`check_swallowed_failures` has no emptiness guard at all.** Its
+  `Dir.glob` returning nothing leaves `problems` empty, and empty is
+  what it reports as success. The spec now asserts it found at least 100
+  rescue sites in `core/lib` — a floor, because the exact number changes
+  every release and a scan that has stopped seeing the directory does
+  not return 140-something.
+- **`check_pinned_mutations` already refuses an empty manifest** — exit
+  1, with a message. *The first draft of this note said it did not, and
+  driving it said otherwise.* What nothing caught is a manifest cut to a
+  handful: not empty, consistent with itself, and it passed both
+  examples. The floor is 50.
+
+**This does not close the class.** 55 instances were confirmed and these
+are two; what it closes is the two checks whose own reachability nothing
+defended, which is the shape at its most embarrassing — a checker that
+guards other people's guarantees and not its own.
+
+**Retargeted to 0.3.0.** The remaining instances are spread across the
+tree and each needs its own assertion; the countermeasure is a habit
+(every check asserts what it read) rather than a change, and
+`pinned_mutations.yml` at 100 entries is that habit already working. It
+is not a defect one release closes.
+
+**Area:** `core/spec/meta/pinned_mutations.yml`,
+`scripts/check_pinned_mutations.rb`
+
+0.2.14's round 2 took twelve guarantees and tried to make each false
+while every check stayed green. **It succeeded against all twelve.** The
+individual breaks are recorded in
+`docs/design/tasks/046-0.2.14-making-the-record-true.md`; the class is
+one sentence:
+
+> The checks are correct. Their **reachability** is not defended.
+
+The sharpest instance, and the one that shows the shape: `SKIP` in
+`check_doc_links.rb` was an ordinary constant. Widening it dropped
+inspection from 537 files to 117, left a dangling citation in a
+`core/lib` source comment unreported, and all four examples passed —
+because the examples asserted *outcomes on fixtures*, and none asserted
+*how much of the tree was read*. The file's headline claim, "source
+comments are in scope, deliberately", was one edit away from false and
+nothing in the tree could tell.
+
+**This is `CLAUDE.md`'s oldest rule, applied one level up.** *Behaviour
+that no test fails on when it is reverted counts as a defect* — the
+checks are behaviour, and almost none of them was pinned.
+
+### What was built in 0.2.14, and why it is not enough
+
+- **Coverage floors.** A scanner reports what it read, per root, and a
+  spec asserts each is non-zero. Structural, so not a number to
+  maintain, and not a second copy of the exclusion. Applied to
+  `check_doc_links`.
+- **The mutation manifest reaches `scripts/`.** `042`'s D7 exists to ask
+  *does this example fail when the decision it names is inverted*, and
+  until now it could only ask that of `core/lib` — so no decision inside
+  a check could be pinned by the one mechanism built for pinning
+  decisions. Seven entries added: `SKIP`, the relative-link pass,
+  `--others`, the pending test, the `NOT YET` exemption, the
+  re-derivation refusal, the SBOM comparison.
+- Not the specs. The applier writes to the real file and restores it,
+  which is safe for a script a spec shells out to and is **not** safe
+  for a spec file, where the mutation could remove the example being
+  run. A decision inside a spec needs a second example instead.
+
+**What remains open is most of it.** 55 confirmed findings, and the
+honest statement is that they were fixed at the rate of one mechanism
+per class, not one patch per finding. In particular:
+
+- Several checks prove wiring by **substring search** — an error
+  message, an exemption comment, or a script's own usage string
+  satisfies them. `release_gate_spec` and `script_encoding_spec` are
+  both this shape.
+- `preflight.rb` is 178 lines of gate that no spec reads: the whole
+  thing can be reduced to a no-op with every check green.
+- Several scanners' scopes are hand-written glob or extension lists —
+  the exact defect the citation scanner was fixed for, in the scanners
+  that check the citation scanner.
+
+**Direction.** Not 55 patches. Two mechanisms, in this order:
+
+1. **Every check states its own coverage, and a spec asserts a floor on
+   it.** `check_doc_links` is the worked example. This kills the whole
+   "narrow the input" family at once.
+2. **Wiring is proved by execution, not by text.** A check that claims
+   something is invoked should invoke it, or read a manifest that does,
+   rather than grepping for its name. Every substring-based instance
+   collapses into this one.
+
+*Recorded rather than done, deliberately. `CLAUDE.md` bounds a review
+loop at three rounds finding defects and then says to ship with what is
+open written down — a 55-finding sweep started at round 2 is exactly the
+unbounded loop that rule exists to prevent, and the countermeasures
+above are worth more than the patches would be.*
+
+### The ten instances round 2 and round 3 confirmed, listed
+
+Recorded here rather than as ten entries: each is this class in a
+different check, and the register's rule is one entry per defect. The
+Direction below is what closes all ten; a patch that fixes one of them
+and not the shape has not closed anything.
+
+- **An Area line C3 cannot parse counts as naming no paths, so the path-existence guarantee is opt-out, and it never looks at a resolved entry at all**  
+  ``scripts/deferred_findings.rb` (`AREA_PATH`, `#area_paths`), `core/spec/meta/deferred_findings_spec.rb` ("names only paths that exist, in every open entry's Area"), `docs/design/tasks/024-deferred-review-findings.md` (024.25's Area line)` — 046's RC-3 is "pointers with no resolver", and C3 answers it for `**Area:**` lines. `AREA_PATH` matches only a backticked path rooted at `core|vscode|scripts|docs|site|.github`, and `area_paths` returns `[]` for anything else with no signal at all, so an entry the matcher cannot read is silently treated as making no claim rather than as an entry the check could not verify. Two of the 57 open defects are already outsi
+
+- **check_doc_links' unreadable-file and shallow-clone refusals are unpinned — append to 024.151 rather than opening separately**  
+  ``scripts/check_doc_links.rb` (lines 128-129 and 295-301), `core/spec/meta/pinned_mutations.yml`, `core/spec/meta/doc_links_spec.rb`` — The `unless unreadable.empty? … exit 1` block is 0.2.14's repair for a swallowed failure — its own comment says "until 0.2.14 this comment claimed and nothing did" and cites CLAUDE.md's rule — and it shipped with no test. Deleting the seven lines leaves the spec green while a tracked file that is not valid UTF-8 is dropped from `inspected` with no output at all, so a citation of a document that has never existed pass
+
+- **The SYNTHETIC allowlist can be widened to switch the detector off, and three documents cite it as the model of a guarded edit**  
+  `scripts/check_home_paths.rb, core/spec/meta/home_path_guard_spec.rb, core/spec/meta/measured_claims_spec.rb, core/spec/meta/no_wall_clock_thresholds_spec.rb, CLAUDE.md` — Adding one word to SYNTHETIC turns the detector off completely, and every check stays green: the list's contents are pinned nowhere, `pinned_mutations.yml` has no entry for this file, and the only names an addition cannot be are the four the examples plant (alice, tkato, bob, carol). The mechanism is 024.151's class — widening an allowlist constant is its sharpest recorded instance — but the second half is its own de
+
+- **release_gate_spec proves wiring by substring, so a mention, an error message or an echo counts as an invocation**  
+  `core/spec/meta/release_gate_spec.rb (`haystack_excluding`, the `include?(base)` test at line 117)` — The check's stated guarantee is that an executable cited in RELEASE_CHECKLIST's evidence column 'is invoked by something that runs'. It is implemented as: does this basename appear on a non-comment line anywhere under core/spec, scripts/, or the five named callers. Nothing distinguishes a call from a mention. Round 1's fix — excluding the candidate's own file — closed only the self-naming case; the same string in a d
+
+- **A row can be exempted invisibly and without limit, and the example guarding against the check going inert measures the unfiltered table**  
+  `core/spec/meta/release_gate_spec.rb (the `[unwired marker]` skip at line 107, the cell join at line 65, the floors at lines 135-136), docs/RELEASE_CHECKLIST.md` — Any row containing `[unwired marker]` is skipped. The marker renders as nothing, nothing bounds how many rows may carry it, and nothing enforces the prose requirement that an unwired row 'must still say what does enforce the item now'. Because line 65 joins the 状態 column with the evidence column, the marker also works from the status cell. The example written to stop the check going inert — 'finds evidence to check i
+
+- **release.sh's payload-hash, semantic-smoke and SBOM refusals are refusals only because of `set -euo pipefail`, and nothing pins that line**  
+  ``vscode/scripts/release.sh` (lines 23, 195-206), `core/spec/meta/release_script_guard_spec.rb`` — Three of the script's named guarantees — the packaged payload-hash check (line 196), the semantic smoke (line 199) and the SBOM-vs-artifact check (line 206) — are bare commands with no `||`, no `if` and no status test. That they refuse rather than log is entirely a property of `set -euo pipefail` on line 23, and nothing in the repository asserts that line exists: `release_script_guard_spec.rb` asserts only that the t
+
+- **No workflow guard pins that a gating CI step actually gates, so any of them can be switched off with every check green**  
+  `.github/workflows/ci.yml, core/spec/meta/ci_skip_guard_spec.rb, core/spec/meta/site_version_guard_spec.rb` — Every spec that guards a CI-only check locates its step in parsed YAML and then asserts the step's `run` text. None of them reads the two parsed-YAML keys GitHub Actions actually uses to decide whether a step runs and whether its failure fails the job -- `if` and `continue-on-error` -- and none rejects a `run` line whose exit status has been neutralised with `|| true`, `; true` or `set +e`, because the assertion is `
+
+- **The locale guarantee is proved by reading the scripts' text over a hand-written glob, and no script is ever executed under a bare locale**  
+  `core/spec/meta/script_encoding_spec.rb` — This is 024.151's own named instance ("`release_gate_spec` and `script_encoding_spec` are both this shape") given an exact reproduction and a one-line direction; record it under 024.151 if the maintainer prefers. The guarantee — every script in `scripts/` survives `LC_ALL=C` — is enforced entirely by reading source text, and every part of that reading is narrower than the claim. (a) Line 47 tests `File.read(...).incl
+
+- **The enumeration guard asserts no coverage, so narrowing its pathspecs to nothing leaves it green**  
+  `core/spec/meta/untracked_visibility_spec.rb` — Another instance of 024.151's class, in the file 024.147's countermeasure lives in. The third example builds `offenders` from `RepoFiles.list(UNTRACKED_ROOT, "scripts/*.rb", "core/spec/meta/*.rb")` and asserts it is empty. Nothing asserts the enumeration produced any files, and nothing asserts the needle logic would flag a planted offender, so an input of zero files is indistinguishable from a clean tree. The tree al
+
+- **design_doc_drift_spec's non-empty floor covers three of the six extractions the file reads, so §5 can pass comparing two empty lists**  
+  ``core/spec/meta/design_doc_drift_spec.rb` (the `extracts a non-empty list from each place it reads` example)` — The example exists because "[e]ach example above compares two lists, and would pass on two empty ones", and its name says it checks "each place it reads". It asserts three floors — §6's documented block, `contributes.commands`, `contributes.configuration.properties` — out of six extractions in the file. Nothing floors §5's documented block, nothing floors the status strings scanned out of clientPresentation.ts, and n
+
+**Re-triaged in 0.2.17** (`024.276`). Nothing about gems: the subject is whether this repository's own checks are *reachable*, and twelve of them were made false with every check green. It adds no capability, so it belongs on the patch line.
+
+0.2.17 paid several instalments of it — coverage floors on the measured-claim scanner and the home-path scanner, a reader for `released-in:` which had none, and a check that open entries do not repeat a justification word for word. Each is the shape this entry's Direction asks for: an answer where the value is produced, rather than an assertion at each reader.
+
+
+**Not taken in 0.3.0.** Defending the checks' reachability is a
+change to every checker, and this release instead spent its
+measurement on the entries the release owed. Worth noting from the
+sweep: two of 0.3.0's own checks *did* catch a disabled guard --
+`check_pinned_mutations` refused a `from:` that matched zero lines
+twice, and once that matched five -- so the class this entry names
+is real and the instances it names are not all still open.
+
+**Retargeted to 0.3.2 in 0.3.0's closing sweep.** The checks'
+reachability is this repository's own machinery, which the table puts
+on the patch line.
+
+**An instalment paid in 0.3.2.** The last one named in the entry: `design_doc_drift_spec`'s "extracts a non-empty list from each place it reads" floored three of six extractions. \S3's activation JSON, \S5's status-bar block and the strings scanned out of `clientPresentation.ts` had nothing under them, so any of the three could have returned nothing and compared `[] == []`. All six are floored now. The class the entry names is not closed -- it never can be by one edit -- but its own Direction is spent, and what remains of the reachability question belongs to whichever check acquires the next gap.
+
+## Reopened in 0.3.3: the entry was closed on one instalment of ten
+
+The paragraph above ends by saying the class is not closed, and the yaml
+over it said `status: fixed` / `released-in: 0.3.2`. Both cannot be true,
+and the yaml is the half every check reads — this file's legend says so
+in as many words. The heading has been amended and the entry is open
+again at 0.4.0.
+
+The 0.3.2 work is not in doubt: the six floors are in
+`core/spec/meta/design_doc_drift_spec.rb` and
+`056-0.3.2-the-backlog-the-0.3-line-owes.md` records exactly that
+instalment. What is wrong is the scope of the closure. It is **one** of
+the ten instances enumerated under "The ten instances round 2 and round
+3 confirmed, listed", against the 55 confirmed findings this entry's own
+note states, and closing on it handed the remainder to "whichever check
+acquires the next gap" — which is nothing, because no successor entry
+was opened. That is the shape this register's own header forbids and
+records `024.90` for.
+
+**Two of the ten are verifiably unchanged**, checked here rather than
+inferred:
+
+- `core/spec/meta/release_gate_spec.rb` still proves that a cited script
+  is invoked by asking whether its basename appears as a substring
+  somewhere under the roots it searches, and its `wired?` answers `true`
+  unconditionally for the `ts_test` and `ci_job` kinds. Direction
+  mechanism 2 — "Wiring is proved by execution, not by text" — is
+  unimplemented, not spent.
+- `vscode/scripts/release.sh`'s `set -euo pipefail` is what makes three
+  of that script's named refusals refuse rather than log, and nothing
+  asserts the line: `core/spec/meta/release_script_guard_spec.rb` does
+  not mention it, `core/spec/meta/pinned_mutations.yml` has no entry for
+  the file, and a repository-wide search for `pipefail` in tracked `.rb`
+  and `.yml` files reaches only `.github/workflows/ci.yml`, which is
+  about something else. The entry's body cites line 23 for it; the line
+  has since moved, which is the second reason to read the file rather
+  than the citation.
+
+Two others are repaired and are not counted as open:
+`core/spec/meta/untracked_visibility_spec.rb` now floors its enumeration,
+and `core/spec/meta/ci_skip_guard_spec.rb` now reads the two parsed-YAML
+keys that decide whether a step runs.
+
+**Reopened rather than replaced by a successor.** The class is what the
+number means, and the tree cites it that way — source and spec comments
+in both `core/spec/meta` and `scripts` name `024.151` as "the class". A
+successor would have to inherit those citations to be worth anything,
+which is this entry under a new number. `released-in:` is dropped
+because the legend puts it on a resolved entry only; the 0.3.2
+instalment is recorded in the paragraph above.
+
+The Direction stands unchanged and is what closes this: not 55 patches,
+two mechanisms, and 0.3.2 spent an instalment on the first of them.
+
 ## 024.221 A block whose receiver cannot be vouched for contains a `private` that Ruby would let through
 
 ```yaml
@@ -3847,11 +4135,370 @@ second shape was rejected for. `CLAUDE.md`'s DTSTTCPW section names
 that shape directly, with `Environment::UNAVAILABLE` as the standing
 example of the cost being paid repeatedly rather than once: a
 reviewer found a *new* consumer getting it wrong in 0.2.16, and
-`024.224` — fixed in this release — is a third.
+`024.224` — whose unbuildable-chain half was fixed in this release —
+is a third.
 
 Adding a fourth such sentinel to `visibility`, which every
 declaration carries and many readers branch on, is not a patch's
 change. Moved to 0.4.0.
+
+## 024.224 A type declared only in `sig/` is reported incompatible with itself — the half 0.3.2 did not fix
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+(`#compatible_nominal?`, `#ancestor_names` and the comment above them),
+and `core/spec/ovallsp/diagnostics/namespaced_argument_type_spec.rb`,
+whose `pending` example is the reproduction
+
+Driven over rbs 4.0.3 with its own `sig/` as the signature root — 102
+files, 89 hand-written `.rbs`, which is the first hand-written-signature
+corpus this project has pointed the engine at — every `argument-type`
+report it produces is this:
+
+    <rbs>/lib/rbs/cli.rb:498            `constant` expects RBS::TypeName here, but TypeName is given
+    <rbs>/lib/rbs/inline_parser.rb:533  `new` expects RBS::Location here, but Location is given
+    <rbs>/lib/rbs/inline_parser.rb:534  `new` expects RBS::Location here, but Location is given
+
+Taken from the interpreter rather than reasoned about:
+
+    $ ruby -e 'require "rbs"; module RBS
+      p [TypeName.equal?(RBS::TypeName), Location.equal?(RBS::Location)]
+    end'
+    # => [true, true]
+    # ruby 3.4.10
+
+They are the same class. The expected side arrives from RBS
+namespace-qualified; the actual side is inferred from Ruby source written
+*inside* `module RBS`, so it arrives bare, and the reachable set
+`#ancestor_names` builds carries the `::`-prefixed and last-segment
+spellings but not the bare qualified one that `simple_name(expected.name)`
+produces.
+
+**Any namespaced project whose parameter types come from RBS and whose
+argument types are inferred from Ruby source is exposed**, which is every
+project that writes `sig/` the way RBS itself does.
+
+**This is not `024.223`**, though the same corpus produced both.
+`024.223`'s fix — a chain that could not be built stops reading as an
+absent one — removes all 20 false `unknown-method` reports on that corpus
+and leaves these three untouched, measured: `argument-type` is 3 before
+and 3 after, with `unresolved-constant` identical at 319 as the control.
+The two want separate fixes and the register should not let one close the
+other.
+
+**Direction, and the caution on it.** The cheap repair is to have
+`#ancestor_names` emit `Index::SymbolId.bare_name(entry)` alongside the
+two spellings it already emits; a review pass measured that at 3 to 0.
+That is the symptom's fix. Three spellings of a type name float between
+the RBS side, the index side and the hierarchy side and each reader
+normalises differently, which is the shape `CLAUDE.md`'s same-place rule
+says to mechanise — `workspace_index.resolve_type_name` already maps
+every spelling to one answer, so comparing through the index rather than
+by `include?` over hand-built variants is the fix that removes the class.
+
+Note what that caution is *itself* cautioned by: 0.2.1 moved the
+type-name shadowing rule to where the value is produced and had to roll
+it back (`024.47`). This belongs at the comparison, not in the converter.
+
+**Also stale, and it is what makes this invisible on reading**: the
+comment at `engine.rb:580-600` asserts the expected side arrives bare and
+that `simple_name_of` is the form `TypeConverter` gives. Both were true
+before 0.2.5 stopped truncating and are false at HEAD.
+
+**Targeted 0.2.16 rather than 0.2.15** because the honest fix is a shared
+resolution path with three readers, and 0.2.15 already carries
+`024.223`'s change to the same area. Two changes to how a type name is
+compared, in one release, reviewed together, is how `024.47` happened.
+
+### Two attempts in 0.2.16, both measured unsound, and why the third is not being written
+
+`CLAUDE.md`'s same-place rule says a hand fix does not get a third go at
+one place. This is that point, so what follows is the deliverable and the
+code change is not.
+
+**Attempt 1 — the cheap repair this entry's own Direction names.** Emit
+`Index::SymbolId.bare_name(entry)` from `#ancestor_names` alongside the
+two spellings it already emits. Measured 3 reports to 0 on the rbs
+corpus, which is why it looked finished. Declined during 0.2.16 for the
+reason the Direction already gave: it adds a fourth spelling to a set of
+hand-built spellings, which is the class of defect rather than the fix
+for it.
+
+**Attempt 2 — the shared resolution path the Direction actually asks
+for.** A `Diagnostics::TypeIdentity.of(name, workspace_index,
+signatures)` answering one identity per type name whatever spelling it
+arrives in, with `#compatible_nominal?` putting both sides through it and
+`#ancestor_names` replaced by an `#ancestor_identities` that asks RBS
+about identities rather than raw hierarchy spellings. It refuses through
+two rules this repository already owns — `WorkspaceIndex#guessed_type_name?`
+and `Index::TypeNameResolution.substitution?` — rather than inventing a
+resolution rule, and it deletes `#simple_name_of`. On paper this is the
+right shape. A reviewer drove it and found two things the author's own
+measurement could not have seen:
+
+- **It buys a false negative wider than the false positive it removes.**
+  The expected side is a name RBS produced — absolute and unambiguous by
+  construction — and putting it through `guessed_type_name?` makes it
+  guessed as soon as the workspace declares one class sharing its last
+  segment. Reproduced on a clone, with and without the patch, `sig/`
+  declaring `Zoo::Barn#feed: (Zoo::Animal) -> void`:
+
+      # workspace as the patch's own control example writes it,
+      # with no Ruby class named Animal anywhere
+      base    ["`feed` expects Zoo::Animal here, but Animal is given"]
+      patched ["`feed` expects Zoo::Animal here, but Farm::Animal is given"]
+
+      # the same fixture, plus the ordinary `module Farm; class Animal; end; end`
+      base    ["`feed` expects Zoo::Animal here, but Farm::Animal is given"]
+      patched []          <- the true mismatch, silenced
+
+  The patch's headline control — "it still reports a same-named class
+  from another namespace" — holds only because its fixture declares no
+  Ruby class named `Animal` at all. Add the class the source is written
+  against and the fix loses exactly the report it was designed to keep.
+
+- **It reintroduces `024.223`'s conflation at a consumer it adds
+  itself.** Half two calls `declared_by_signatures?`, which is
+  `!signatures.ancestors(...).empty?` — and `Environment::UNAVAILABLE` is
+  a frozen `[]`, so a chain that could not be built reads as "not
+  declared". Probed with this entry's own fixture, adding one
+  `include _Serializable` to `class Key` brings the original report back
+  unchanged. The two halves' fixtures each avoid the other's condition.
+
+Four behavioural decisions in that patch were also unpinned — reverse-applied
+one at a time with the whole core suite green — including the very decision
+the report credits with the fix.
+
+**The root cause, stated plainly.** Three spellings of a type name float
+between the RBS side, the index side and the hierarchy side, and each
+reader normalises differently. That much this entry already said. What
+the two attempts add is *why a fix at the comparison keeps failing*: the
+comparison is being asked to recover an identity that was **already lost
+upstream**, and every recovery rule strong enough to reunite the two
+spellings is also strong enough to unite two genuinely different classes.
+`guessed_type_name?` and `substitution?` are refusals designed for a
+*receiver*, where declining costs a missed report; on an *argument's
+expected type* the same refusal costs a wrong silence, and neither rule
+was written for that side.
+
+**The direction actually needed.** The expected type must not arrive as a
+name to be re-resolved at all. `Signatures::TypeConverter` knows the
+absolute `RBS::TypeName` at the moment it builds the `Types::Nominal`,
+and that identity is exact; it is thrown away and a String is compared
+downstream. Carrying it — a nominal that remembers what resolved it —
+removes the comparison's job rather than improving it, and no refusal
+rule is needed on the expected side because there is nothing left to
+guess. That is a change to a type every component reads, which is a
+release's worth of blast radius on this project's own evidence
+(`0.2.5`'s one-line converter change), and it is why this is re-scoped
+rather than attempted a third time.
+
+**Re-scoped to 0.3.0**, where `024.R7`'s work already opens the
+signature and index sides together. Until then the entry stays open and
+`KNOWN_LIMITATIONS` keeps its paragraph in both languages: the product
+does have this defect, and 0.2.16 shipped without fixing it.
+
+
+**Re-driven at 0.3.0 over rbs 4.0.3 with its own `sig/`, and it has
+grown from three to seven.** 102 files, control `unresolved-constant`
+at 326:
+
+    lib/rbs/cli.rb:498               `constant` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/inline_parser.rb:533     `new` expects RBS::Location here, but Location is given
+    lib/rbs/inline_parser.rb:534     `new` expects RBS::Location here, but Location is given
+    lib/rbs/prototype/runtime.rb:525 `generate_mixin` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/prototype/runtime.rb:528 `generate_methods` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/prototype/runtime.rb:565 `generate_mixin` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/prototype/runtime.rb:567 `generate_methods` expects RBS::TypeName here, but TypeName is given
+
+**Every `argument-type` report this corpus produces is this entry.**
+The check's whole output on a hand-written-signature corpus is false.
+
+**And there is a direction that is not spelling normalisation.**
+`CLAUDE.md` records why normalising the two spellings cannot work --
+every rule strong enough to reunite `TypeName` and `RBS::TypeName`
+also unites two different classes. But the *actual* side is inferred
+from Ruby source whose lexical nesting the parser already records on
+the candidate: a bare `TypeName` written inside `module RBS` resolves
+to `RBS::TypeName` the way Ruby resolves it, not by guessing at the
+string. That is a different mechanism from the one the register
+rejects, and it is the one worth measuring next -- 7 to 0, with
+`unresolved-constant` at 326 as the control.
+
+**Attempted in 0.3.0 and abandoned before a change, with one fact
+gained.** The lexical-nesting direction sketched above is not the one:
+two fixtures were built for it -- a bare name written inside its own
+`module`, then the same across two files, which is rbs's own shape --
+and **neither reproduces**. Both were deleted rather than kept, because
+a passing example that does not reproduce the defect is worse than no
+example: it reads as coverage.
+
+What the fixtures ruled out is that this is Ruby-side constant
+resolution. rbs writes the expected side **bare** in its own signature:
+
+    sig/resolver/constant_resolver.rbs:29
+      def constant: (TypeName constant_name) -> Constant?
+
+and it arrives at the check as `RBS::TypeName`. So the absolutisation
+RBS performs is reaching one side and not the other, and both sides
+are RBS's -- not, as this entry says, an actual side "inferred from
+Ruby source written inside `module RBS`".
+
+That puts the root exactly where `CLAUDE.md` already puts it, in the
+DTSTTCPW section: `Signatures::TypeConverter` holds an absolute
+`RBS::TypeName` at the moment it builds the `Types::Nominal` and
+flattens it to a String, after which three readers normalise spellings
+to get the identity back. The direction is to keep the identity, which
+is a change to what a `Nominal` carries and to its readers -- not a
+hunk a review round can add.
+
+**Retargeted to 0.3.2 in 0.3.0's closing sweep.** Seven reports and
+all of them false, on the only hand-written-signature corpus this
+engine has been pointed at.
+
+## Fixed in 0.3.2, and the cause was neither of the two this entry chased
+
+Two attempts were declined for being spelling normalisation, and the
+direction recorded here was to carry `RBS::TypeName`'s identity through
+`Types::Nominal` — a change to a type every component reads. Driven at
+0.3.2, **the spelling is a symptom of a swallowed failure**, and the
+fix is one guard in the reader that swallows it.
+
+`Signatures::Environment#ancestors` answers `UNAVAILABLE` — a frozen
+`[]` — when RBS declares a type whose ancestry it cannot build
+(`024.223`). `Engine#ancestor_names` added whatever came back to the
+reachable set, so an unavailable chain was indistinguishable there from
+a type with no ancestors, and `#compatible_nominal?` then asserted a
+mismatch from a question it could not ask. That is the exact shape
+`CLAUDE.md`'s swallowed-failure rule forbids, one layer below the layer
+that knows what to do with it — and the register had already noticed it
+*in a proposed patch* while missing that it was at HEAD.
+
+Why rbs's own signatures trip it, taken from the run rather than
+reasoned about:
+
+    failed to build ancestors of ::RBS::TypeName:
+      sig/typename.rbs:52:4...52:19: Could not find mixin: _ToJson
+
+`sig/typename.rbs` includes an interface rbs does not load for itself.
+With the chain unavailable, `via_signatures` contributes nothing and the
+set comes out as every spelling of the class except the bare-qualified
+one the expected side is compared as:
+
+    actual="TypeName"  expected="RBS::TypeName"
+    reachable=["TypeName", "::RBS::TypeName", "Object", "Kernel",
+               "BasicObject"]
+
+**Measured, rbs 4.2.0 with its own `sig/` as the signature root**, 109
+files, corpus-sha256 identical on both sides:
+
+    argument-type          6  ->  0        (all six were this entry)
+    unresolved-constant  369  ->  369      (control)
+
+0 introduced. Two further corpora, each run against a `git worktree` of
+HEAD so the two sides differ only in this change:
+
+    language_server-protocol-3.17.0.6, its own sig/, 375 files
+      byte-identical, both sides
+
+    activesupport + activerecord + activemodel 8.1.3.1, 759 files,
+    stdlib signatures
+      unresolved-constant  1788 = 1788
+      unknown-method         97 =   97
+      byte-identical, both sides
+
+`#ancestor_names` has exactly one caller, `#compatible_nominal?`, so
+`argument-type` is the whole blast radius by construction — and the two
+runs above are what says so from outside the code rather than from
+reading it.
+
+**The deciding control is in the spec, not in prose.** One fixture, two
+signature files one `include _Missing` apart: with the chain
+unbuildable the call is reported, with it buildable the same call is
+silent. That is what makes the chain rather than the spelling the
+cause, and an earlier fixture that lacked it passed at HEAD for a
+reason unrelated to the defect.
+
+**What it costs, pinned as an assertion rather than written as a
+sentence.** A *genuine* mismatch whose argument's own chain is
+unavailable is now declined too. The reachable set is a lower bound and
+a chain that could not be built may well have had the expected type in
+it, so this is section 0's preferred direction — a missed report rather
+than a wrong one — and
+`spec/ovallsp/diagnostics/unbuildable_signature_chain_spec.rb` asserts
+it so the price cannot quietly change.
+
+**What is left, and it is a different entry.** The actual side still
+arrives under-qualified: a bare `TypeName` written inside a module
+nested deeper than the class is recorded as written, and only the
+hierarchy index recovers it. Nothing in this fix touches that, and the
+fixture that reproduces it is `024.19`'s. The half this entry was
+titled for — *a namespaced type reported incompatible with itself* — no
+longer happens on the corpus that produced it.
+
+## Reopened in 0.3.3: the entry was closed on one half, and the other one is its own reproduction
+
+The section above is sound about what it changed, and the qualifier in
+its last sentence is doing all the work: *on the corpus that produced
+it*. Off that corpus the titled symptom still happens, and where it
+happens is this repository's own reproduction.
+
+`core/spec/ovallsp/diagnostics/namespaced_argument_type_spec.rb` holds
+it, `pending`, and run at 0.3.3 the pending example still fails with
+
+    `fetch` expects App::Key here, but Key is given
+
+which is a namespaced type reported incompatible with itself — the
+symptom the heading named. The three controls in the same file pass, so
+this is not an engine that has stopped checking argument types.
+
+**Why 0.3.2's fix does not reach it.** That fix declines when
+`Signatures::Environment#ancestors` answers `UNAVAILABLE`: RBS declaring
+a type whose ancestry it cannot *build*, which is what rbs's own
+`sig/typename.rbs` does by including an interface rbs does not load for
+itself. Nothing in this fixture is unbuildable. `App::Key` is declared in
+`sig/` with no includes and there is **no Ruby class of that name** for
+the hierarchy index to resolve the receiver through, so the actual side
+arrives bare, the reachable set is that bare spelling and nothing else,
+the expected side is `App::Key`, and the comparison misses.
+`Environment.unavailable?` tells the sentinel apart by identity, so an
+empty chain for a name RBS never declared is not unavailable and the new
+guard does not fire. Two different causes, one symptom; 0.3.2 fixed one.
+
+**The remaining half, stated so it cannot be closed on part of itself
+again:** a type declared in `sig/` alone, with no Ruby class of that name
+in the workspace, is reported incompatible with itself when the source
+writes it bare under the namespace it is declared in. The spec's own
+comment records that this shape was found by probe and that adding
+`class Key` in Ruby hides it — so a fixture that declares the class in
+both places cannot be used to check this closed.
+
+The two attempts recorded above stand as measured-unsound, and the
+direction the 0.3.2 section reaches — the identity thrown away upstream
+in `Signatures::TypeConverter` — is the one this half needs, more
+plainly than the other half did: there is nothing in the workspace for
+any downstream reader to recover the identity *from*.
+
+**And this closure is the failure the register keeps recording.**
+`024.151`, reopened in the same pass, was closed on one instalment of
+ten while its own last sentence said the class was not closed. This
+entry was closed on one of two causes while its own last section said
+what remained. `docs/ISSUES.md` puts "does it reproduce?" first for
+moving an issue *into* the register, on the strength of `024.130`;
+nothing said the same about moving one out, and both closures were made
+without running the reproduction the entry already had. In this case the
+reproduction is a `pending` example in the suite, which reports as
+pending rather than as a failure — so nothing was going to raise a hand.
+
+*The Area's line numbers were dropped in the same pass.* They named
+positions in `engine.rb` that had drifted, and an Area is a live pointer
+rather than history.
 
 ## 024.237 Four shapes stopped reporting by declining on the body, not by reading it
 
@@ -4301,9 +4948,18 @@ they do. Neither the per-gem key nor a whole-index one can see that.
 
 What is left is therefore a design question — what identity a
 persisted index is keyed by — rather than plumbing. Moved to 0.4.0.
-0.3.2 fixed the half of this that was making *wrong* answers rather
-than late ones, in 0.3.1: the index is dropped when the Agent
-restarts.
+The half that was making *wrong* answers rather than late ones was
+fixed in 0.3.1, as the section above already says; 0.3.2 did not
+touch it.
+
+*Corrected in 0.3.3.* The sentence immediately above read "0.3.2 fixed
+the half of this ... in 0.3.1", naming two shipped releases for one
+fix. It was written in 0.3.2 as a copy of the 0.3.1 sentence in the
+section above with its subject overwritten and the original trailing
+clause left standing. The attribution to 0.3.1 is the correct one, and
+`docs/design/tasks/055-0.3.1-what-a-restart-forgets.md` and
+`core/spec/ovallsp/server_gem_index_retry_spec.rb` are where it is
+recorded and pinned.
 
 ## 024.297 Call hierarchy lists no callee reached through `send`, `super` or a macro
 
@@ -4509,7 +5165,7 @@ user-visible: yes
 target: 0.4.0
 ```
 
-**Area:** `core/lib/ovallsp/index/workspace_index.rb` (`open_surface?`)
+**Area:** `core/lib/ovallsp/workspace_index.rb` (`open_surface?`)
 
 A class body carrying a macro this parser does not model has its
 surface marked open, and the undefined-method check then declines
@@ -4527,6 +5183,18 @@ measurement of how much of a real application it costs -- a corpus
 question, not a code change.
 Recorded per `CLAUDE.md`'s rule that a release ships with its open
 findings written down.
+
+*Area corrected in 0.3.3.* It named a file under `core/lib/ovallsp/index/`
+that has never existed on any branch; `open_surface?` is in
+`core/lib/ovallsp/workspace_index.rb`, and the declining caller is
+`core/lib/ovallsp/semantic/method_resolver.rb`. This was the register's
+only Area path pointing at nothing, and it sat where the guard written
+for exactly that — `deferred_findings_spec`'s "names only paths that
+exist, in every open entry's Area" — cannot look: that example takes its
+entries from `DeferredFindings.open_defects`, which filters
+`kind == "defect"`, and this entry is `kind: friction`. The guard passes
+green with the path broken. Reported to whoever owns that spec rather
+than fixed here.
 
 ## 024.318 A workspace directory shaped like a gem path would be attributed to a gem
 
@@ -4703,11 +5371,11 @@ still absent.
 | Diagnostics across the whole project | Open files only | **0.2.0** | 0.2.0, no capability row (024.14) | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
 | Docstrings in hover and completion | Type, origin and definition location only | **0.2.0** | 0.2.0 | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
 | Semantic highlighting (semantic tokens) | None | **0.2.0** | 0.2.0 | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
-| Inlay hints (inferred types, parameter names) | None | **0.3.0** | — | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
-| Code actions / quick fixes | None | **0.3.0** | — | Each existing diagnostic implies one: define the missing method, correct the route helper name, fix the argument count. A diagnostic that only complains is half a feature. |
-| Go to type definition | Go to definition only | **0.3.0** | — | Cheap given `explainType` already resolves the type: jump from an expression to the class it evaluates to, rather than to the method being called. |
-| Document highlight (occurrences in file) | None | **0.3.0** | — | Small and self-contained: the reference index already answers this workspace-wide, so scoping it to one file is nearly free. |
-| Call hierarchy | Find references only | **0.3.0** | — | An incremental step on the same index. Callers/callees of a method, navigable, rather than a flat list. |
+| Inlay hints (inferred types, parameter names) | None | **0.3.0** | 0.3.0 | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
+| Code actions / quick fixes | None | **0.3.0** | 0.3.0 | Each existing diagnostic implies one: define the missing method, correct the route helper name, fix the argument count. A diagnostic that only complains is half a feature. |
+| Go to type definition | Go to definition only | **0.3.0** | 0.3.0 | Cheap given `explainType` already resolves the type: jump from an expression to the class it evaluates to, rather than to the method being called. |
+| Document highlight (occurrences in file) | None | **0.3.0** | 0.3.0 | Small and self-contained: the reference index already answers this workspace-wide, so scoping it to one file is nearly free. |
+| Call hierarchy | Find references only | **0.3.0** | 0.3.0 | An incremental step on the same index. Callers/callees of a method, navigable, rather than a flat list. |
 | Auto-import / add `require` | None | **0.4.0** | — | Much weaker payoff than in Python: Rails autoloads, and plain Ruby projects mostly `require` at the entry point. Worth revisiting only after the plain-Ruby story (024.R1) exists. |
 | Type checking strictness levels | One fixed set of checks | **0.4.0** (as per-check severity) | — | Pylance's basic/strict switch matters because its checks are numerous and opinionated. With the checks this engine has, a per-check severity setting would cover the same need more simply. |
 | Signature help with active parameter tracking | Signature label only | **0.4.0** | — | Already useful; highlighting which argument the cursor is in is a refinement, not a gap. |
@@ -4729,6 +5397,25 @@ section is the reasoning behind each. Keep the two in step.
 
 
 **Retargeted to 1.0.0.** A parity roadmap does not get fixed in a release; it terminates at the version whose definition it serves. The other two roadmap entries that are still open, 024.R1 and 024.R4, are both 1.0.0, and docs/PUBLISHING.md's 0.x section is what defines that bar. Unscheduled was the value that let it sit outside every release's reckoning.
+
+### 0.3.3: the five 0.3.0 rows are filled in, three releases late
+
+Inlay hints, code actions, go to type definition, document highlight and
+call hierarchy each carried an empty **Shipped in** cell until here, and
+the preamble above makes an empty cell an assertion — "Everything below
+without a 'shipped in' is still absent." All five shipped in 0.3.0:
+`vscode/CHANGELOG.md`'s 0.3.0 section names each, and
+`core/lib/ovallsp/server.rb` advertises `inlayHintProvider`,
+`codeActionProvider`, `typeDefinitionProvider`, `documentHighlightProvider`
+and `callHierarchyProvider` in the `initialize` response, which is the
+source this table says its capability list was read from. So this entry
+asserted the absence of five capabilities across three shipped releases,
+and broke its own "Keep the two in step" instruction, since `README.md`
+and `README.ja.md` mark all five shipped.
+
+Nothing about the roadmap changes: the rows are a record, the entry stays
+open at 1.0.0 as a parity plan, and only the record was wrong.
+
 ## 024.R4 Only one platform is published or verified (roadmap, 1.0.0)
 
 ```yaml
@@ -4781,13 +5468,13 @@ target: 1.0.0
 
 **Area:** `README.md`'s opening note, `docs/PUBLISHING.md`'s "External
 contributions: none until 1.0.0", and the repository root, where a
-contributing guide, a code of conduct and a support page stood until 057
+contributing guide, a code of conduct and a support page stood until 058
 with the Japanese translations of the internal process documents beside
 them.
 
 The repository does not accept issues or pull requests while the
 developer is investigating and fixing things faster than an external
-change could be reviewed against, and GitHub Issues are disabled. 057
+change could be reviewed against, and GitHub Issues are disabled. 058
 removed the documents written for a contributor who cannot yet arrive —
 `CONTRIBUTING`, `CODE_OF_CONDUCT` and `SUPPORT`, in both languages —
 rather than keep them current for nobody, and with them the Japanese

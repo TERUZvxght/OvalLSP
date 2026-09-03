@@ -83,7 +83,7 @@
     <div class="wrap">
       <div class="hero-copy">
         <div class="badge-row">
-          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.3.2</span>
+          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.3.3</span>
           <span class="badge">VS Code extension</span>
           <span class="badge">MIT</span>
         </div>
@@ -396,7 +396,7 @@
       <div class="legend">
         <div><span class="mark mark--yes">Verified</span> a test fails if it breaks</div>
         <div><span class="mark mark--warn">Unverified</span> may well work; nothing promises it</div>
-        <div><span class="mark mark--plan">0.3.0</span> not built yet — the release it is planned for</div>
+        <div><span class="mark mark--plan">0.4.0</span> not built yet — the release it is planned for</div>
         <div><span class="mark mark--none">n/a</span> needs Rails data no agent can supply here</div>
       </div>
 
@@ -547,12 +547,17 @@
           </p>
         </div>
         <div class="callout callout--warn reveal">
-          <h4>Gem-derived methods aren't indexed yet</h4>
+          <h4>The gem index is rebuilt on every start</h4>
           <p>
             The unknown-method check only fires when a receiver's whole ancestry is known.
-            A class inheriting from a gem — <code>ApplicationController</code>, and so most
-            controllers and jobs — is silent instead. Indexing what the gems define is what
-            lifts that, and is planned for <a href="roadmap.html#v030">0.3.0</a>.
+            <a href="roadmap.html#v030">0.3.0</a> indexed what the gems define, so a class
+            inheriting from a gem — <code>ApplicationController</code>, and so most
+            controllers and jobs — is no longer silent. That index is asked of your running
+            application at every start, so the check is late by a few seconds each session.
+            And it still declines about any class whose body carries a macro this extension
+            does not model — <code>before_action</code>, <code>helper_method</code>,
+            <code>rescue_from</code> — which in a Rails application is nearly every
+            controller.
           </p>
         </div>
         <div class="callout callout--info reveal">
@@ -630,15 +635,15 @@
 
       <div class="grid grid--4">
         <a class="card card--hover reveal" href="roadmap.html#v020" style="text-decoration:none">
-          <h3 class="mono" style="color:var(--ruby-bright)">0.2.0</h3>
+          <h3 class="mono">0.2.0 <span class="mark mark--yes">shipped</span></h3>
           <p><strong>Completion from the first keystroke</strong>, project-wide diagnostics, documentation in hover, semantic highlighting, argument types, unassigned <code>@ivar</code>.</p>
         </a>
         <a class="card card--hover reveal" href="roadmap.html#v030" style="text-decoration:none">
-          <h3 class="mono">0.3.0</h3>
+          <h3 class="mono">0.3.0 <span class="mark mark--yes">shipped</span></h3>
           <p><strong>Knowing what the gems define</strong> — plus inlay hints, quick fixes, go to type definition and call hierarchy.</p>
         </a>
         <a class="card card--hover reveal" href="roadmap.html#v040" style="text-decoration:none">
-          <h3 class="mono">0.4.0</h3>
+          <h3 class="mono" style="color:var(--ruby-bright)">0.4.0</h3>
           <p><strong>Refinements</strong> — per-check severity settings and auto-<code>require</code> insertion.</p>
         </a>
         <a class="card card--hover reveal" href="roadmap.html#v100" style="text-decoration:none">

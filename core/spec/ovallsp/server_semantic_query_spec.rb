@@ -95,8 +95,13 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
 
   # The scan that finds which call the cursor is inside. `activeParameter`
   # -- which parameter within it -- was built on the same tokens during
-  # 0.2.1's review loop and is deferred to 0.3.0 with its capability row;
-  # what stays is the scan itself, which fixes a 0.2.0 regression where a
+  # 0.2.1's review loop and is deferred to 0.4.0 with the capability row
+  # that named it (S4; the roadmap's "Signature help highlights the
+  # argument the cursor is in"). This copy said 0.3.0, which shipped
+  # without it: 0.2.3 corrected the same sentence beside the code in
+  # `server.rb` and missed this one.
+  #
+  # What stays is the scan itself, which fixes a 0.2.0 regression where a
   # call that had already closed before the cursor won.
   describe "which call the cursor is inside" do
     # The cursor is at the end of the written text, wherever that lands --

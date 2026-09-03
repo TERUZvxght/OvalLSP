@@ -108,7 +108,7 @@ RSpec.describe "what we rely on the client to do" do
                         "docs/CLIENT_BEHAVIOUR.md: #{restated.join(', ')}"
   end
 
-  # The Japanese edition of the document was retired in 057: internal
+  # The Japanese edition of the document was retired in 058: internal
   # documents are one language, and this one is internal. What its guard
   # held -- a row for every row, translated rather than copied, the same
   # rows marked checked -- is recorded in that release's task document.

@@ -68,9 +68,13 @@ RSpec.describe "a literal whose class name a workspace class shares" do
   # same class from 0.2.5: one line in a type converter, one failure in
   # the suite, and a second consequence a corpus found immediately.
   #
-  # The direction is `024.224`'s: a type that came from a literal has an
-  # identity, and encoding it in the *name* makes every reader normalise
-  # the spelling back.
+  # The direction was recorded as `024.224`'s too: a type that came from
+  # a literal has an identity, and encoding it in the *name* makes every
+  # reader normalise the spelling back. `024.47`'s own entry withdraws
+  # that pairing — `024.224`'s cause turned out to be a swallowed
+  # `UNAVAILABLE`, repaired by one guard, not the identity change — so
+  # the argument rests on this entry alone and is to be made or declined
+  # on its own evidence rather than on a second case that has evaporated.
   it "completes the core class's members, not the workspace class's" do
     pending("rooting the name breaks 11 examples in 7 files; the identity belongs beside it — 024.47")
 

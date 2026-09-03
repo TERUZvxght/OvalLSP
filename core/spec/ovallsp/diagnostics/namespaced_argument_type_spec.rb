@@ -112,7 +112,7 @@ RSpec.describe "an argument whose type is namespaced" do
   # made both correct and cheap. See `024.224` for the measurement and
   # the direction that remains.
   it "does not report a namespaced type against itself" do
-    pending("the cheap fix silences a true mismatch; see 024.224")
+    pending("Key is declared only in sig/, with no Ruby class of that name to qualify it — 024.224")
     expect(findings(NAMESPACED_SOURCE)).to be_empty
   end
 

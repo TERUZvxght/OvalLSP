@@ -1,7 +1,8 @@
-# 057 — The rulebook, cleaned: one card, the documents behind it, and the contributor pages retired
+# 058 — The rulebook, cleaned: one card, the documents behind it, and the contributor pages retired
 
 **Branch:** `worktree-057-rulebook-cleanup`, merging into `main` by pull
-request. Not a release: no version moves and no capability row moves.
+request. The branch kept the number this record was opened under; 0.3.3
+took 057 on `main` while this was in review, so the record is 058. Not a release: no version moves and no capability row moves.
 
 **Scope:** what the maintainer asked for on 2026-09-03, after an inventory
 of everything this repository designates as mandatory — about 1,800 lines
@@ -280,7 +281,7 @@ rather than looping further.
 |---|---|---|
 | 1 | `CLAUDE.md` could regrow a rulebook as prose, or as `* ` or `1. ` items; the spec counted only `- ` lines | fixed: the spec pins the whole file |
 | 2 | The stale-claim pattern was three backticked prefixes; a branch outside backticks, a two-part version, or this change set's own `worktree-` branch passed | fixed: the pattern covers those spellings, and "in preparation" and "being prepared" |
-| 3 | The task-file guard was fenced to one bullet; a number one bullet away, or without `.md`, passed | fixed for the `.md` forms: the whole card is scanned, with the two reference documents allowed. A bare "task 057" still passes, because record numbers are cited legitimately |
+| 3 | The task-file guard was fenced to one bullet; a number one bullet away, or without `.md`, passed | fixed for the `.md` forms: the whole card is scanned, with the two reference documents allowed. A bare "task 058" still passes, because record numbers are cited legitimately |
 | 4 | The declared-relationship check read four hardcoded documents, and did not check that the declared section was the right one | fixed in part: the list is read from the card's index, so a new document is asked by default, and five more documents declare. Whether a declaration names the *right* section is not checked, and the spec says so |
 | 5 | The shipped changelog's new pointer named "Code that deletes" for a rule that lives under "Unpinned behaviour is a defect" | fixed: the pointer names the document and no section |
 | 6 | `SECURITY.md` gained a section that `site/security.html` does not mirror | fixed after the rounds: the maintainer asked for every contradiction to be aligned to the correct side, and the map says the page mirrors the policy, so both languages of the page carry the section now |

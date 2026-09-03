@@ -2,7 +2,7 @@
 
 # The working rules are one short file, `AGENTS.md`, and `CLAUDE.md` is
 # an import of it -- so every agent reads the same card and nothing is
-# kept in step by hand. `057` set this up, replacing an 803-line
+# kept in step by hand. `058` set this up, replacing an 803-line
 # `CLAUDE.md` and a 199-line `AGENTS.md` that restated it.
 #
 # What this holds:
@@ -12,7 +12,7 @@
 #   rules were no longer legible among their own histories. Adding a
 #   line costs a line, or a check that makes the line unnecessary.
 # - **`CLAUDE.md` stays an import.** Held by pinning the whole file, not
-#   by counting list items: 057's third review round wrote a rival
+#   by counting list items: 058's third review round wrote a rival
 #   rulebook into it as prose, under the note, and the count did not
 #   notice. A rule written there and not in the card is a second
 #   rulebook, which is `024.150`'s shape.
@@ -20,7 +20,7 @@
 #   prepared, on which branch, and in which task file is what
 #   `git branch --show-current` and the highest-numbered task file say.
 #   A claim written here went stale within one release each time it was
-#   tried; `agents_pointer_spec` guarded that until 057 folded it in
+#   tried; `agents_pointer_spec` guarded that until 058 folded it in
 #   here, and the same round widened both patterns past the spellings
 #   the old one knew -- a branch outside backticks, a two-part version,
 #   this change set's own `worktree-` branch, a task file named anywhere
@@ -28,14 +28,14 @@
 # - **The documents behind the card say which section they stand
 #   behind, and that section exists.** The countermeasure `024.150`
 #   records, in a new shape -- that entry describes the first one, the
-#   `restates` markers 057 retired with the spec that read them. The
+#   `restates` markers 058 retired with the spec that read them. The
 #   list of documents is read from the card's own index, so a document
 #   added there is asked by default. What is *not* checked is that the
 #   declared section is the right one: a declaration is a claim, and
 #   this holds only that it names something.
 RSpec.describe "the working-rules card" do
   AGENTS_CARD_ROOT = File.expand_path("../../..", __dir__)
-  # The budget sits within a line of the card as 057 wrote it: a new
+  # The budget sits within a line of the card as 058 wrote it: a new
   # line has to pay for itself.
   AGENTS_CARD_BUDGET = 120
 
@@ -138,7 +138,7 @@ RSpec.describe "the working-rules card" do
 
     pointer = AGENTS_CARD_TASK_FILE
     expect("- Read section 0. The current file is `046-0.2.14-making-the-record-true.md`.".scan(pointer)).not_to be_empty
-    expect("under `.claude/`; the work is `057-the-rulebook-cleaned.md`.".scan(pointer)).not_to be_empty
+    expect("under `.claude/`; the work is `058-the-rulebook-cleaned.md`.".scan(pointer)).not_to be_empty
     expect("the highest-numbered `docs/design/tasks/NNN-*.md`".scan(pointer)).to be_empty
 
     gone = "`AGENTS.md`'s \"Sections nobody wrote\" lines point here."

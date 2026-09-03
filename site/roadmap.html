@@ -80,8 +80,10 @@
       <h1>What each release lets you do</h1>
       <p class="lede">
         In the order a user notices it. A version number here is a promise about
-        <em>what arrives together</em>, not a date. Patch releases are absent by design:
-        they announce nothing new — though they are where a promise already made gets kept.
+        <em>what arrives together</em>, not a date. The <em>plans</em> below are minor and major
+        versions only: a patch promises nothing new, it is where a promise already made gets
+        kept. The shipped panels include the patch releases, because what they fixed is worth
+        being able to look up.
       </p>
     </div>
   </section>
@@ -91,7 +93,7 @@
       <div class="grid grid--3">
         <div class="card card--flat">
           <h3 class="mono" style="font-size:1rem">patch — 0.1.<em>x</em></h3>
-          <p>Nothing a user sees changed. Fixes, hardening, tests. Never adds a capability row.</p>
+          <p>Nothing new is announced: the release makes the extension do what some earlier release already claimed. What a user sees can change — that is what a bug fix is — and a capability row may be added or turned ✅ where it names something already understood to work.</p>
         </div>
         <div class="card card--flat">
           <h3 class="mono" style="font-size:1rem">minor — 0.<em>x</em>.0</h3>
@@ -200,6 +202,36 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v033">
+          <div class="tl-version">
+            <span class="v">0.3.3</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>The record said one thing and the product did another</h3>
+          <ul class="feature-list">
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>This page showed 0.3.0 as unshipped</strong>, with every item marked as a plan, beside panels listing 0.3.1 and 0.3.2 as shipped &mdash; since the day 0.3.0 merged.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>The front page said indexing what the gems define was still to come.</strong> It shipped in 0.3.0. That page also now states what is still missing rather than gesturing at it.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>A limitation retired in 0.3.2 is back, narrowed.</strong> Half of it was fixed; if your <code>sig/</code> declares a class no Ruby file in your workspace declares, you can still meet the rest.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>Nothing in the engine changed.</strong> The only edits to the Core Server are comments.</span>
+                    </li>
+          </ul>
+          <p class="text-mute">
+            The full account is in the
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.md">changelog</a>
+          </p>
+        </article>
+
         <article class="tl-item" id="v032">
           <div class="tl-version">
             <span class="v">0.3.2</span>
@@ -251,6 +283,53 @@
                       <span><strong>The test suite stops re-tightening the cache on every launch,</strong> and three documents that went stale without anything noticing now fail a check instead &mdash; the protocol between the two processes, the record naming a release&rsquo;s branch, and a guard still hunting a branch-name spelling retired two releases ago.</span>
                     </li>
           </ul>
+        </article>
+
+        <article class="tl-item" id="v030">
+          <div class="tl-version">
+            <span class="v">0.3.0</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>Eight new things the editor can do, and it knows what the gems define</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>Article.all.</code> completes.</strong> A <code>Relation</code> answers what it holds &mdash; <code>where</code>, <code>order</code>, <code>limit</code>, and the chain they build. The chain used to lose its type after the second link: <strong>228 items</strong> where there were none.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Unknown methods are reported on classes that inherit from a gem</strong> &mdash; <code>ApplicationController</code>, and so most controllers and jobs. A Runtime Agent walks the loaded modules of your running application, and the check fires only where every link in that ancestry is known and nothing in it defines <code>method_missing</code>. It stays silent where the receiver can answer at call time, which is why a model is never reported.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Inlay hints.</strong> The inferred type after each local assignment, and the parameter name each argument is being passed as.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Quick fixes.</strong> Insert a <code>def</code> for a method reported as unknown, into the class the call was made on; replace an unknown route helper with the nearest one your application actually has; remove surplus arguments where a call passes too many. Three fixes, not one for every diagnostic.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Go to type definition</strong> &mdash; jumps to the class an expression evaluates to, rather than to the method that produced the value.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Call hierarchy</strong> &mdash; who calls this method, across files, and what it calls, each with the range of the call inside the calling method.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Document highlight.</strong> Every occurrence of the local under the cursor &mdash; not a same-named local in another scope &mdash; each marked as a read or a write. On a method name, its declaration and its call sites in the file.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Completion of <code>@ivar</code> names</strong> the moment you type the sigil, from the instance variables the class assigns anywhere &mdash; not only the ones the method you are in assigns.</span>
+            </li>
+          </ul>
+          <p class="text-mute">
+            The full account is in the
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.md">changelog</a>,
+            which is where every release is recorded in full.
+          </p>
         </article>
 
         <article class="tl-item" id="v0218">
@@ -728,56 +807,6 @@
           </p>
         </article>
 
-        <article class="tl-item tl-item--future" id="v0215">
-          <div class="tl-version"><span class="v">0.2.15</span></div>
-          <h3>The accuracy line</h3>
-          <ul class="feature-list">
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Open engine defects, and nothing announced.</strong> A patch release closes the gap between what the extension already claimed and what it does — and from 0.2.14, against any earlier claim rather than only the previous release's. No capability is added here; that is what makes it a patch.</span>
-            </li>
-          </ul>
-        </article>
-
-        <article class="tl-item tl-item--future" id="v030">
-          <div class="tl-version"><span class="v">0.3.0</span></div>
-          <h3>Knowing what the gems define</h3>
-          <ul class="feature-list">
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong><code>Article.all.</code> completes.</strong> A <code>Relation</code> answers what it holds — <code>where</code>, <code>order</code>, <code>limit</code>, and the chain they build. Hover already names the type; nothing yet tells the engine what a Relation's own API is, and the gem index above is what supplies it.</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Unknown methods are reported on classes that inherit from a gem</strong> — <code>ApplicationController</code>, and so most controllers and jobs. Today the check is deliberately silent there, because reporting would mean guessing.</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Inlay hints.</strong> The inferred types and parameter names appear in the code itself, not only when you hover.</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Quick fixes for each diagnostic.</strong> Define the missing method, correct the route helper name, fix the argument count.</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Go to type definition</strong> — jump to the class an expression evaluates to, rather than to the method being called.</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Call hierarchy</strong> — callers and callees, navigable, instead of a flat list of references.</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Highlight the other occurrences</strong> of the symbol under the cursor, within the file.</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Completion of <code>@ivar</code> names</strong> the moment you type the sigil.</span>
-            </li>
-          </ul>
-        </article>
-
         <article class="tl-item tl-item--future" id="v040">
           <div class="tl-version"><span class="v">0.4.0</span></div>
           <h3>Refinements</h3>
@@ -832,13 +861,15 @@
       <p>
         Every item corresponds to a row in the
         <a href="capabilities.html">capability matrix</a> — there is no roadmap entry
-        without a matrix row, and no matrix row without a stated release. The first three
+        without a matrix row, and no matrix row without a stated release. Three of the
         items in 0.2.0 are measured against Pylance, the closest well-known reference point
-        for a language server in a dynamically typed language: project-wide diagnostics
-        (today a mistake in a file you are not looking at is invisible), documentation in
-        hover (hover says what a thing is, never what it is for), and semantic highlighting
-        (Ruby's <code>foo</code> is ambiguous between a local variable and a method call —
-        the engine already knows which, the editor does not).
+        for a language server in a dynamically typed language — naming them rather than
+        counting them, because they are not the first three in this list: project-wide
+        diagnostics (before 0.2.0 a mistake in a file you were not looking at was
+        invisible), documentation in hover (hover said what a thing is, never what it is
+        for), and semantic highlighting (Ruby's <code>foo</code> is ambiguous between a
+        local variable and a method call — the engine already knows which, the editor does
+        not).
       </p>
       <p>
         The Pylance features deliberately <em>not</em> planned are recorded with their
@@ -849,9 +880,10 @@
 
       <h2>Where the released versions are recorded</h2>
       <p>
-        This page covers what has not shipped yet. What has shipped, release by release —
-        including why each change was made, what was measured, and which approaches were
-        disproved — is in the
+        The panels above marked <em>shipped</em> record what each release added; the ones at
+        the end of the timeline are what has not shipped yet. The full account, release by
+        release — including why each change was made, what was measured, and which
+        approaches were disproved — is in the
         <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.md">changelog</a>.
       </p>
     </div>
@@ -860,7 +892,7 @@
   <section class="section">
     <div class="wrap">
       <div class="cta">
-        <h2>Everything above is unbuilt. Here is what is not.</h2>
+        <h2>Most of the list above has shipped. Here is where each one is verified.</h2>
         <p>The capability matrix marks each shipped feature with the environment its test actually runs in.</p>
         <div class="btn-row">
           <a class="btn btn--primary" href="capabilities.html">See what works today</a>

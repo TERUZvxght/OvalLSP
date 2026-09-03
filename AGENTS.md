@@ -48,7 +48,7 @@ the lines carry the rest of the rules and the how-to; when to open them:
 
 - Test first, and watch the test fail before the implementation exists. A
   line no test fails on when reverted is a defect; `scripts/hunk_sweep.rb`
-  finds them. *judgement*; 038, 057
+  finds them. *judgement*; 038, 058
 - An expected value has a source: Ruby's behaviour is a pasted session, a
   fact about the editor or client is a row in `docs/CLIENT_BEHAVIOUR.md`,
   a number about this tree is a `measured:` marker with a deriver.
@@ -90,7 +90,7 @@ the lines carry the rest of the rules and the how-to; when to open them:
   them. Before reverting anything, grep the tree for it. *judgement*;
   024.109, 024.47
 - An incident produces a check or a register entry, never a paragraph
-  here; a new line has to fit this file's budget. *check*; 057
+  here; a new line has to fit this file's budget. *check*; 058
 
 ## Review loop
 

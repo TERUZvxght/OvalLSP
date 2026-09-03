@@ -36,8 +36,15 @@ require "fileutils"
 #
 # So this is not a rule the check gets wrong. It is the check asserting
 # on a workspace that cannot see the gem where the real
-# `Vendor::Gadgets::Widget` lives — which is `024.R7`, and why the entry
-# moves there rather than being fixed here.
+# `Vendor::Gadgets::Widget` lives — which was read as `024.R7`'s, and why
+# the entry was moved there rather than being fixed here.
+#
+# **That reading did not hold.** `024.R7` shipped in 0.3.0 and this did
+# not follow it — the fixture below has no gem in it at all — while
+# `024.19` was retargeted past 0.3.0 twice, to 0.3.2 in 0.3.0's closing
+# sweep and then to 0.4.0, for reasons of its own. Its residual is
+# constant resolution respecting `Module.nesting` for a bare name, which
+# is that entry's own Direction.
 RSpec.describe "an argument-type report about a bare name in a namespace" do
   subject(:engine) { Ovallsp::Diagnostics::Engine.new }
 
@@ -88,9 +95,11 @@ RSpec.describe "an argument-type report about a bare name in a namespace" do
 
   # **The defect, reproduced.** Pending deliberately: the engine's answer
   # is correct for the workspace it can see, and making it decline needs
-  # to know what the gem declares. `024.R7`.
+  # constant resolution to respect `Module.nesting` for a bare name.
+  # `024.19`, open at 0.4.0. The reason recorded here was `024.R7`, which
+  # shipped in 0.3.0 and did not answer this.
   it "does not judge it against a same-named class from another namespace" do
-    pending("correct for the workspace it can see; needs the gems indexed — 024.R7")
+    pending("correct for the workspace it can see; needs Module.nesting respected for a bare name — 024.19")
 
     expect(findings({ "w.rb" => TOP_LEVEL_WIDGET, "s.rb" => BARE_CALL }, "s.rb")).to be_empty
   end
