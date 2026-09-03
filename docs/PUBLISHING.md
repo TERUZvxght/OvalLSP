@@ -26,12 +26,13 @@ inside the VSIX, and is reported to users as "Core x.y.z" by
 `OvalLSP: Show Version Information` — so a Core version that no release
 ever had makes a bug report impossible to map back to a build.
 
-**Bump `Ovallsp::VERSION` together with `package.json`, even for a
-release that changed no Ruby code.** That is the case that forgets, so it
-is not left to procedure: `copy-core.js` refuses to write a platform
-manifest when the two disagree, and `npm run package` fails with both
-versions named. There is nothing to remember — a mismatched build cannot
-be produced.
+**`ruby scripts/release.rb bump` moves `Ovallsp::VERSION` and
+`package.json` together, with both lock files and the site badge, even
+for a release that changed no Ruby code.** That was the case that forgot,
+so it is not left to procedure twice over: `copy-core.js` refuses to write
+a platform manifest when the two disagree, and `npm run package` fails
+with both versions named. There is nothing to remember — a mismatched
+build cannot be produced.
 
 ### What each number means
 
@@ -239,14 +240,16 @@ Before treating this as a release candidate:
 
 1. Run `vsce ls --tree` and review the full file list — check for
    absolute paths, local usernames, or anything not meant to ship.
-2. Compute the VSIX's SHA-256 and record it in
-   [`docs/RELEASE_ARTIFACTS.md`](RELEASE_ARTIFACTS.md). `release.sh` prints
-   the row to paste. This step existed without a destination from the
-   first Preview until 0.2.0, which is why fourteen releases have a hash
-   nobody kept.
+2. Record the VSIX's SHA-256 in
+   [`docs/RELEASE_ARTIFACTS.md`](RELEASE_ARTIFACTS.md): `ruby
+   scripts/release.rb record` writes the row once the hash matches what
+   the Marketplace serves, and tags. This step existed without a
+   destination from the first Preview until 0.2.0, which is why fourteen
+   releases have a hash nobody kept.
 3. Run `ruby scripts/vsix_semantic_smoke.rb <path-to-unpacked-vsix>/extension`
    against the packaged output.
-4. Confirm `docs/RELEASE_CHECKLIST.md`'s gate items all pass.
+4. Confirm `docs/RELEASE_CHECKLIST.md`'s gate items all pass. `gate` runs
+   the mechanical ones; rows 17 and 20 are checked by hand and say so.
 
 ## Publishing
 
@@ -299,13 +302,16 @@ without a decision behind it, or reaching it and deciding for itself.
 
 **A patch does not need the owner asked again.** Their standing position,
 given during 0.2.4: for a *patch* — no capability row moves, by the table
-above — the go-ahead is already granted, **provided the secret and privacy
-checks have actually been run and have passed**. Concretely that means
+above, and `ruby scripts/release.rb bump` refuses to cut one otherwise —
+the go-ahead is already granted, **provided the secret and privacy checks
+have actually been run and have passed**. Concretely that means
 `release.sh` reached its publish step, which refuses a `.vsce-pat.local`
 readable beyond its owner; the token appears nowhere in the run's output;
-gitleaks is clean over the outgoing range; and
-`scripts/check_home_paths.rb` is clean in both modes. A minor or major
-release still asks, and so does a patch where any of those did not run.
+gitleaks is clean — `gate` runs it over the whole history and the pre-push
+hook over the outgoing range; and `scripts/check_home_paths.rb` is clean in
+both modes, which `gate`'s preflight and the hook run between them. A minor
+or major release still asks, and so does a patch where any of those did
+not run.
 
 That is the whole of the delegation; it is not a general licence. It
 exists because this class of change fixes what was already promised and
