@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "open3"
 require_relative "../../../scripts/review_round"
 
 # `docs/REVIEW_LOOP.md`'s cadence is four rules and an ordering, and until
@@ -48,12 +49,58 @@ RSpec.describe "scripts/review_round.rb" do
     commit_throwaway(root, name)
   end
 
+  # **The script in its own process, loading its own requires.**
+  #
+  # Every other example here reaches `ReviewRound` through this file,
+  # which requires `fileutils` at line 1 — so the spec supplied a
+  # constant the script never asked for, and twelve green examples stood
+  # over a `start` that raised `uninitialized constant
+  # ReviewRound::FileUtils` the first time anyone ran it. A spec that
+  # loads the subject's dependencies for it cannot see a missing one.
+  #
+  # The real file, not a copy: `OVALLSP_REVIEW_ROUND_ROOT` exists so the
+  # tracked script can be aimed at a throwaway repository, which is what
+  # makes running the actual thing possible here.
+  def run_as_a_process(*args)
+    script = File.expand_path("../../../scripts/review_round.rb", __dir__)
+    Open3.capture3({ "OVALLSP_REVIEW_ROUND_ROOT" => root }, "ruby", script, *args, chdir: root)
+  end
+
   describe "start" do
     it "opens the next round under the method it was given" do
       expect(ReviewRound.run(%w[start attack])).to eq(0)
 
       expect(body).to include(round(4, "attack"))
       expect(ReviewRound.state).to include("round" => 4, "method" => "attack")
+    end
+
+    it "opens one when run as its own process, with nothing loading its requires for it" do
+      _, err, status = run_as_a_process("start", "attack")
+
+      expect(status).to be_success, err
+      expect(body).to include(round(4, "attack"))
+    end
+
+    # **The state is written first, and the heading only if it lands.**
+    # The other order leaves the document claiming a round that was never
+    # opened, and the next `start` then refuses that method as already
+    # used — observed once, from a crash between the two writes.
+    it "leaves the document untouched when the state cannot be recorded" do
+      before_start = body
+      allow(ReviewRound).to receive(:record).and_raise(Errno::EACCES)
+
+      expect { ReviewRound.run(%w[start attack]) }.to raise_error(Errno::EACCES)
+      expect(body).to eq(before_start)
+    end
+
+    # And the mirror: a state file saying a round is open, over a
+    # document with no round in it, refuses every later `start` for a
+    # round nobody can find.
+    it "forgets the state when the heading cannot be written" do
+      allow(ReviewRound).to receive(:append_round).and_raise(Errno::EACCES)
+
+      expect { ReviewRound.run(%w[start attack]) }.to raise_error(Errno::EACCES)
+      expect(ReviewRound.state).to be_nil
     end
 
     it "refuses the method the previous round used" do
@@ -102,7 +149,22 @@ RSpec.describe "scripts/review_round.rb" do
       commit_something("a-fix.rb")
 
       expect(ReviewRound.run(%w[close])).to eq(1)
-      expect(ReviewRound.state).not_to be_nil, "a refused close still forgot the round"
+    end
+
+    # **Refusing is not the same as holding the round open.** A round the
+    # index moved under is finished — it concluded about neither tree —
+    # and the only thing left to do is start a fresh one. Keeping the
+    # state file meant `start` then refused with "close it first" while
+    # `close` refused with "it closes nothing", and the way out was
+    # deleting a file in `core/tmp/` that nothing mentions.
+    it "is over once the index moved, so the next round can start" do
+      ReviewRound.run(%w[start attack])
+      commit_something("a-fix.rb")
+      ReviewRound.run(%w[close])
+
+      expect(ReviewRound.state).to be_nil
+      expect(ReviewRound.run(%w[start drive])).to eq(0)
+      expect(body).to include(round(5, "drive"))
     end
 
     # **The control.** Without it every example here passes on a `close`

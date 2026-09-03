@@ -3,6 +3,7 @@
 require_relative "utf8"
 require_relative "deferred_findings"
 
+require "open3"
 require "optparse"
 require "shellwords"
 
@@ -397,18 +398,34 @@ def intake_add(title, opts)
   ]
 
   added = rewrite(path, expect_delta: entry.length, why: "intake add") do |lines|
-    at = lines.index { |l| l.start_with?(INTAKE_HEADING) } or
-      raise RefusedWrite, "#{ISSUES_DOC} has no #{INTAKE_HEADING} section"
-    insert = lines[at..].index { |l| l.strip == INTAKE_EMPTY || l.start_with?("## Index") }
-    raise RefusedWrite, "cannot find where the intake list ends" unless insert
-
-    lines.insert(at + insert, *entry)
+    items = intake_items(lines)
+    lines.insert(intake_insert_at(lines, items), *entry)
+    restate_count(lines, items.length + 1)
   end
 
   puts "issues: added to intake (#{added} lines). It is not in the register and has no number:"
   puts "  #{title}"
   puts "Drive it with a control before promoting it -- see docs/ISSUES.md, \"The rule\"."
   0
+end
+
+# Where a new bullet goes: directly after the last item, so the list
+# stays one contiguous run and the sentence counting it goes on being
+# true about what stands above it. This appended below that sentence and
+# below its table until the sentence started being maintained, at which
+# point "N items above" would have been counting items written under it.
+# With no items yet, the bullet goes above the sentence; with neither, at
+# the end of the section, which is where this began.
+def intake_insert_at(lines, items)
+  at, stop = intake_section(lines)
+  return items.last[0] + items.last[3] if items.any?
+
+  sentence = (at...stop).find { |i| lines[i].match?(INTAKE_COUNT) }
+  return sentence if sentence
+
+  after = lines[at..].index { |l| l.strip == INTAKE_EMPTY || l.start_with?("## Index") } or
+    raise RefusedWrite, "cannot find where the intake list ends"
+  at + after
 end
 
 # Where the intake list starts and stops, as line indices.
@@ -654,7 +671,7 @@ def close(number, opts)
 
   puts "issues: #{number} is fixed, released in #{released}."
   sections.each { |s| puts "  removed #{s[:document]}'s section #{s[:heading].inspect}" }
-  system("ruby", "scripts/archive_resolved_findings.rb", chdir: ROOT, out: File::NULL)
+  delegate("scripts/archive_resolved_findings.rb")
   reindex_and_check
 end
 
@@ -731,9 +748,29 @@ def retarget(number, opts)
 end
 
 def reindex_and_check
-  system("ruby", "scripts/reindex_findings.rb", chdir: ROOT, out: File::NULL)
-  system("ruby", "scripts/issue_index.rb", chdir: ROOT, out: File::NULL)
+  delegate("scripts/reindex_findings.rb")
+  delegate("scripts/issue_index.rb")
   check
+end
+
+# Running one of the repository's own scripts and refusing on **its
+# words**.
+#
+# These ran with `out: File::NULL` and an ignored status, so the reason a
+# script refused was discarded at the moment it was produced. The
+# trailing `check` did catch the state that left behind and printed
+# "FAILED", which is a checker reporting that something is wrong and
+# unable to say what -- and the message that would have said it had
+# already been thrown away by the caller.
+def delegate(script)
+  output, status = Open3.capture2e("ruby", script, chdir: ROOT)
+  return if status.success?
+
+  # Explicit, never the invoking shell's locale: the scripts print
+  # Japanese, and `String#strip` against US-ASCII bytes above 127 raises
+  # rather than not-matching. `scripts/utf8.rb` says why this keeps
+  # happening.
+  raise RefusedWrite, "#{script} refused:\n#{output.dup.force_encoding(Encoding::UTF_8).scrub('?').strip}"
 end
 
   # --- checking -------------------------------------------------------

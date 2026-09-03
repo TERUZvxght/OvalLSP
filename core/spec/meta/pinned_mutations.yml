@@ -1045,3 +1045,51 @@
   to: ""
   spec: spec/meta/issues_tool_spec.rb
   example: "keeps the count sentence current when an item leaves"
+- why: "The script requires what it uses; without it every real `start` raises an uninitialized constant, which only a spec that loads the dependency for it can miss."
+  file: scripts/review_round.rb
+  from: "require \"fileutils\"\n"
+  to: ""
+  spec: spec/meta/review_round_spec.rb
+  example: "opens one when run as its own process, with nothing loading its requires for it"
+- why: "The round's state is written before its heading; the other order leaves the document claiming a round that was never opened, and the next start then refuses that method as already used."
+  file: scripts/review_round.rb
+  from: "    record(round: number, method: method, document: document, tree: tree)\n    begin\n      append_round(document, number, method)\n"
+  to: "    begin\n      append_round(document, number, method)\n      record(round: number, method: method, document: document, tree: tree)\n"
+  spec: spec/meta/review_round_spec.rb
+  example: "leaves the document untouched when the state cannot be recorded"
+- why: "A state file whose heading never landed is removed; without it a round nobody can find refuses every later start."
+  file: scripts/review_round.rb
+  from: "      File.unlink(state_path) if File.file?(state_path)\n"
+  to: ""
+  spec: spec/meta/review_round_spec.rb
+  example: "forgets the state when the heading cannot be written"
+- why: "A round the index moved under is forgotten as well as refused; without that, start refuses with `close it first` and close refuses with `it closes nothing`, and the way out is deleting an untracked file nothing mentions."
+  file: scripts/review_round.rb
+  from: "      File.unlink(state_path)\n      warn \"review-round: this round read a moving tree and closes nothing.\"\n"
+  to: "      warn \"review-round: this round read a moving tree and closes nothing.\"\n"
+  spec: spec/meta/review_round_spec.rb
+  example: "is over once the index moved, so the next round can start"
+- why: "A delegated guard's refusal is reported in its own words; without the status check the reason is discarded at the moment it is produced and only `FAILED` survives."
+  file: scripts/issues.rb
+  from: "  return if status.success?\n"
+  to: "  return\n"
+  spec: spec/meta/issues_tool_spec.rb
+  example: "prints the delegated script's own message when one refuses"
+- why: "A new intake bullet joins the existing run rather than landing below the sentence that counts what stands above it."
+  file: scripts/issues.rb
+  from: "  return items.last[0] + items.last[3] if items.any?\n"
+  to: ""
+  spec: spec/meta/issues_tool_spec.rb
+  example: "keeps the count sentence current when an item arrives"
+- why: "Adding an item restates the count too; without it the sentence is true only until the next `intake add`, and the command that maintains it on the way out is silent on the way in."
+  file: scripts/issues.rb
+  from: "    restate_count(lines, items.length + 1)\n"
+  to: "    lines\n"
+  spec: spec/meta/issues_tool_spec.rb
+  example: "keeps the count sentence current when an item arrives"
+- why: "The count is spelled in words, so zero reads `No items above` in the same sentence shape the pattern finds; a digit there would be a second wording for the list to drift between."
+  file: scripts/issues.rb
+  from: "def count_word(count) = COUNT_WORDS[count] || count.to_s\n"
+  to: "def count_word(count) = count.to_s\n"
+  spec: spec/meta/issues_tool_spec.rb
+  example: "says 'No items above' once the list empties, in a sentence still findable"

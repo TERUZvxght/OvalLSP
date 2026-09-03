@@ -168,27 +168,56 @@ end.
 
 **And each decision inside them is pinned separately**, because
 reverse-applying a hunk that adds a whole method only shows the method
-exists. Twelve entries were added to `core/spec/meta/pinned_mutations.yml`
-— one per refusal, plus the two removals `close` and `promote` perform —
-and each was applied to the tracked file and run against the example that
-names it. **Two of the twelve were caught by that run and not by
-reading**: the mutation for the dirty-tree refusal and the one for the
-published-paragraph refusal were written as `unless false`, which inverts
-the guard into *always refuse* rather than removing it, so both examples
-passed under a mutation that pinned nothing. Corrected to `unless true`
-and re-run; all twelve are caught now.
+exists. Twenty-two entries were added to
+`core/spec/meta/pinned_mutations.yml` — one per refusal, plus the
+removals and restatements the two commands perform — and each was
+applied to the tracked file and run against the example that names it.
 
-## Noticed here, not fixed here
+**Three of the twenty-two were caught by that run and not by reading**,
+and they are three different mistakes:
 
-`scripts/issue_index.rb` scans the `<!-- documents: -->` marker with its
-own pattern rather than through `DeferredFindings`, and that pattern
-cannot express a sub-numbered entry. It is a third grammar for a marker
-whose other two readers now share one — `#anchors` and the
-`#anchored_numbers` added here. Nothing has gone wrong from it: no
-sub-numbered entry is published today. It is not repaired in this change
-set because unifying it would change what the generated index counts,
-which is a measurement to make on its own rather than inside a tooling
-change.
+- the dirty-tree refusal and the published-paragraph refusal were
+  mutated as `unless false`, which *inverts* a guard into always-refuse
+  rather than removing it, so both examples passed under a mutation that
+  pinned nothing;
+- the mutation for where a new intake bullet goes passed because
+  "above the sentence" was all the example asserted, and inserting *at*
+  the sentence is also above it. The example now asserts the bullet
+  joined the run and the blank before the sentence survived — which is
+  the difference between one list and two.
+
+The second of those is the case the manifest exists for: an example
+whose fixture cannot distinguish the two candidate behaviours passes
+under both, and no amount of reading finds it.
+
+## The review rounds
+
+### Round 1 — `diff`
+
+An independent reviewer read the change set. Five findings.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | HIGH — `scripts/review_round.rb` never requires `fileutils`, so every real `start` raised `uninitialized constant ReviewRound::FileUtils` at `record`. Twelve green examples stood over it, because the spec file requires `fileutils` at its own line 1 and so supplied what the script forgot. | Fixed. `require "fileutils"` at the top, and a new example runs the tracked script *as its own process* through `OVALLSP_REVIEW_ROUND_ROOT`, so the subject loads its own dependencies. That example is the countermeasure, not the require. |
+| 2 | HIGH — `start` wrote the round heading before recording the state, so a crash between the two left a heading for a round that was never opened — and the next `start` refused that method as already used. | Fixed. State first, heading second, and a failed heading write removes the state. Two examples: `record` raising leaves the document unchanged, `append_round` raising leaves no state. |
+| 3 | MEDIUM — `close` on a moved tree returned 1 and *kept* the state, while `start` refuses whenever a state exists. The loop stuck: `start` said "close it first", `close` said "it closes nothing", and the way out was deleting an untracked file nothing mentions. | Fixed. A round the index moved under is over: `close` forgets it, still exits 1, and says the next round starts fresh. |
+| 4 | LOW-MEDIUM — the delegated guards ran with `out: File::NULL` and an ignored status, so a refusal's reason was discarded at the moment it was produced; the trailing `check` could then say `FAILED` and not why. | Fixed. One `delegate` runs them, captures the output, and refuses in the script's own words. |
+| 5 | LOW — with the last item promoted the count sentence reads "**No items above; …**"; decide whether zero should return to the original "Empty, and emptied deliberately". | Decided: one sentence shape, always. The original wording is outside `INTAKE_COUNT`'s reach, so restoring it at zero would leave the next item to arrive under a sentence nothing could restate, and the count would go stale silently. An example now covers the zero case and asserts the sentence is still findable. |
+
+### Round 2 — `drive`
+
+The same reviewer ran both commands in a scratch copy of the tree turned
+into a throwaway git repository. One finding, and the rest confirmed.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | `intake add` did not restate the count, so the sentence `promote` maintains on the way out went stale on the way in — found while recording the `issue_index.rb` observation with the tool, as the round asked. It also appended below that sentence and its table, which is where "N items above" stops being true. | Fixed. `intake add` restates the count and inserts the bullet after the last item, and two mutations pin both halves. |
+| — | `issues.rb intake` lists the three hand-written items; `promote 1 …` wrote the entry in the legend's shape, in numeric position before the roadmap entries, dropped the bullet, restated the count, and the three guards passed; `close … --released-in` set `status` and `released-in`, moved the entry to the archive, and `deferred_findings_spec`, `register_split_spec` and `issue_index_spec` passed on the result. | Confirmed, no change. |
+
+The round also asked that the `scripts/issue_index.rb` observation be
+recorded with the tool rather than only in this document. It is intake
+item 4, added with `ruby scripts/issues.rb intake add` — which is how the
+`intake add` defect above was found.
 
 ## 残課題
 

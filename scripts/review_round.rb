@@ -4,6 +4,7 @@
 require_relative "utf8"
 require_relative "repo_files"
 
+require "fileutils"
 require "json"
 
 # Opening and closing a review round, so that the two mechanical halves
@@ -119,8 +120,22 @@ module ReviewRound
 
     tree = index_tree
     number = (previous ? previous[0] : 0) + 1
-    File.write(File.join(ROOT, document), "\n### Round #{number} — `#{method}`\n\n#{TABLE}", mode: "a")
+
+    # **The state first, the heading only if it lands.** These two writes
+    # are one act, and each half alone is a lie the other would have
+    # corrected: a heading with no state is a round the document claims
+    # and `start` will refuse the method of, and a state with no heading
+    # is a round `start` refuses to replace and nobody can find. Written
+    # in this order because a crash between them is far likelier than a
+    # failure in the second write, and this order's residue is the one
+    # `close` can clear.
     record(round: number, method: method, document: document, tree: tree)
+    begin
+      append_round(document, number, method)
+    rescue StandardError
+      File.unlink(state_path) if File.file?(state_path)
+      raise
+    end
 
     puts "review-round: round #{number} is open, method `#{method}`."
     puts "  recorded in #{document}, under a heading and an empty table."
@@ -134,14 +149,26 @@ module ReviewRound
     File.write(state_path, "#{JSON.pretty_generate(fields.transform_keys(&:to_s))}\n")
   end
 
+  def append_round(document, number, method)
+    File.write(File.join(ROOT, document), "\n### Round #{number} — `#{method}`\n\n#{TABLE}", mode: "a")
+  end
+
   def close
     open = state or raise Refused, "no round is open. Start one: ruby scripts/review_round.rb start <method>"
 
     now = index_tree
     if now != open["tree"]
+      # **The round is over, so the state goes.** Keeping it made `start`
+      # refuse with "close it first" while `close` refused with "it
+      # closes nothing", and the only way out was deleting a file in
+      # `core/tmp/` that nothing tells anyone about. A round the index
+      # moved under concluded about neither tree; there is nothing left
+      # to close, and the next round is a fresh one.
+      File.unlink(state_path)
       warn "review-round: this round read a moving tree and closes nothing."
       warn "  round #{open['round']} (`#{open['method']}`) opened on #{open['tree']}; the index is now #{now}."
-      warn "  Start a fresh round on the tree as it stands."
+      warn "  The round is over and is forgotten. Start a fresh one on the tree as it stands:"
+      warn "  ruby scripts/review_round.rb start <method>"
       return 1
     end
 

@@ -189,6 +189,48 @@ RSpec.describe "scripts/issues.rb" do
         expect(intake_titles.last).to eq("A thing that was noticed")
       end
 
+      it "keeps the count sentence current when an item arrives" do
+        before_add = intake_titles.length
+
+        plant_intake("A thing that was noticed")
+
+        lines = File.readlines(issues_doc, encoding: "UTF-8")
+        sentence = lines.index { |line| line.match?(Issues::INTAKE_COUNT) }
+        expect(lines.join).to match(/\*\*#{Issues.count_word(before_add + 1)} items? above;/i)
+        expect(Issues.intake_items(lines).map(&:first)).to all(be < sentence),
+                                                          "an item was written below the sentence counting it"
+
+        # **Above the sentence is not enough**, and the mutation manifest
+        # said so: inserting at the sentence is also above it, and lands
+        # the bullet across the blank line from the list and hard against
+        # the paragraph — one list broken into two, with the sentence
+        # swallowed. The item joins the run, and the blank that separates
+        # the run from the sentence stays where it is.
+        planted = Issues.intake_items(lines).find { |(_, title, _, _)| title == "A thing that was noticed" }
+        expect(lines[planted.first - 1].strip).not_to be_empty,
+                                                      "the new bullet was written across a blank from the list"
+        expect(lines[sentence - 1].strip).to be_empty,
+                                             "the sentence lost the blank line separating it from the list"
+      end
+
+      # **Zero keeps the same sentence.** The list read "Empty, and
+      # emptied deliberately" before it had items, and going back to that
+      # wording at zero would take the sentence out of `INTAKE_COUNT`'s
+      # reach — so the next item to arrive would restore a list under a
+      # sentence nothing could restate, and the count would go stale
+      # silently. One shape, always findable, is the property worth more
+      # than the nicer wording.
+      it "says 'No items above' once the list empties, in a sentence still findable" do
+        intake_titles.length.times do
+          expect(promote(1, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
+        end
+
+        body = File.read(issues_doc, encoding: "UTF-8")
+        expect(intake_titles).to be_empty
+        expect(body).to include("**No items above;")
+        expect(body).to match(Issues::INTAKE_COUNT)
+      end
+
       # The list's own sentence says how many items stand above it, and a
       # count nobody updates is the class of claim this repository
       # re-derives rather than types.
@@ -256,6 +298,21 @@ RSpec.describe "scripts/issues.rb" do
         at = plant_intake("A thing that was noticed")
 
         expect(promote(at, "--user-visible=no", "--note=Internal to this repository.")).to eq(0)
+      end
+
+      # **A delegated script's refusal is its message, not its status.**
+      # Running them with the output discarded meant the reason was
+      # thrown away and only "FAILED" survived — the shape this
+      # repository calls a checker that cannot say what it saw. Planted
+      # by replacing the copy in this root, which is the seam the whole
+      # describe block already turns on.
+      it "prints the delegated script's own message when one refuses" do
+        File.write(File.join(root, "scripts", "reindex_findings.rb"),
+                   "warn 'reindex-findings: the register is out of order'\nexit 1\n")
+        at = plant_intake("A thing that was noticed")
+
+        expect { expect(promote(at, "--user-visible=no", "--note=Internal.")).to eq(2) }
+          .to output(/the register is out of order/).to_stderr
       end
     end
 

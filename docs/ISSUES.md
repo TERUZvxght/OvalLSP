@@ -104,8 +104,12 @@ because a number is a claim that the thing exists.
   058: a changelog pointer named a `docs/CODE_DISCIPLINE.md` section that
   does not hold the rule it quoted, in two rounds running, while
   `check_doc_links.rb` sees only paths.
+- **`scripts/issue_index.rb` reads the documents-marker with a third grammar of its own**
+  - found by: 059's diff round, reading the two readers that now share one
+  - It scans the marker with its own pattern rather than through `DeferredFindings`, and that pattern cannot express a sub-numbered entry, so a published sub-entry would be counted by the register's guards and not by the generated index. Nothing has gone wrong from it yet: no sub-numbered entry is published today. Driving it means writing one and comparing the two counts.
+  - unverified: not yet driven against the tree
 
-**Three items above; the rest was emptied deliberately.** The twenty-one items that had
+**Four items above; the rest was emptied deliberately.** The twenty-one items that had
 accumulated by 0.3.1 were driven and dispositioned in one pass:
 fourteen became `024.306` through `024.319`, and seven left without a
 number. The seven, and why:
