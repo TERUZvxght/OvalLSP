@@ -111,9 +111,10 @@ the lines carry the rest of the rules and the how-to; when to open them:
 - One `release/<version>` branch per version, merged into `main` by pull
   request; other work takes a short-lived branch and a pull request too.
   Merged branches are kept. *check*; maintainer 2026-09-01
-- `ruby scripts/preflight.rb` before every commit; `--list` says what it
-  runs. Nothing personal in the tree or a commit message: no secret, no
-  home path, a noreply address. *check*; 024.195, 028
-- A patch ships without asking, provided the privacy checks named in
-  `docs/PUBLISHING.md` ran and passed; a minor or major asks. *judgement*;
-  maintainer 0.2.4, 024.231
+- `ruby scripts/preflight.rb` before every commit, `--install-prepush`
+  once for the scans a push needs. Nothing personal in a tree, message or
+  tag: no secret, no home path, a noreply address. *check*; 024.195, 028
+- A release is `ruby scripts/release.rb`: one command per step, each
+  refusing when the one before left no evidence. A patch ships without
+  asking if `docs/PUBLISHING.md`'s privacy checks passed; a minor or major
+  asks. *judgement*; maintainer 0.2.4, 024.231

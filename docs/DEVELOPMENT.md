@@ -71,6 +71,43 @@ Never run either while anything else is mutating the same tree. The hunk
 sweep refuses a dirty tree and a concurrent sweep; the mutation applier
 restores each file but cannot see another writer, so that one is on you.
 
+## Before pushing
+
+    ruby scripts/preflight.rb --install-prepush
+
+Two things must be true of a push and of nothing else, so neither is in
+preflight: the outgoing range carries no secret, and no commit or tag
+message carries a real home path. The tree scan preflight runs cannot see
+a message, and `gitleaks` over the history is not a price to pay on every
+commit — so they are a pre-push hook. It refuses the push on either, and
+refuses when `gitleaks` is not installed rather than passing, because a
+scan that did not run reports what a clean one reports.
+`PREPUSH_SKIP=1 git push …` skips it for one push; say what you checked
+instead.
+
+## What else has to change when a file does
+
+    ruby scripts/check_doc_triggers.rb
+
+[`docs/DOCUMENTATION_MAP.md`](DOCUMENTATION_MAP.md)'s trigger table says
+what must change alongside what. The rows whose left column is a set of
+files are data in [`docs/doc_triggers.yml`](doc_triggers.yml), and this
+fails from preflight when one of them changed on your branch and none of
+its companions did. It asks for one companion, not all of them, and it
+covers only the pairs nothing already checks — that file says per rule
+what it adds.
+
+## Cutting a release
+
+    ruby scripts/release.rb status
+
+One command per step — `open`, `bump`, `gate`, `publish`, `record` —
+each refusing when the one before it left no evidence, and every refusal
+naming what clears it. It implements no check: each step runs the script
+or spec that already owns the question.
+[`docs/PUBLISHING.md`](PUBLISHING.md) has the sequence and the
+permission it operates under.
+
 ## Branches and pull requests
 
 One `release/<version>` branch per version, every commit for that release

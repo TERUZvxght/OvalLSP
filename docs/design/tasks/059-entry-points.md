@@ -264,12 +264,104 @@ the word they then looked for, so a wrong `count_word` agreed with
 itself. They spell "Two", "Three" and "One item" out, the singular
 included.
 
+## What package B did
+
+Four more entry points, and the same rule throughout: **none of them
+implements a check that exists.** Each runs the script or spec that
+already owns the question and reports what it said, and every refusal
+names the command or the edit that clears it.
+
+### The changelog's shape
+
+`scripts/changelog.rb` holds it; `changelog_parity_spec` and
+`scripts/check_changelog.rb` both read it, and
+`core/spec/meta/changelog_shape_spec.rb` drives it against deviations
+the real files do not contain.
+
+The parity spec already asserted almost all of this, and could not
+assert it when it mattered: it reads the newest section against
+`Ovallsp::VERSION`, which becomes true only *after* the bump — so during
+the window in which the entry is being written, nothing could say it was
+wrong. `--version` is that window, and it is what `release.rb bump`
+asks. The spec's three private splits of the same text were rewired onto
+the module rather than left beside it.
+
+**The brief asked for one thing that was not built:** a register number
+in backticks, or the word `none`, at the end of every bullet. The
+changelog does not do that, `docs/PUBLISHING.md` does not ask for it, and
+applying it would mean rewriting a published release's notes to satisfy
+a check written afterwards. The shape is checked for the newest section
+only, for the same reason.
+
+### The trigger table as data
+
+`docs/doc_triggers.yml` holds the rows of
+`docs/DOCUMENTATION_MAP.md`'s table whose left column is a set of files,
+and `scripts/check_doc_triggers.rb` fails from preflight when one of
+them changed on the branch and none of its companions did. Two rules
+decide what became data, and both are recorded in that file: the trigger
+has to be a file, and **nothing else may already check the pair** — a
+rule restating `check_protocol_doc.rb`, `design_doc_drift_spec` or
+`swallowed_failures_spec` would be a second and weaker implementation of
+a check that exists. Six rules qualified; each says what it adds.
+
+It asks for **one** companion, not all of them. Which of a row's
+companions apply varies with the change, and a check demanding every one
+would fire on ordinary work — `024.150` measured a guard at three false
+positives in eleven and it was removed.
+
+### The pre-push hook
+
+`ruby scripts/preflight.rb --install-prepush`. Two things must be true
+of a push and of nothing else: the outgoing range carries no secret, and
+no commit or tag message carries a real home path — the channel a tree
+scan cannot see, and the one 0.2.3 leaked through. It refuses when
+`gitleaks` is absent rather than passing.
+
+`scripts/preflight.rb` became a module to make this drivable. It was a
+script that ran on load, so an example about the hook could only have
+asserted its text; `prepush_hook_spec` runs it, in a throwaway
+repository, against a planted home path and a stubbed `gitleaks`.
+
+### `scripts/release.rb`
+
+`status`, `open`, `bump`, `gate`, `publish`, `record` — each refusing
+when the one before it left no evidence, recorded in `core/tmp/`. The
+four manual steps `docs/RELEASE_CHECKLIST.md` listed are absorbed and
+that list now names their executors; the fourth of them, the grep for
+the previous version, had no implementation anywhere and is the one
+genuinely new check here.
+
+What is **not** driven, and deliberately: `bump`'s npm and bundler runs,
+`publish`'s handover to `release.sh`, `record`'s fetch from the
+Marketplace. `release_flow_spec` drives the refusals in front of each of
+them, so none is reached with its precondition unmet, and none of the
+actions themselves is performed by an example.
+
+## What the mutation manifest caught in package B
+
+Thirty-one entries now, for this task. Three of package B's nine were
+reported as pinning nothing:
+
+- **twice, a mutation inverted a guard instead of removing it.**
+  `unless X` mutated to `unless false` means *always refuse*, so the
+  example passed. That is the same mistake as package A's, in the same
+  form, for the third and fourth time — recorded here rather than
+  repaired quietly, because the pattern is the finding: when the guard
+  reads `unless`, the mutation that disables it is `unless true`.
+- **once, the example could not tell which check spoke.** `gate` and
+  `publish` end in a refusal anyway in a throwaway tree, so an exit code
+  of 2 proved nothing. Both now assert the message, or what was
+  recorded.
+
 ## 残課題
 
 未処理の指摘はこの文書ではなく `024` に書く。
 
-## Package B
+## What is still owed
 
-Not started. The changelog shape and its check, the trigger table as
-data, the pre-push hook, and `scripts/release.rb` are the second half of
-the brief, and begin in this worktree on the reviewer's go-ahead.
+`release.rb`'s three side-effecting steps have never been run: no
+release has been cut through it. The first one that is will be the
+measurement, and the refusals in front of each action are what make that
+safe to try. `docs/RELEASE_CHECKLIST.md`'s rows 17 and 20 stay manual
+and say so.

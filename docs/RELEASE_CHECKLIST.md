@@ -10,7 +10,7 @@ Task 022の受け入れ基準(「1.0 release checklistが全項目判定可能�
 
 | # | 項目 | 状態 | 根拠/備考 |
 |---|---|---|---|
-| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 3,153 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` / `test:integration`(source Core)/ `test:integration:packaged`(packaged Core)、いずれも0 failures — 後ろ2つは ci.yml の `vscode-integration` ジョブが両方実行し、どちらにも「examples が0件なら落とす」ガードが付いています。**core側の数は `core/spec/meta/documented_counts_spec.rb` が実行中のスイートと突き合わせます** — 890/895/1,776/1,833 と三度陳腐化し、「毎回測り直すこと」と書いた行自体がまた陳腐化したため、覚えておくのをやめて検査させることにした。vscode側の数はここから消した。増える数字を2箇所に書く理由がない |
+| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 3,198 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` / `test:integration`(source Core)/ `test:integration:packaged`(packaged Core)、いずれも0 failures — 後ろ2つは ci.yml の `vscode-integration` ジョブが両方実行し、どちらにも「examples が0件なら落とす」ガードが付いています。**core側の数は `core/spec/meta/documented_counts_spec.rb` が実行中のスイートと突き合わせます** — 890/895/1,776/1,833 と三度陳腐化し、「毎回測り直すこと」と書いた行自体がまた陳腐化したため、覚えておくのをやめて検査させることにした。vscode側の数はここから消した。増える数字を2箇所に書く理由がない |
 | 2 | compatibility matrix green or documented | ✅ 判定可能・文書化済み | `docs/SUPPORT_MATRIX.md`。実際に検証済みなのはmacOS(darwin-arm64) + Ruby 3.4(3.4.5/3.4.7/3.4.10) + Rails 8.1のみ — Ruby 3.3は`required_ruby_version >= 3.3`が拒否しないというだけで実際の動作確認実績ではないため、Task 023.1/023.4でsupported表から外した。VSIXのnative payloadはdarwin-arm64 + Ruby 3.4.x専用。それ以外では、0.2.1 以降は起動前に `prism`/`rbs` の有無を確認し、あればそちらで動かして Output に記録する。無ければ診断を出す(ADR-0005 と 0.2.1 の変更)。以前の版がRails 7.1を"supported"としていた誤りと、GitHub Actions未実行にもかかわらず"CIで実行"としていた誤りは修正済み |
 | 3 | benchmark regression within threshold | ✅ 判定可能・report-only | `docs/design/tasks/021-persistent-cache-notes.md`。1k/5kファイル規模での実測は未実施(既知のギャップとして記録済み) |
 | 4 | no known P0/P1 | ✅ 判定可能・green | Task 022.2(Bundler境界分離)は round 1-31 の独立レビューで収束、`docs/design/tasks/022.2-collector-tracepoint-state-machine.md`の最終release gateセクションに全不具合の重大度分類を記録。Packaging/Support Matrix整備(本ドキュメント更新の対象作業)自体の独立レビューは次アクション参照 |
@@ -50,10 +50,25 @@ parity と coverage の spec だけは preflight の full suite が毎回行っ�
 CI の secret-scan job は `main` への push では全履歴を、pull request では
 その PR のコミットを走査するので、リリース前の全履歴走査は手元で行う。
 
-1. `docs/DOCUMENTATION_MAP.md` のトリガ表を、このリリースの変更すべてについて歩く。
-2. 両言語の changelog を揃える — bullets が先、details が下、EN と JA が同じことを言う。
-3. `gitleaks detect --config .gitleaks.toml` を全履歴に対して走らせる。
-4. 直前のバージョン番号をリポジトリ全体で grep し、履歴でないのに残っているものを直す。
+この 4 手順は **`ruby scripts/release.rb gate` が実行する**ようになった
+(059)。手で行うものとしてここに残さない — 順序を人が覚えている限り、
+覚え違いが起きるまで誰も気づかないため。実行者は次のとおり:
+
+1. トリガ表 → `scripts/check_doc_triggers.rb`(preflight。`docs/doc_triggers.yml`
+   がデータ半分で、左列がファイル集合の行のみ)。
+2. 両言語の changelog → `scripts/check_changelog.rb`(preflight。`gate` は
+   バンプ前のバージョンについても `--version` で問う)。
+3. 全履歴の `gitleaks` → `gate` が直接走らせる。push 前には
+   `ruby scripts/preflight.rb --install-prepush` が入れる pre-push hook も走る。
+4. 直前のバージョン番号の grep → `gate` が
+   `docs/RELEASE_ARTIFACTS.md` の published 表から直前バージョンを読み、
+   `docs/design/tasks/`・同表・両 changelog **以外**で名前が残っている
+   ファイルを列挙して拒否する。過去のバージョンはその 4 箇所にこそ
+   残るべきもので、それ以外は誰かが直し忘れた文である。
+
+順序そのものは `ruby scripts/release.rb status` が答える。各ステップは
+直前のステップが証拠を残していなければ拒否し、**拒否は必ずそれを解消
+するコマンドを名指しする**。
 
 ## Apple Silicon Marketplace Preview Release Gate (Task 023)
 
@@ -93,7 +108,7 @@ Marketplace Preview公開)固有の22項目のゲートを設ける。各項目�
 | 16 | darwin-arm64 target確認 | ✅ `vscode/package.json` の `package` スクリプト自体が `--target darwin-arm64` 固定 + `release.sh` が生成された VSIX のファイル名を検証する |
 | 17 | clean install/update/uninstall PASS | ⚠️ 手動確認のみ — `vscode/scripts/verify-installed-extension.sh` を手で走らせる。0.2.14 以前は `make-final-review-bundle.sh` の "VS Code isolated install" ステップに数えられていたが、そのスクリプトも呼ばれていなかったので実態は当時から手動である(`024.125` の隣にある同種のギャップ) | <!-- unwired -->
 | 18 | no process leftover | ✅ `scripts/vsix_semantic_smoke.rb`のprocess group kill(0)確認+`clientLifecycle.test.ts`のlifecycle race修正 |
-| 19 | README/Support Matrix/CHANGELOG整合性 | ✅ 目視確認(Task 023.6、Ruby 3.3の扱いをSUPPORT_MATRIX.md/RELEASE_CHECKLIST.md/README.md/KNOWN_LIMITATIONS.mdで統一) |
+| 19 | README/Support Matrix/CHANGELOG整合性 | ✅ 059 から機械化。`scripts/release.rb` の `gate` が changelog の形(`scripts/check_changelog.rb`)、トリガ表の companion(`scripts/check_doc_triggers.rb`)、直前バージョンの残存を見る。残る目視確認は散文の中身のみ(Task 023.6、Ruby 3.3の扱いをSUPPORT_MATRIX.md/RELEASE_CHECKLIST.md/README.md/KNOWN_LIMITATIONS.mdで統一) |
 | 19.1 | Workspace Trust: an untrusted folder cannot choose what is executed | ✅ 0.2.4 で追加・実機検証済み | `vscode/src/test/unit/workspaceTrust.test.ts` が manifest 側を fail-closed で固定(設定が増えたら restricted 宣言か「実行に影響し得ない」論証のどちらかを強制)。実機手順は下の節を参照 — **対照(公開版で再現すること)を必ず取る**。0.2.3 は約2秒後に7回実行、0.2.4 は0回、信頼済みでは7回(正当な機能が生きていること)|
 | 20 | Marketplace preflight PASS | ⚠️ 手動確認のみ — 実際のMarketplace publisher登録・アップロードUIでのpreflightはpublish実行時まで発生しない(Task 023.8で確認事項として提示) |
 | 21 | repository visibility change is deliberate, not implicit | ✅ Task 023.8完了時点では`gh repo view`で`PRIVATE`のまま変更していないことを都度確認していた。その後、ユーザーの明示的な指示によりpublic化(git履歴の実メールアドレス除去・リポジトリ作り直し・Issues無効化を経た上で)— visibility変更自体がpublish処理の副作用として暗黙に起きたことは一度もない |

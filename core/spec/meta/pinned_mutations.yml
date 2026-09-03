@@ -1093,3 +1093,57 @@
   to: "def count_word(count) = count.to_s\n"
   spec: spec/meta/issues_tool_spec.rb
   example: "says 'No items above' once the list empties, in a sentence still findable"
+- why: "A release entry leads with bullets; without the check a section that starts explaining passes, and one entry that does drags the whole file back."
+  file: scripts/changelog.rb
+  from: "      if section.bullets.zero?\n"
+  to: "      if false\n"
+  spec: spec/meta/changelog_shape_spec.rb
+  example: "reports a section that leads with prose instead of bullets"
+- why: "Each language's reasoning heading is its own; checking for the English one in the Japanese file would pass on a translation that had stopped translating."
+  file: scripts/changelog.rb
+  from: "      unless section.details.start_with?(DETAILS.fetch(path))\n"
+  to: "      unless true\n"
+  spec: spec/meta/changelog_shape_spec.rb
+  example: "reports the Japanese section using the English heading for its reasoning"
+- why: "The newest section names the release being prepared; without it the check passes on a changelog that never gained the version's entry."
+  file: scripts/changelog.rb
+  from: "      next if section.version == expected\n"
+  to: "      next if true\n"
+  spec: spec/meta/changelog_shape_spec.rb
+  example: "reports a newest section that is not the version being prepared"
+- why: "A trigger whose companion did not change is reported; without the companion test every rule reports, which is a check that gets switched off."
+  file: scripts/check_doc_triggers.rb
+  from: "      next if rule[\"then\"].any? { |glob| touched.any? { |path| matches?(glob, path) } }\n"
+  to: "      next if false\n"
+  spec: spec/meta/doc_triggers_spec.rb
+  example: "says nothing when the companion changed too"
+- why: "The working tree is read as well as the committed range; without it the check is blind in exactly the window preflight runs in."
+  file: scripts/check_doc_triggers.rb
+  from: "    working = RepoFiles.capture(root, %w[status --porcelain])\n"
+  to: "    working = \"\"\n"
+  spec: spec/meta/doc_triggers_spec.rb
+  example: "sees a trigger file changed and not yet committed"
+- why: "A release branch starts from a clean tree; without the refusal `open` branches over work in flight and carries it into the release."
+  file: scripts/release.rb
+  from: "    unless dirty.empty?\n"
+  to: "    unless true\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses a tree that is not clean"
+- why: "`--accept` states why the release does not owe the entry; without the requirement an entry is skipped rather than accepted, and nothing records the decision."
+  file: scripts/release.rb
+  from: "    raise Refused, \"--accept #{number} needs --reason: say why #{version} does not owe it.\" if reason.to_s.strip.empty?\n"
+  to: ""
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses an --accept with no reason, and records nothing"
+- why: "`publish` refuses unless `gate` passed on this very index; without it the thing gated and the thing published are two different trees."
+  file: scripts/release.rb
+  from: "    unless gated == index_tree\n"
+  to: "    unless true\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses when the index moved after it was gated"
+- why: "The version before this one may not stand outside the four places history belongs; this was the fourth manual step the checklist asked a person to do."
+  file: scripts/release.rb
+  from: "    return if stale.empty?\n"
+  to: "    return if true\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "names a file still carrying the version before it"
