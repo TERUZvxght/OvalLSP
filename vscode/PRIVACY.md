@@ -134,6 +134,7 @@ ships and reviews.
 
 ## Questions or concerns
 
-See [SUPPORT.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.md)
-for how to reach out, or [SECURITY.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.md)
-for security-specific concerns.
+See [SECURITY.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.md)
+for security-specific concerns. The repository does not take other
+reports during the Preview; its
+[README](https://github.com/TERUZvxght/OvalLSP/blob/main/README.md) says why.

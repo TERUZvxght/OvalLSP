@@ -38,7 +38,7 @@ RSpec.describe "the extension id, in every document that prints it" do
   # The documents a reader installs from. Task records are history and
   # may name an id that was true when they were written.
   def documents
-    %w[README.md README.ja.md docs/PUBLISHING.md docs/PUBLISHING.ja.md
+    %w[README.md README.ja.md docs/PUBLISHING.md
        vscode/README.md vscode/README.ja.md
        site/index.html site/ja/index.html site/getting-started.html site/ja/getting-started.html]
       .select { |path| File.file?(File.join(repo_root, path)) }

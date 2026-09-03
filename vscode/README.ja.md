@@ -237,7 +237,11 @@ OvalLSPはテレメトリを収集せず、実行時にネットワーク経由�
 
 ## サポート
 
-[SUPPORT.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md)を参照。
+外部からの issue と Pull Request は Preview の間は受け付けていません。理由は
+リポジトリの [README](https://github.com/TERUZvxght/OvalLSP/blob/main/README.ja.md) にあり、
+1.0.0 で再開します。よくある事例は上のトラブルシューティングの節を、
+セキュリティ報告は [SECURITY.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.ja.md)
+を参照してください。
 
 ## ライセンス
 

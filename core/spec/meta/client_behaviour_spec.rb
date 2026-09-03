@@ -108,14 +108,11 @@ RSpec.describe "what we rely on the client to do" do
                         "docs/CLIENT_BEHAVIOUR.md: #{restated.join(', ')}"
   end
 
-  # Both languages, and this is not decoration: the first version of
-  # `CLIENT_BEHAVIOUR.ja.md` had a Japanese header over **25 rows of
-  # untranslated English** -- the tables being the whole document. A
-  # review round found it with one `diff`. `DOCUMENTATION_MAP` listed both
-  # files with this spec in the enforcement column while this spec read
-  # neither, which is the shape of every parity guard this project has had
-  # to add: `privacy_parity_spec`, `changelog_parity_spec`,
-  # `roadmap_parity_spec`.
+  # The Japanese edition of the document was retired in 057: internal
+  # documents are one language, and this one is internal. What its guard
+  # held -- a row for every row, translated rather than copied, the same
+  # rows marked checked -- is recorded in that release's task document.
+  #
   # The check is only worth having if it would catch what it was written
   # for, and this file exempts itself from it -- so the matcher is run
   # against a planted restatement rather than trusted.
@@ -123,34 +120,6 @@ RSpec.describe "what we rely on the client to do" do
     expect(PHRASINGS.any? { |phrase| "the staleness filter drops it".match?(phrase) }).to be(true)
     expect(PHRASINGS.any? { |phrase| "陳腐化フィルタが落とす".match?(phrase) }).to be(true)
     expect(PHRASINGS.any? { |phrase| "an unrelated sentence about versions".match?(phrase) }).to be(false)
-  end
-
-  describe "the Japanese edition" do
-    ENGLISH = File.expand_path("../../../docs/CLIENT_BEHAVIOUR.md", __dir__)
-    JAPANESE = File.expand_path("../../../docs/CLIENT_BEHAVIOUR.ja.md", __dir__)
-
-    def rows(path) = File.read(path, encoding: "UTF-8").lines.select { |line| line.start_with?("|") }
-
-    it "has a row for every row the English one has" do
-      expect(rows(JAPANESE).length).to eq(rows(ENGLISH).length)
-    end
-
-    it "is translated, not copied" do
-      shared = rows(ENGLISH) & rows(JAPANESE)
-      # A separator row (`|---|---|---|`) is identical in both by
-      # construction; anything else identical is untranslated.
-      untranslated = shared.reject { |row| row.match?(/\A\|[\s|:-]+\|\s*\z/) }
-
-      expect(untranslated).to be_empty,
-                              "these rows are byte-identical in both languages, so one of them is not " \
-                              "translated:\n#{untranslated.map(&:strip).first(5).join("\n")}"
-    end
-
-    it "keeps the same rows marked checked, since that is a claim about what runs" do
-      checked = ->(path) { rows(path).count { |row| row.include?("| checked |") } }
-
-      expect(checked.call(JAPANESE)).to eq(checked.call(ENGLISH))
-    end
   end
 end
 

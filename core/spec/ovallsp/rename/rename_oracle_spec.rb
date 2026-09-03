@@ -2,7 +2,7 @@
 
 require_relative "../../../../scripts/rename_oracle"
 
-# The countermeasure `CLAUDE.md`'s same-place rule asked for, and did not
+# The countermeasure `docs/REVIEW_LOOP.md`'s same-place rule asked for, and did not
 # get until now.
 #
 # 0.2.17 fixed nine shapes of local-variable rename. Every one of them

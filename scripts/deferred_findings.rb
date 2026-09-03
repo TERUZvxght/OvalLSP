@@ -359,8 +359,8 @@ end
   # behaviour that had just been removed. Worse than no limitation at
   # all: it sends them looking for something that is not there.
   #
-  # `CLAUDE.md` states the lesson as "a revert is the change most likely
-  # to leave documentation behind". This is that lesson mechanised, so
+  # `docs/DOCUMENTATION_MAP.md`'s row for a reverted change states the lesson:
+  # a revert is the change most likely to leave documentation behind. This is that lesson mechanised, so
   # it does not depend on anyone remembering it.
   def wrongly_documented(markdown, *documents)
     resolved(markdown).keys.select { |number| documents.any? { |doc| anchors(doc, number).any? } }

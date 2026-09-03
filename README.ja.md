@@ -6,8 +6,8 @@
 > **開発途中のプロジェクトです。** 現在、開発者自身が調査・修正作業を
 > 継続的に行っている段階のため、**外部からのissue提案・Pull Requestは
 > 現在受け付けていません**。PRチェックが後回しになり、開発者側で
-> 進行中の修正と内容が重複してしまう可能性があるためです。詳細は
-> [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md)を参照してください。
+> 進行中の修正と内容が重複してしまう可能性があるためです。外部からの
+> 貢献の受け入れ再開は 1.0.0 の対応事項です(register の 024.R10)。
 
 Ruby/Rails向けセマンティック言語サーバーのmonorepo。設計の背景と全体方針は
 [`docs/design/README.md`](docs/design/README.md)(日本語、内部設計文書) を参照。
@@ -141,7 +141,7 @@ Windows・Linux・Intel macOS 向けのVSIXは公開していません。それ�
 なるか」の形にまとめたものが [`docs/ROADMAP.ja.md`](docs/ROADMAP.ja.md) です。
 
 このプロジェクトに変更を加える方は
-[`docs/DOCUMENTATION_MAP.ja.md`](docs/DOCUMENTATION_MAP.ja.md) も参照して
+[`docs/DOCUMENTATION_MAP.md`](docs/DOCUMENTATION_MAP.md) も参照して
 ください。どの種類の変更がどの文書——`site/` 以下のページを含む——を古く
 するか、そしてそのうちどの対応関係が既にテストで検査されているかを示して
 います。
@@ -189,7 +189,7 @@ ERBビューに限定した機能なので、素のRubyプロジェクトには�
 
 この表のバージョンの読み方は、patchが「新しく告知するものが無い」——利用者から
 見た振る舞いはむしろ変わるのが普通です——minorが「ケイパビリティを告知した」、
-majorが「利用者が依存していたものが動かなくなった」です。正式な定義は [`docs/PUBLISHING.ja.md`](docs/PUBLISHING.ja.md)
+majorが「利用者が依存していたものが動かなくなった」です。正式な定義は [`docs/PUBLISHING.md`](docs/PUBLISHING.md)
 にあります。
 
 各✅は [`docs/EXTENSION_CAPABILITIES.ja.md`](docs/EXTENSION_CAPABILITIES.ja.md)
@@ -243,9 +243,10 @@ npm run test:unit         # vscode API非依存の単体テスト
 npm run test:integration  # Extension Development Hostでの実機テスト（VS Codeバイナリをダウンロードします）
 ```
 
-## Contributing / Security / Support
+## セキュリティと貢献について
 
-- [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md)
-- [SECURITY.ja.md](SECURITY.ja.md)
-- [SUPPORT.ja.md](SUPPORT.ja.md)
-- [CODE_OF_CONDUCT.ja.md](CODE_OF_CONDUCT.ja.md)
+- [SECURITY.ja.md](SECURITY.ja.md) — 脆弱性の報告方法と、ソース checkout に
+  影響した過去の事故。
+- 外部からの issue と Pull Request は Preview の間は受け付けていません。理由は
+  冒頭の注記のとおりで、1.0.0 で再開します(`024.R10`)。リポジトリ自体の開発の
+  進め方は [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)(英語)にあります。

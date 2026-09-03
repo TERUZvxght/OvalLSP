@@ -1,199 +1,119 @@
-# Development Guidelines
+# Working rules
 
-## Read this first, every time
+Section 0 of `docs/design/docs/01-product-requirements.md` is the trusted
+root, and this is it in one paragraph so that a lost pointer is not a lost
+purpose: Ruby's LSP support is weak enough that every guarantee falls to
+hand-written tests, and this product takes the basic half back — type
+checking, and calls to methods that do not exist — so tests can narrow to
+what they are for. 1.0.0 is where that is usable in practice, with Pylance
+as the reference. A wrong answer is worse than no answer, but a 1.0.0 that
+recedes forever is worse than either: a wrong answer on a path people walk
+daily blocks a release, one on a path almost nobody walks ships as a known
+limitation, and when you cannot tell, measure the frequency. None of that
+is a licence to decide freely and stop reporting. Every rule here serves
+section 0 and changes when they disagree; 0.6 says how to check one.
+Absolute: section 0, and ordinary safety obligations — personal data, the
+extension's own data, the user's machine — named there or not.
 
-**Why this project exists, and what "finished" means:**
-[`docs/design/docs/01-product-requirements.md`](docs/design/docs/01-product-requirements.md)
-section 0. It is short. Read it at the start of a session and again
-whenever a task has run long.
+## Where the rules are
 
-In one paragraph, so that a lost pointer is not a lost purpose: Ruby/Rails
-LSP support is markedly weaker than other languages', so every guarantee
-falls to hand-written tests. This product takes the basic half back —
-**type checking and calls to methods that do not exist** — so that tests
-can narrow to what they are actually for, strengthening Ruby's
-conventions rather than fighting them. **1.0.0 is where that becomes
-usable in practice** and a Ruby/Rails engineer is measurably better off;
-its scope is *make the foundation solid, with Pylance as the reference*.
-Conveniences that are not load-bearing — completion candidates sorted
-most-useful-first, say — are 2.x.x.
+This file is the card: the rules to hold in mind, one line each, with what
+enforces it — *check*: `preflight` or CI fails; *judgement*: nothing does —
+and the number of the record that holds its history. The documents behind
+the lines carry the rest of the rules and the how-to; when to open them:
 
-**Two things are absolute. Nothing else is.**
+- Setting up, running the suites, committing, branching: `docs/DEVELOPMENT.md`
+- Writing code, and what a test has to show: `docs/CODE_DISCIPLINE.md`
+- Comparing two runs, driving a corpus, quoting a number: `docs/MEASURING.md`
+- Asking for a review round, or running one: `docs/REVIEW_LOOP.md`
+- Finishing any change a user could notice: `docs/DOCUMENTATION_MAP.md`
+- Recording, triaging or closing an issue: `docs/ISSUES.md`
+- Relying on the editor, the client or the LSP spec: `docs/CLIENT_BEHAVIOUR.md`
+- Cutting or publishing a release: `docs/PUBLISHING.md`, `docs/RELEASE_CHECKLIST.md`
+- What each version is for, and the road to 1.0.0: `docs/ROADMAP.md`, `docs/design/tasks/036-road-to-1.0.0.md`
 
-- **General safety obligations** — personal data, the extension's own
-  data, and the safety of the LSP user's machine. This axis is
-  *independent of* the product vision: it is what shipping a product at
-  all makes you responsible for. **Anything ordinary decency requires is
-  done whether or not section 0 mentions it**; finding no basis in
-  section 0 is not a reason to skip it.
-- **Section 0 itself** — the vision, the definition of finished, the
-  scope, and the accuracy-versus-shipping principle.
+## When a session starts
 
-**A patch is already approved; do not ask again.** The owner's standing
-position, given during 0.2.4 and written out in
-[`docs/PUBLISHING.md`](docs/PUBLISHING.md)'s Publishing section: for a
-*patch* — no capability row moves — the go-ahead is granted in advance,
-**conditional on the secret and privacy checks having actually run and
-passed**, and on whoever answers `release.sh`'s prompt having read what
-the script printed and saying what it found. A minor or major still
-asks, and so does a patch where any of those checks did not run.
+- Read section 0. Then `git fetch --all --prune` and read the
+  highest-numbered `docs/design/tasks/NNN-*.md` on every branch whose name
+  or record claims the release — list the directory; never trust a number
+  written elsewhere. The current work, its findings and its decisions
+  live there and nowhere else. *judgement*; 024.109, 028
+- After a context compaction or handoff, re-read this file and anything
+  under `.claude/` that applies. *judgement*
+- Read `docs/design/tasks/042-second-enumeration.md` before touching code
+  it names. *judgement*
 
-That paragraph also says the prompt does **not** need the owner's own
-fingers: 0.2.3 was published by an agent driving the script under the
-owner's instruction, and that is within the rule. What is outside it is
-reaching the prompt with no decision behind it, or deciding for oneself.
+## Writing code
 
-*This pointer exists because the permission was written down once, at
-line 259 of a three-hundred-line document, and a session preparing a
-release still missed it and asked — which is the failure that paragraph
-predicts in its own text: "a permission carried only in a conversation is
-one compaction away from being either forgotten or assumed larger than it
-is." It was neither forgotten nor inflated; it was assumed smaller.
-`024.231`.*
+- Test first, and watch the test fail before the implementation exists. A
+  line no test fails on when reverted is a defect; `scripts/hunk_sweep.rb`
+  finds them. *judgement*; 038, 057
+- An expected value has a source: Ruby's behaviour is a pasted session, a
+  fact about the editor or client is a row in `docs/CLIENT_BEHAVIOUR.md`,
+  a number about this tree is a `measured:` marker with a deriver.
+  *check* once written; 024.220, 024.181
+- An example that claims to tell two behaviours apart names its mutation
+  in `core/spec/meta/pinned_mutations.yml`. *check*; 024.109
+- Every `rescue` in `core/lib` has a verdict in
+  `core/spec/meta/rescue_verdicts.yml`: it surfaces, or no caller can
+  turn the value into an assertion. *check*; 024.122
+- Code that deletes is tested under `Dir.mktmpdir` and removes in one
+  contained place. *check* for the cache, *judgement* elsewhere; 027
+- Write the simplest construction for the requirement in front of you;
+  simpler means fewer places that must agree, not fewer lines. Simplifying
+  working code is an ordinary change. *judgement*; maintainer 2026-08-25
+- Fix the design that allowed a defect, not the instance; fix what you
+  find in passing, in the same session; build nothing speculative; a real
+  trade-off gets an ADR. *judgement*; maintainer, 022.2
 
-**The distance to 1.0.0 is written down**, derived from those two and
-nothing else: [`docs/design/tasks/036-road-to-1.0.0.md`](docs/design/tasks/036-road-to-1.0.0.md).
-**Which release is being prepared is not written here.** `git branch
---show-current` names it, and the highest-numbered file in
-`docs/design/tasks/` records it — read that file first. This paragraph
-used to name the release and its branch, and it named the *next* one
-while HEAD was on the current one — in the very paragraph designated
-below as the defence against a compaction losing the path. A pointer
-that must be edited every release is wrong most of the time. (The
-specific numbers are deliberately not repeated here: naming them would
-make this sentence match the check that keeps the paragraph honest.)
+## Measuring
 
-`docs/ROADMAP.md` is what each version is *for*, and
-[`045`](docs/design/tasks/045-0.3.0-scope.md) scopes 0.3.0 — the first
-release that may add capability, and the one every accuracy release so
-far has been clearing the way for.
-**Read [`042`](docs/design/tasks/042-second-enumeration.md) before
-touching anything it names.**
-Read it when a session opens, so the path is seen rather than inferred —
-an inferred path is what a compaction loses.
+- One measurement at a time, in the foreground: each side prints its
+  working directory and version first, both get the identical corpus, and
+  the diff carries a control the change cannot move. *judgement*; 026
+- A green suite is not a blast radius: a change to a name, encoding or
+  key every component reads gets a corpus run. *judgement*; 033
 
-**Section 0 is the trusted root.** Everything else in this repository —
-this file, CLAUDE.md, the task files, the register, the checklists — is
-instruction stacked to fulfil it, *including the maintainer's own past
-instructions*, which may have drifted or been dropped. When a rule and
-section 0 disagree, section 0 wins and the rule is what changes. Section
-0.6 states how to check a rule against it, and how to write one without
-manufacturing a false one.
+## Documents and the record
 
-Given those two, the maintainer does not need to be asked about each
-decision — that is their own position, and it is why a patch may ship
-without them. **It is not a licence to decide freely and run on.** They
-have asked explicitly that this not become that; the axes are what
-judgement is measured against, not permission to stop reporting. A wrong answer is worse than no
-answer, because the foundation's value is that it can be trusted — **but
-letting 1.0.0 recede forever in pursuit of accuracy is worse than either**.
-Nothing is perfect at first. So a wrong answer on a path people walk daily
-blocks the release, one on a path almost nobody walks is recorded as a
-known limitation and ships, and when you cannot tell which it is, *measure
-the frequency* instead of estimating it. "It is a real bug" and "it is
-worth fixing now" are different claims; treating them as one makes
-everything top priority and ships nothing.
+- Before finishing a change a user could notice, walk
+  `docs/DOCUMENTATION_MAP.md`'s trigger table. User-facing documents are
+  bilingual; internal ones are one language. *check*, in part
+- A new issue starts in `docs/ISSUES.md`'s intake, is driven, then gets a
+  register entry in the legend's shape; the index is generated. *check*,
+  in part; 024.130
+- Promoting a finding — a target, a user-visible flag, a
+  `KNOWN_LIMITATIONS` paragraph — means re-running its reproduction on the
+  tree it is promoted into. *judgement*; 024.131
+- A review round's findings go into the task file as the round produces
+  them. Before reverting anything, grep the tree for it. *judgement*;
+  024.109, 024.47
+- An incident produces a check or a register entry, never a paragraph
+  here; a new line has to fit this file's budget. *check*; 057
 
-The maintainer's role in a session is to notice when an agent has gone a
-long way in the wrong direction and correct the course toward that goal.
-The single largest threat to it is context compaction dropping the goal
-while the work continues — which is why it is written here rather than
-carried in a conversation.
+## Review loop
 
+- A round closes when a reviewer that has not seen the change set, using
+  a method the previous round did not — diff, drive, attack, reproduce —
+  reports nothing. *judgement*; 028
+- After three rounds that find defects, ship with the open findings
+  recorded. During a loop, fix; do not add. *judgement*; section 0.4, 026
+- The same place found in two consecutive rounds gets a mechanical
+  countermeasure; a third time, roll the thread back and record the root
+  cause. *judgement*; 024.15
+- Tell a reviewer what a defect is — never what not to count, where to
+  look, or that clean is expected. Before believing a falling count, run
+  one neutral round. *judgement*; 024.36
 
-*A bullet below that restates a `CLAUDE.md` rule ends with an HTML comment
-naming the section it restates — look at any of them for the spelling; it is
-deliberately not quoted here, because a quoted one is a marker and this
-paragraph is not a bullet. `core/spec/meta/agents_restates_spec.rb` holds
-`CLAUDE.md` to still having every section they name. The relationship is
-declared rather than inferred because inferring it from shared wording was
-measured at three false positives in eleven, and a check with that error rate
-gets switched off (`024.150`). A bullet that cites `CLAUDE.md` as a file to
-read carries no marker.*
+## Branches, commits, releases
 
-- Never implement functionality speculatively or in advance. Apply the YAGNI principle rigorously, and implement only what is explicitly required for the current task.
-- Write the simplest construction that satisfies the requirement in front of you, and let the next requirement change the shape. The measure of simpler is *places that must agree*, not lines — a measured simplification in `048` came out at +3 net lines once it had to work. This governs code being written; a simplification of code that already works is an ordinary change and carries an ordinary change's obligations. See `CLAUDE.md` for the rule, the four shapes to stop at, and the counter-rule about centralising.
-  <!-- restates: The simplest thing that could possibly work (mandatory) -->
-- Write tests first: a test must be observed failing before the code that makes it pass is written. Behaviour that no test fails on when it is reverted counts as a defect. See `CLAUDE.md` for the full rule and for how to verify it mechanically.
-  <!-- restates: Test-first discipline (mandatory) -->
-- When asking another agent for an independent review, do not tell it what not to count, where to concentrate, or that finding nothing is fine. Each of those narrows what it can report, and a falling defect count then measures the instructions rather than the code. See `CLAUDE.md` for the rule and 024.36 for the control run that established it.
-  <!-- restates: How to ask for an independent review (mandatory) -->
-- **Work in progress lives in `docs/design/tasks/`, not in a transcript.**
-  The open findings of the current review loop are in the
-  highest-numbered `NNN-*.md` there — **list the directory on the branch
-  you are on** rather than trusting a number written down anywhere,
-  including here. Anything a reviewer reported and nobody has fixed
-  exists only in that file; agent reports are not kept. Read it before
-  deciding what to do next, and add to it before a long session ends.
-  <!-- restates: Where a release's work lives (mandatory) -->
-
-  *This bullet used to name the current file by number, and went stale
-  three times — twice pointing at a file the branch did not contain,
-  once created while fixing the same line. A pointer that has to be
-  edited every release is a pointer that will be wrong most of the time;
-  the instruction to list the directory cannot go stale.*
-- **One branch per version, merged into `main` by pull request.**
-  `release/<version>`. Every commit for a release goes on it; `main` is
-  what has shipped, not where a release is assembled. Set by the
-  maintainer on 2026-09-01, and it replaces four releases built
-  directly on `main` that had no reviewable unit between a commit and a
-  tag. Before starting or resuming release work: `git fetch --all
-  --prune`, list the remote branches, and read the highest-numbered
-  task file on every branch whose name or record claims the release —
-  not only on `main`. 0.2.3 was prepared twice in parallel because a
-  pointer on `main` named a file that existed only on a branch nothing
-  named. `CLAUDE.md` has the rule and why the name carries no `feat/`
-  or `fix/`; 028's "Two preparations, one release" records the episode.
-  <!-- restates: Where a release's work lives (mandatory) -->
-- **Never write a real absolute home path into the tree or a commit
-  message.** Write `$HOME`, `~`, or a description. This is machine-checked
-  now, in both channels — `core/spec/meta/home_path_guard_spec.rb` for
-  tracked content and ci.yml's secret-scan job for commit messages, both
-  reading the one detector in `scripts/check_home_paths.rb`. The prose
-  rule alone missed it twice, which is why the check exists; `CLAUDE.md`
-  has the rule and what it deliberately does not cover.
-  <!-- restates: Public repository privacy and secret handling -->
-- **Run the tool the thing under test runs.** 0.2.3 read a release
-  gate's `grep` result in a shell where the name resolves to a `ugrep`
-  wrapper that skips binary files, contradicted the gate, and filed a
-  register entry against a defect that did not exist. `CLAUDE.md`'s
-  measurement section carries this with the others.
-  <!-- restates: A measurement is a claim, and it needs the same care as a test -->
-- **A measurement that disagrees with a spec you have watched fail is
-  wrong until proven otherwise.** The corpus comparisons that went wrong
-  are catalogued in `CLAUDE.md`'s measurement section — read them before
-  comparing anything. That copy is the one to keep current: this bullet
-  used to carry its own list, which drifted out of agreement with it.
-  `026-0.2.1-review-loop.md` records what each invented and what caught
-  it.
-  <!-- restates: A measurement is a claim, and it needs the same care as a test -->
-- **During a review loop, fix; do not add.** A capability a reviewer asks
-  for is an entry in `024-deferred-review-findings.md`, not work to do
-  before the next round. 0.2.1 ran nine rounds and seven found a defect
-  in code the previous round had written.
-  <!-- restates: Review cadence (mandatory) -->
-- **Two review rounds on the same place buys a mechanical countermeasure;
-  a third buys a rollback.** Not a third hand fix, and not a regression
-  test for the one instance — something that makes the class of defect
-  fail a check. And when the countermeasure turns out to have been aimed
-  at the symptom too, roll back the whole thread and write down the root
-  cause; the entry is the deliverable, not the code. `CLAUDE.md` has the
-  rule; 024.15 records the first time it fired.
-  <!-- restates: Two rounds in a row on the same place: mechanise, then roll back (mandatory) -->
-- **A green `rspec` run can be green because the decisive suites did not
-  run.** Without `rails ~> 8.1` and `sqlite3` as local gems,
-  `spec/e2e/capabilities_spec.rb` and `spec/integration/real_rails_spec.rb`
-  skip in full and the run still exits 0. Run those two files and check
-  the example count before reporting a suite as passing. See `CLAUDE.md`
-  and `CONTRIBUTING.md`.
-  <!-- restates: A measurement is a claim, and it needs the same care as a test -->
-- **A test that deletes must be given a temporary directory, never a
-  fabricated absolute path.** `bundle exec rspec` emptied
-  `/Applications` for six days because one example passed `current: "/x"`
-  to cache pruning and `File.dirname("/x")` is `/`. The assertion was
-  `.not_to raise_error` against a method that swallows every error, so it
-  could not have failed. `CLAUDE.md` has the three rules; 027 records the
-  incident.
-  <!-- restates: A test that deletes things, and an assertion that could not fail (mandatory) -->
-- Proactively locate and consult Claude-specific source files and instructions, including `CLAUDE.md` and relevant files under `.claude/`, before beginning work, and follow any applicable guidance.
-- Context compaction or a task handoff may omit project instructions. After every compaction/handoff, re-read `AGENTS.md`, `CLAUDE.md`, and relevant files under `.claude/` before resuming work.
+- One `release/<version>` branch per version, merged into `main` by pull
+  request; other work takes a short-lived branch and a pull request too.
+  Merged branches are kept. *check*; maintainer 2026-09-01
+- `ruby scripts/preflight.rb` before every commit; `--list` says what it
+  runs. Nothing personal in the tree or a commit message: no secret, no
+  home path, a noreply address. *check*; 024.195, 028
+- A patch ships without asking, provided the privacy checks named in
+  `docs/PUBLISHING.md` ran and passed; a minor or major asks. *judgement*;
+  maintainer 0.2.4, 024.231

@@ -565,7 +565,7 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
   #
   # Two wall-clock thresholds of one shape in one release is what
   # `core/spec/meta/no_wall_clock_thresholds_spec.rb` exists to stop, per
-  # CLAUDE.md's rule about the same place twice.
+  # docs/REVIEW_LOOP.md's rule about the same place twice.
   it "runs the pass on a thread other than the one serving requests" do
     Dir.mktmpdir do |root|
       write(root, "app/models/widget.rb", "class Widget\n  def build\n  end\nend\n")

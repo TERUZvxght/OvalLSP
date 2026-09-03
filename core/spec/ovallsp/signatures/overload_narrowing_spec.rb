@@ -61,7 +61,7 @@ RSpec.describe "Ovallsp::Signatures::OverloadResolver narrowing by argument type
   # corrected it.** It asserted a union, on the belief that an unknown
   # argument leaves every overload contributing; the engine answers
   # `Unknown` for the whole expression instead, which is a different and
-  # more honest thing. Recorded because `CLAUDE.md` asks where an
+  # more honest thing. Recorded because `docs/CODE_DISCIPLINE.md` asks where an
   # expected value came from, and the answer here is "a belief, until it
   # was run".
   it "answers Unknown, not a narrowed type, when the argument's type is unknown" do

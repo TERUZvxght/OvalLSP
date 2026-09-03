@@ -219,7 +219,7 @@ jobs:
       # to accept "nothing ran" as a pass. `continue-on-error` makes this
       # job green whatever happens, so without a count nobody can tell a
       # 4.0 run that passed from a 4.0 that never started -- which is
-      # exactly `CLAUDE.md`'s "a green suite is a measurement too" arriving
+      # exactly `docs/MEASURING.md`'s "A green suite is a measurement too" arriving
       # in the one job whose whole purpose is to answer "is 4.0 green".
       # The documents that cite this job as continuous verification are
       # citing this count.

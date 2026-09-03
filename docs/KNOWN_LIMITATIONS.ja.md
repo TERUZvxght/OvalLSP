@@ -728,7 +728,7 @@ stable releaseの受け入れ基準)は、このPreviewをblockしない後続�
 として記録されています — 全体のタスク分解は
 [docs/design/tasks/023.1-marketplace-preview-investigation-and-distribution-model.md](design/tasks/023.1-marketplace-preview-investigation-and-distribution-model.md)
 以降を参照。このリポジトリは現在外部からのissueを受け付けていない
-ため([CONTRIBUTING.ja.md](../CONTRIBUTING.ja.md)参照)、これらの作業は
+ため([README.ja.md](../README.ja.md)冒頭の注記を参照)、これらの作業は
 公開issue trackerではなく内部で追跡しています。
 
 ## rename がしてはいけないこと

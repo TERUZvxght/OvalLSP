@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**316 entries below** <!-- measured: register-entries = 316 -->,
+**317 entries below** <!-- measured: register-entries = 317 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -502,6 +502,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.R7`](024-deferred-review-findings-resolved.md#024R7-index-what-the-gems-actually-define-and-keep-it-fresh-roadmap-0-3-0) | done | 0.3.0 | Index what the gems actually define, and keep it fresh (roadmap, 0.3… |
 | [`024.R8`](024-deferred-review-findings-resolved.md#024R8-completion-does-nothing-until-you-type-a-dot-done-0-2-0) | done | 0.2.0 | Completion does nothing until you type a dot (done, 0.2.0) |
 | [`024.R9`](024-deferred-review-findings-resolved.md#024R9-this-register-outgrew-its-file-and-0-3-0-moves-it) | done | 0.3.0 | This register outgrew its file, and 0.3.0 moves it |
+| [`024.R10`](#024R10-the-repository-is-closed-to-external-contributions-until-1-0-0-roadmap-1-0-0) | open | 1.0.0 | The repository is closed to external contributions until 1.0.0 (road… |
 
 ---
 
@@ -4767,6 +4768,40 @@ several unknowns.
 
 The other of the two things 1.0.0 requires (`docs/PUBLISHING.md`, "0.x,
 and what 1.0.0 requires").
+
+---
+
+## 024.R10 The repository is closed to external contributions until 1.0.0 (roadmap, 1.0.0)
+
+```yaml
+status: open
+kind: roadmap
+target: 1.0.0
+```
+
+**Area:** `README.md`'s opening note, `docs/PUBLISHING.md`'s "External
+contributions: none until 1.0.0", and the repository root, where a
+contributing guide, a code of conduct and a support page stood until 057
+with the Japanese translations of the internal process documents beside
+them.
+
+The repository does not accept issues or pull requests while the
+developer is investigating and fixing things faster than an external
+change could be reviewed against, and GitHub Issues are disabled. 057
+removed the documents written for a contributor who cannot yet arrive —
+`CONTRIBUTING`, `CODE_OF_CONDUCT` and `SUPPORT`, in both languages —
+rather than keep them current for nobody, and with them the Japanese
+copies of `DOCUMENTATION_MAP`, `PUBLISHING` and `CLIENT_BEHAVIOUR`, which
+are internal process documents and are now single-language, as
+`RELEASE_CHECKLIST` and `RELEASE_ARTIFACTS` already were. The
+`/Applications` disclosure that lived in the contributing guide moved to
+`SECURITY.md`, which stays bilingual because a user reads it.
+
+**Direction:** at 1.0.0 — the point where the product is stable enough
+for a contributor to work against (`docs/PUBLISHING.md`, "External
+contributions: none until 1.0.0") — restore the three documents, decide
+again which internal documents earn a translation, and re-enable Issues.
+`README.md` states the closure and points here until then.
 
 ---
 

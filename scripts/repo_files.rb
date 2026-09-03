@@ -50,10 +50,10 @@ module RepoFiles
   # and runs `git log --all`, so the public-repository privacy guard read
   # whichever repository `GIT_DIR` named and reported clean about it. And
   # the vector is documented: `preflight.rb --install` installs exactly
-  # such a hook and `CONTRIBUTING.md` tells contributors to run it.
+  # such a hook and `docs/DEVELOPMENT.md` tells contributors to run it.
   #
   # **Contained where the spawn happens, not at each caller** -- the shape
-  # `CLAUDE.md`'s "a test that deletes things" section prescribes, for the
+  # `docs/CODE_DISCIPLINE.md`'s "Code that deletes" section prescribes, for the
   # same reason: every call site here computed its own target and was
   # individually plausible, and safety was an emergent property of all of
   # them being right at once, which is not a property. Every `git` in

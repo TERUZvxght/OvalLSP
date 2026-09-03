@@ -1179,7 +1179,7 @@ it, and the fix needs a version number to point at.
 
 **If you cloned this repository between 2026-08-05 and 2026-08-11 and
 ran the Core test suite, it deleted directories outside the repository.**
-`CONTRIBUTING.md` carries the disclosure, the affected commit range and
+`SECURITY.md` carries the disclosure, the affected commit range and
 what to do about it. In short: an example passed a fabricated absolute
 path to code that removes directories, the sweep resolved to the
 filesystem root, and it removed all but the most recently modified
@@ -1190,7 +1190,8 @@ The method under test swallows every error by design — a cache that
 cannot be tidied is still a correct cache — so the example's
 "does not raise" assertion was satisfied on every run while this
 happened. An assertion that cannot fail is not a test, and that is the
-first of the three rules this incident wrote into `CLAUDE.md`.
+first of the three rules this incident wrote into the project's code
+discipline (`docs/CODE_DISCIPLINE.md`).
 
 The fix is deliberately not a guard at the entry point. That would have
 stopped this one caller and left the next one free to compute a target
@@ -2375,6 +2376,6 @@ See
 for exactly what has been verified, and
 [docs/KNOWN_LIMITATIONS.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.md)
 for what is intentionally out of scope in this Preview. This is a Preview
-release; see
-[SUPPORT.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.md)
-for the current state of external feedback and issue intake.
+release; the repository's
+[README](https://github.com/TERUZvxght/OvalLSP/blob/main/README.md)
+states the current state of external feedback and issue intake.

@@ -794,8 +794,8 @@ stable-release readiness bar) is recorded as non-blocking follow-up work
 for this Preview — see
 [docs/design/tasks/023.1-marketplace-preview-investigation-and-distribution-model.md](design/tasks/023.1-marketplace-preview-investigation-and-distribution-model.md)
 (Japanese) and onward for the full task breakdown. This repository is
-not currently accepting external issues (see
-[CONTRIBUTING.md](../CONTRIBUTING.md)), so this work is tracked
+not currently accepting external issues (see the note at the top of
+[README.md](../README.md)), so this work is tracked
 internally rather than via a public issue tracker for now.
 
 ## What rename does that it should not

@@ -110,7 +110,7 @@ module CiStatus
       [stdout.read.force_encoding(Encoding::UTF_8), stderr.read.force_encoding(Encoding::UTF_8), wait.value]
     end
   rescue Errno::ENOENT
-    say("cannot tell -- `gh` is not installed (see CONTRIBUTING.md)")
+    say("cannot tell -- `gh` is not installed (see docs/DEVELOPMENT.md)")
   rescue SystemCallError => e
     # Contained: any other failure to reach `gh` is reported as a failure
     # to reach it. No caller reads this; it is one line for a person.

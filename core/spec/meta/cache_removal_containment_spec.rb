@@ -5,7 +5,7 @@
 # `current: "/x"`, `File.dirname` turned that into `/`, and the sweep
 # emptied `/Applications` of everything SIP did not protect. Every error
 # was swallowed by the method under test, so the suite stayed green
-# throughout. `CLAUDE.md` carries the full account.
+# throughout. `docs/CODE_DISCIPLINE.md` carries the rules, and 027 the full account.
 #
 # The fix was to make containment a property of *removal* rather than of
 # each caller's arithmetic: one function, `remove_within`, performs every

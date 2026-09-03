@@ -103,7 +103,7 @@ module HomePaths
   # `Encoding.default_external` before anything here shells out, so the
   # backtick result is already UTF-8 under `LC_ALL=C`. The comment
   # describing it outlived it by a release (`024.191`), which is the
-  # shape `CLAUDE.md`'s revert/documentation rule warns about: the prose
+  # shape `docs/DOCUMENTATION_MAP.md`'s row for a reverted change warns about: the prose
   # was correct when written and nothing about the fix announced that it
   # had made it false.
   #
@@ -198,7 +198,7 @@ module HomePaths
 
   # `actions/checkout` fetches a single commit by default, and this mode
   # would then scan that one commit and report the whole history clean --
-  # green because it did not run, which is the failure CLAUDE.md already
+  # green because it did not run, which is the failure `docs/MEASURING.md` already
   # spends a section on. Refusing is the only honest answer; the
   # secret-scan job that runs this sets `fetch-depth: 0` for gitleaks
   # anyway, and `ci_skip_guard_spec.rb` pins that it still does.

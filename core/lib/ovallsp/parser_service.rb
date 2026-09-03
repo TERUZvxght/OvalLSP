@@ -85,7 +85,7 @@ module Ovallsp
     # Contained where the recursion is rather than at each caller.
     # `Server#dispatch`, `ColdIndexer` and `scripts/corpus_diagnostics.rb`
     # each had their own rescue and each was individually plausible; that
-    # is exactly the arrangement CLAUDE.md's containment rule is about.
+    # is exactly the arrangement docs/CODE_DISCIPLINE.md's containment rule is about.
     #
     # An empty visitor rather than a partial one: a half-finished walk
     # holds the declarations from the top of the file and none from the

@@ -25,7 +25,7 @@ require_relative "utf8"
 # **Why this exists.** 0.2.17 fixed nine shapes of local rename, and
 # every one of them had a passing spec beside it. A spec asserts the
 # edits; none of them could see a file that stops running, because that
-# is a property of the program and not of the edit list. `CLAUDE.md`'s
+# is a property of the program and not of the edit list. `docs/REVIEW_LOOP.md`'s
 # same-place rule was fired twice by the scope-frame work and asks for a
 # mechanical countermeasure rather than a third hand-fix; this is it.
 #

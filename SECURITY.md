@@ -55,6 +55,27 @@ full, itemized threat model and mitigations — summarized:
 - Agent↔Core and plugin↔Core each require an exact protocol-version
   match; a mismatch is refused rather than tolerated.
 
+## A past incident affecting source checkouts
+
+**If you cloned or checked out this repository between 2026-08-05 and
+2026-08-11 and ran the Core test suite, it deleted directories outside
+the repository.** A cache-pruning example passed a fabricated absolute
+path (`current: "/x"`) to code that removes directories. The sweep
+resolved to the filesystem root, kept the most recently modified entry
+and removed the rest, so on macOS `/Applications` was emptied of anything
+not protected by SIP. It stopped when a protected path raised, which is
+why some applications survived. Every error was swallowed by the method
+under test, so the run reported success.
+
+Affected commits are `28a041c` (2026-08-05) through the fix; tag `v0.2.1`
+contains them. Reinstall from Time Machine or from the applications' own
+installers — nothing here can recover them.
+
+**The published extension was never affected.** `core/spec/**` is
+excluded from the VSIX, and the one production caller derives both paths
+from the same cache root, so the sweep could not leave it. Only running
+this repository's test suite from a source checkout could reach it.
+
 ## Scope
 
 This policy covers the OvalLSP Core Server (`core/`) and VS Code

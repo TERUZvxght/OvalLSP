@@ -13,7 +13,7 @@ require "tmpdir"
 # What is pinned here is the part of that tool a wrong answer would hide
 # in. A generator that emits the probe one line off its recorded line
 # reports every probe as missed, and a recall of 0 reads exactly like a
-# check that is switched off -- which is the shape `CLAUDE.md` warns
+# check that is switched off -- which is the shape `docs/MEASURING.md` warns
 # about under "a checker that cannot see the thing it checks". The
 # line-number round trip is the assertion.
 RSpec.describe ArityRecall do

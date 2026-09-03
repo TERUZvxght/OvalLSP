@@ -142,7 +142,7 @@ RSpec.describe "the release script's own guards" do
   # store. The `if ! git ...` form collapsed the third into the second,
   # so a tree git could not read was announced to the user as a tree with
   # uncommitted changes: a failure to *ask* turned into an assertion
-  # about their tree, which is CLAUDE.md's swallowed-failure rule
+  # about their tree, which is docs/CODE_DISCIPLINE.md's swallowed-failure rule
   # arriving from the other side. Refusing is still right; saying the
   # wrong reason is not.
   it "refuses on a tree git could not read, and says that is what happened" do

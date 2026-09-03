@@ -18,7 +18,7 @@
 # mutated; neither can be affected by load.
 #
 # The second one is why this file exists rather than a third careful
-# rewrite. CLAUDE.md: the first time a place is found twice, put in
+# rewrite. docs/REVIEW_LOOP.md: the first time a place is found twice, put in
 # something that makes the class of defect fail a check instead of
 # waiting for a reviewer.
 #

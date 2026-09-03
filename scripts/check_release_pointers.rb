@@ -12,7 +12,7 @@ require_relative "utf8"
 # found a pointer to nothing and rebuilt the release from scratch. Days of
 # duplicated work, recorded in `docs/design/tasks/028-0.2.3-review-loop.md`.
 #
-# `CLAUDE.md`'s "Where a release's work lives" says the task file on `main`
+# `docs/DEVELOPMENT.md`'s "Branches and pull requests" says the task file on `main`
 # that names the release also names its branch, and
 # `docs/DOCUMENTATION_MAP.md` carries the row. Nothing enforced either: the
 # row's "Checked by" column is one of eight that reads as nothing at all.
@@ -29,7 +29,7 @@ require_relative "utf8"
 # problem; a document naming a branch that is gone is not, because a
 # release's record outlives its branch. That said, the branches are not
 # meant to go: `main` squash-merges, so a release's individual commits
-# live only there. `CONTRIBUTING.md`'s "A merged release branch is kept"
+# live only there. `docs/DEVELOPMENT.md`'s "A merged branch is kept"
 # is the reason, and deleting one is a decision to write down rather
 # than a tidy-up this check would notice.
 #
