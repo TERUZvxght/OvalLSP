@@ -42,6 +42,16 @@ module Release
 
   Refused = Class.new(StandardError)
 
+  # How to get each tool this shells out to. Named rather than left to
+  # the reader, because the refusal that sends somebody to a search
+  # engine is the one they work around.
+  INSTALL = {
+    "gitleaks" => "Install it: brew install gitleaks",
+    "npm" => "Install Node, which brings npm",
+    "bundle" => "Install Bundler: gem install bundler",
+    "curl" => "Install curl, or pass --served <sha256> instead"
+  }.freeze
+
   module_function
 
   # --- what the tree says -------------------------------------------
@@ -79,8 +89,21 @@ module Release
   # `scripts/issues.rb` uses, and for the same reason: running these with
   # their output discarded throws away the reason at the moment it is
   # produced.
+  # **A tool that is not installed is a refusal, not a stack trace.**
+  # `Open3.capture2e` raises `Errno::ENOENT` when the binary is not on
+  # PATH, and nothing turned that into one -- so `gate` on a machine
+  # without `gitleaks` died mid-run, naming neither the tool nor what to
+  # do about it. The pre-push hook already states the rule this follows:
+  # a scan that cannot run is not a clean scan, so it refuses rather than
+  # passing.
   def delegate(*command, chdir: ROOT, why:)
-    out, status = Open3.capture2e(*command, chdir: chdir)
+    begin
+      out, status = Open3.capture2e(*command, chdir: chdir)
+    rescue Errno::ENOENT
+      raise Refused, "`#{command.first}` is not installed, so this step cannot run #{command.join(' ')}.\n" \
+                     "  #{INSTALL.fetch(command.first, "Install #{command.first}")}, then run this again.\n" \
+                     "  A step that could not run is not a step that passed."
+    end
     out = out.dup.force_encoding(Encoding::UTF_8).scrub("?")
     return out if status.success?
 

@@ -1261,3 +1261,9 @@
   to: "    File.write(path, open_accepted(body, line))\n"
   spec: spec/meta/release_flow_spec.rb
   example: "gathers a second acceptance under the heading the first wrote"
+- why: "A tool that is not installed is a refusal naming it, not an Errno::ENOENT: gate died mid-run on every machine without gitleaks, which is every CI runner."
+  file: scripts/release.rb
+  from: "    rescue Errno::ENOENT\n"
+  to: "    rescue Errno::EACCES\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses, naming the tool and how to install it"

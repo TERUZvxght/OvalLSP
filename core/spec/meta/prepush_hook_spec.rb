@@ -69,29 +69,9 @@ RSpec.describe "the pre-push hook" do
 
   def head = RepoFiles.capture(root, %w[rev-parse HEAD]).strip
 
-  # A PATH holding `git` and `ruby` and nothing else, so `gitleaks` is
-  # genuinely absent. Emptying PATH instead would take the hook's other
-  # two tools with it, and the example would pass on a hook that refused
-  # because it could not find `git`.
-  #
-  # Shims rather than symlinks: a symlinked interpreter resolves its own
-  # prefix from the link's target on some builds and from the link on
-  # others, and this example is not about that.
-  def path_without_gitleaks
-    dir = example_tmpdir("prepush-noleaks")
-    { "ruby" => RbConfig.ruby, "git" => executable_on_path("git") }.each do |tool, real|
-      File.write(File.join(dir, tool), "#!/bin/sh\nexec #{real} \"$@\"\n")
-      File.chmod(0o755, File.join(dir, tool))
-    end
-    dir
-  end
-
-  def executable_on_path(tool)
-    found = ENV.fetch("PATH").split(File::PATH_SEPARATOR)
-               .map { |dir| File.join(dir, tool) }
-               .find { |candidate| File.executable?(candidate) }
-    found or raise "#{tool} is not on PATH, and this example needs it to be"
-  end
+  # `path_without_gitleaks` is `core/spec/support/without_gitleaks.rb`
+  # now: `release_flow_spec` needs the same PATH for the same reason, and
+  # the second copy would have been the thing that drifted.
 
   # What git feeds a pre-push hook on stdin: local ref, local sha, remote
   # ref, remote sha. All zeros on the remote side is a branch the remote

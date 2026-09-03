@@ -508,6 +508,10 @@ three rounds is fixed here, each with an example watched failing first
 and a mutation the manifest applies. So this ships under that rule with
 nothing outstanding, rather than in spite of it.
 
+*Round 8 followed anyway, and not as a fourth review round: CI is not a
+reviewer this loop invited, it is the gate the change has to pass. What
+it found is recorded below.*
+
 **The measurement.** All three driven on an archive copy of the fixed
 tree. Two acceptances leave one heading and two lines. `main` one commit
 ahead of `origin/main` refuses without offering a pull, and says to
@@ -534,6 +538,56 @@ in the other direction, a second acceptance. The countermeasure is not
 another rule; it is that each of those refusals now has an example
 asserting the *message*, not the exit code, which is what round 5's B5
 and round 6's C2 also ended up needing.
+
+### Round 8 — `reproduce`, by CI
+
+PR #39's two required jobs failed on exactly two examples, and the
+informational Ruby 4.0 job on the same two. The reviewer had driven this
+change set four times and the suite had been green on this machine every
+time.
+
+| # | Finding | Disposition |
+|---|---|---|
+| E1 | HIGH — `delegate` let an absent tool escape as `Errno::ENOENT`. `Open3.capture2e` raises when the binary is not on PATH, so `gate` on a machine without `gitleaks` died with a stack trace instead of refusing, naming neither the tool nor what to do. | Fixed. `delegate` turns it into a `Refused` that names the command, says how to install it, and says why it is not a pass: "a step that could not run is not a step that passed" — the rule the pre-push hook already states for the same case. |
+| E2 | HIGH — two examples asserted the listing `gate` prints and then let `gate` run on into `gitleaks` and `preflight`. Here that passed; on a runner it crashed. | Fixed. Both run with a PATH carrying `ruby`, `git` and `bundle` and no `gitleaks`, and assert the listing, which `gate` prints before it shells out — so the examples are deterministic without stubbing anything. Four more that reach the scan after an acceptance clears `refuse_open_entries` were given the same PATH. |
+| E3 | Record only — what let it through. | Below. |
+
+**What let it through, and why nothing here saw it.** The two examples'
+result was decided by what the machine happened to supply. Every local
+signal agreed for exactly that reason: preflight, four drives and the
+mutation manifest all ran where `gitleaks` is installed, so all of them
+confirmed each other and none of them was evidence.
+
+It is round 5's stub from the other side. There, a stub that ignored its
+argv could not see a hook handing gitleaks an empty range, and reported
+what a working hook reports. Here, an example that could not run
+reported what a passing one reports. Both are `024.148`: a check that
+cannot see the thing it checks is indistinguishable from one that looked
+and found nothing — and the environment is part of what a check can see.
+
+The countermeasure is not a rule saying "think about the environment".
+It is E1's example, which drives the absent-tool path, and E2's PATH,
+which is now `core/spec/support/without_gitleaks.rb` so the next example
+that needs it does not grow a second copy. An example that reaches a
+step needing an external tool says which tools it is entitled to rather
+than inheriting the machine's.
+
+**Reproduced first**, with a PATH shimmed down to `ruby`, `git`, `bundle`
+and `sh`: the same two examples, at the same line numbers, with the same
+`Errno::ENOENT` at `release.rb`'s `delegate`. After the fix,
+`release_flow_spec` and `prepush_hook_spec` give 56 examples and 0
+failures with `gitleaks` absent, and the same with it present.
+
+**And the claim stops there, deliberately.** Running the whole suite
+under that PATH is not the same experiment: a PATH narrow enough to
+remove `gitleaks` also removes `bash`, `grep` and the rest, and
+`release_script_guard_spec` — which drives `release.sh` — then fails for
+want of those instead. Seven such failures came back, in two files, none
+of them this change set's. So what is established is that the specs
+which shell out to `gitleaks` no longer depend on it, not that the suite
+is indifferent to its environment everywhere. The second claim would
+need a PATH that removes one tool and nothing else, and this
+reproduction cannot make one.
 
 ## What is still owed
 

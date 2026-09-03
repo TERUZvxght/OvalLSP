@@ -247,7 +247,7 @@ RSpec.describe "scripts/release.rb" do
       bump_version_files
       open_entry
       commit_all
-      run("gate", "--accept", open_entry, "--reason", "It is a plan, and the release does not owe it.")
+      accept(open_entry, "It is a plan, and the release does not owe it.")
 
       accepted = File.read(File.join(root, "core", "tmp", "release-#{prepared}.json"), encoding: "UTF-8")
       expect(JSON.parse(accepted).dig("accepted", open_entry)).to include("does not owe it")
@@ -269,7 +269,7 @@ RSpec.describe "scripts/release.rb" do
       FileUtils.mkdir_p(File.dirname(record))
       File.write(record, "# #{prepared}\n\n## 残課題\n\n未処理の指摘はこの文書ではなく `024` に書く。\n")
 
-      run("gate", "--accept", open_entry, "--reason", "It is a plan, and the release does not owe it.")
+      accept(open_entry, "It is a plan, and the release does not owe it.")
 
       expect(File.read(record, encoding: "UTF-8")).to include(open_entry)
       expect(File.read(record, encoding: "UTF-8")).to include("does not owe it")
@@ -285,8 +285,8 @@ RSpec.describe "scripts/release.rb" do
       FileUtils.mkdir_p(File.dirname(record))
       File.write(record, "# #{prepared}\n\n## 残課題\n\n未処理の指摘はこの文書ではなく `024` に書く。\n")
 
-      run("gate", "--accept", open_entry, "--reason", "It is a plan.")
-      run("gate", "--accept", unspellable_number(902), "--reason", "Nor does the release owe this one.")
+      accept(open_entry, "It is a plan.")
+      accept(unspellable_number(902), "Nor does the release owe this one.")
 
       body = File.read(record, encoding: "UTF-8")
       expect(body.scan("## Accepted, and why").length).to eq(1)
@@ -320,7 +320,7 @@ RSpec.describe "scripts/release.rb" do
       write("vscode/README.md", "Install Preview 9.9.8 from the Marketplace.\n")
       commit_all
 
-      expect { run("gate") }.to output(%r{vscode/README\.md}).to_stdout
+      expect { gate_until_gitleaks }.to output(%r{vscode/README\.md}).to_stdout
     end
 
     # **It lists; it does not refuse.** "Not history" was a human
@@ -337,7 +337,7 @@ RSpec.describe "scripts/release.rb" do
       write("site/roadmap.html", "<h2>9.9.8</h2>\n")
       commit_all
 
-      expect { run("gate") }.to output(%r{site/roadmap\.html}).to_stdout
+      expect { gate_until_gitleaks }.to output(%r{site/roadmap\.html}).to_stdout
       expect(Release.stale_version_mentions(prepared)).to include("site/roadmap.html")
     end
 
@@ -366,6 +366,32 @@ RSpec.describe "scripts/release.rb" do
       write("a-new-file.txt", "uncommitted\n")
 
       expect { run("gate") }.to output(/a-new-file\.txt/).to_stderr
+    end
+  end
+
+  # **A tool that is not installed is a refusal, not a stack trace.**
+  # `Open3.capture2e` raises `Errno::ENOENT` when the binary is not on
+  # PATH, and nothing turned that into one — so `gate` on a machine
+  # without gitleaks died mid-run, naming neither the tool nor what to do
+  # about it. The pre-push hook already states the rule for this case:
+  # a scan that cannot run is not a clean scan.
+  describe "a tool the machine does not have" do
+    it "refuses, naming the tool and how to install it" do
+      branch("release/#{prepared}")
+      bump_version_files
+      published_artifacts
+      commit_all
+
+      with_path(path_without_gitleaks) do
+        expect { expect(run("gate")).to eq(2) }.to output(/gitleaks.*not installed/mi).to_stderr
+      end
+    end
+
+    # **The control.** A `delegate` that refused every command would
+    # satisfy the example above; this one says a command that is present
+    # and succeeds still returns its output.
+    it "runs a command the machine does have" do
+      expect(Release.delegate(executable_on_path!("git"), "--version", why: "unused")).to match(/git version/)
     end
   end
 
@@ -545,6 +571,37 @@ RSpec.describe "scripts/release.rb" do
 
       expect { Release.delegate(File.join(root, "quiet.sh"), why: "unused") }.not_to raise_error
     end
+  end
+
+  # **`gate` as far as the secret scan, and no further.**
+  #
+  # These two examples are about the listing `gate` prints before it
+  # shells out. They used to let `gate` run on into `gitleaks` and
+  # `preflight`, which passed here because this machine has gitleaks and
+  # died on every CI runner, which does not — a spec whose result the
+  # environment decided, and which every local signal called green for
+  # exactly that reason.
+  #
+  # The listing comes first, so removing the tool makes the example
+  # deterministic rather than stubbing anything: the output is asserted,
+  # and `gate` then refuses at the scan it cannot run.
+  # An acceptance clears `refuse_open_entries`, so `gate` runs on into
+  # the secret scan — which is not what any of these examples is about.
+  # Same PATH as `gate_until_gitleaks`, for the same reason.
+  def accept(number, reason)
+    with_path(path_without_gitleaks) { run("gate", "--accept", number, "--reason", reason) }
+  end
+
+  def gate_until_gitleaks
+    with_path(path_without_gitleaks) { expect(run("gate")).to eq(2) }
+  end
+
+  def with_path(path)
+    previous = ENV.fetch("PATH", "")
+    ENV["PATH"] = path
+    yield
+  ensure
+    ENV["PATH"] = previous
   end
 
   def build_a_vsix
