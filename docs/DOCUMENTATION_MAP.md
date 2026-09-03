@@ -2,8 +2,9 @@
 
 Every document that has to change when the product does, and what makes
 each one go stale. **Read this before finishing any change that a user
-could notice**, and again before a release. `AGENTS.md`'s "Documents and
-the record" lines point here.
+could notice**, and before a release walk it for everything in the
+release — `docs/RELEASE_CHECKLIST.md` says when. `AGENTS.md`'s "Documents
+and the record" lines point here.
 
 It exists because the alternative kept failing: the same facts live in
 eight places, nobody remembers all eight while writing a fix, and the gap

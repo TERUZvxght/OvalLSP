@@ -32,8 +32,9 @@ reaching the process over the network" — it's:
 1. **Untrusted workspaces** (opening someone else's repository, checking
    out a malicious PR) must not let the Core process itself, or the
    developer's machine, be compromised just by opening the folder.
-2. **Untrusted plugins** (third-party OvalLSP plugins) must not be able
-   to hijack Core's internal state or the LSP protocol stream itself.
+2. **Results read from another process** — the Rails Runtime Agent's
+   answers, and the types a test run reports — must not be able to
+   construct objects inside Core or hijack the LSP protocol stream.
 3. **Secret leakage via logs/error messages** must be minimized, since
    Core often logs a target Rails app's own exception text verbatim.
 
@@ -44,16 +45,18 @@ full, itemized threat model and mitigations — summarized:
   code) only starts once a workspace is explicitly marked **trusted** in
   VS Code — fail-closed on anything else (missing/`false`/absent trust
   signal).
-- Plugins run in a genuinely OS-process-isolated fork with no access to
-  Core's live LSP transport or internal index objects; only plain,
-  Marshal-safe data crosses the process boundary.
-- Runtime (highest-privilege) plugins never load at all in an untrusted
-  workspace.
+- What another process sends back — the Agent's answers, a test run's
+  observed types — crosses the boundary as plain JSON. A payload cannot
+  name a class, Core rebuilds typed values only from fields it has
+  validated, and one malformed element discards the whole payload.
+- Restarting the Agent asks the same trust question as starting it; the
+  check sits where the process is spawned, not at each caller.
 - Log output runs through a redaction pipeline (bearer tokens, basic
   auth, DB connection strings, known vendor key formats, labeled
   credentials) before being written anywhere.
-- Agent↔Core and plugin↔Core each require an exact protocol-version
-  match; a mismatch is refused rather than tolerated.
+- Agent↔Core requires an exact protocol-version match; a mismatch is
+  refused, the child is stopped, and Core falls back to static-only
+  answers.
 
 ## A past incident affecting source checkouts
 
@@ -80,5 +83,5 @@ this repository's test suite from a source checkout could reach it.
 
 This policy covers the OvalLSP Core Server (`core/`) and VS Code
 extension (`vscode/`) in this repository. It does not cover
-vulnerabilities in your own Rails application's code, or in third-party
-plugins not maintained in this repository.
+vulnerabilities in your own Rails application's code or in the gems it
+loads.

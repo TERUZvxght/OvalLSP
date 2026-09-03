@@ -14,7 +14,7 @@
 # cannot answer, because the two ordinary ways it fails to answer -- no
 # network and no `gh` -- say nothing about the tree. Preflight runs it
 # after its verdict for the same reason: a line that could change a
-# passing run into a failing one would be a tenth check, and a tenth check
+# passing run into a failing one would be one more check, and a check
 # that needs the network is not one this repository wants at the front of
 # every commit.
 #

@@ -224,7 +224,7 @@ end
 # red for a week while every local signal said the tree was fine.
 #
 # So: report, do not gate. This runs *after* the verdict and cannot
-# change it. It is deliberately not a tenth `Check` -- it needs the
+# change it. It is deliberately not one of the `CHECKS` -- it needs the
 # network, and a check that needs the network at the front of every
 # commit is not one this repository wants. `--list` therefore does not
 # print it, and "all N checks passed" stays true about the N checks.

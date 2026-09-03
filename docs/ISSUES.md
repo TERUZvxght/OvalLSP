@@ -18,7 +18,7 @@ disagreeing before.
 | **The store** | [`docs/design/tasks/024-deferred-review-findings.md`](design/tasks/024-deferred-review-findings.md) for open entries, [`…-resolved.md`](design/tasks/024-deferred-review-findings-resolved.md) for closed ones. One numbered entry per issue. `DeferredFindings.register` is the only reader that knows about the split — anything reading the live file alone loses three-quarters of them. |
 | **What users are told** | [`docs/KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) and its `.ja` twin, one paragraph per issue a user can meet, each ending in `<!-- documents: 024.N -->`. |
 | **What the product promises** | [`docs/EXTENSION_CAPABILITIES.md`](EXTENSION_CAPABILITIES.md) and its `.ja` twin. A row here is a promise with an E2E example behind it. |
-| **How a release went** | `docs/design/tasks/NNN-*.md`. Narrative, per release. Findings are recorded here as they are produced, then given a register number if they outlive the release. |
+| **How a release went** | `docs/design/tasks/NNN-*.md`. Narrative, per release. Findings are recorded here as they are produced; one that outlives the release goes to the intake below, and to the register once it has been driven. |
 | **Not yet triaged** | The intake list below. |
 
 ## The rule

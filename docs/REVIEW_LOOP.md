@@ -18,8 +18,9 @@ Each round records which it used, in the release's task document. A
 closing round whose method repeats the previous round's closes nothing.
 
 **After three rounds that find defects, ship with the open findings
-recorded** — a register entry each, and a `KNOWN_LIMITATIONS` paragraph
-for any a user can meet. Section 0.4: letting 1.0.0 recede in pursuit of
+recorded** — each in `docs/ISSUES.md`'s intake, in the register once it
+has been driven, and a `KNOWN_LIMITATIONS` paragraph for any a user can
+meet. Section 0.4: letting 1.0.0 recede in pursuit of
 accuracy is worse than the defects being pursued, and an unbounded loop
 has no other outcome. The bound of three is this project's operational
 choice, not a maintainer ruling. Departing from it is written down where

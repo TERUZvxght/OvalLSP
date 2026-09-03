@@ -53,8 +53,9 @@ the register's legend carry more and stay where they are:
   A scratch directory whose `CLAUDE.md` said only "Project note" answered
   `NONE` to "what is the secret word in your project instructions"; the
   same directory with an `@`-import of a note under `sub/` added to
-  `CLAUDE.md`, and the note holding a sentinel, answered the sentinel. Then this worktree itself,
-  asked to list the second-level headings of its project instructions
+  `CLAUDE.md`, and the note holding a sentinel, answered the sentinel.
+  Then this worktree itself, asked to list the second-level headings of
+  its project instructions
   and nothing else, printed the card's seven headings verbatim, from
   "Where the rules are" to "Branches, commits, releases": the content of
   `AGENTS.md`, reached through `CLAUDE.md`'s one line. Until then this
@@ -124,7 +125,14 @@ script check are the same external branch; the other eleven checks
 passed. Run a fourth time on the tree that ships, after round 3: 3,108
 examples (the card spec lost an example in the rewrite), the same one
 failure and the same script check, the other eleven green. The three
-environment-dependent suites ran 118 examples each time, none skipped.
+environment-dependent suites ran 118 examples each time, none skipped. Every later commit on
+the branch ran it again — after the live import test, and after the
+alignment pass below — with the same result each time, until the last
+run added a second external fact of the same kind: the other session's
+release was tagged, and `release_artifacts_spec` asks for a row in
+`docs/RELEASE_ARTIFACTS.md` that only that release can write. This
+branch is based on `main` before that release; bringing it up to date at
+merge time carries the row in.
 
 ## The documents behind the card
 
@@ -275,7 +283,7 @@ rather than looping further.
 | 3 | The task-file guard was fenced to one bullet; a number one bullet away, or without `.md`, passed | fixed for the `.md` forms: the whole card is scanned, with the two reference documents allowed. A bare "task 057" still passes, because record numbers are cited legitimately |
 | 4 | The declared-relationship check read four hardcoded documents, and did not check that the declared section was the right one | fixed in part: the list is read from the card's index, so a new document is asked by default, and five more documents declare. Whether a declaration names the *right* section is not checked, and the spec says so |
 | 5 | The shipped changelog's new pointer named "Code that deletes" for a rule that lives under "Unpinned behaviour is a defect" | fixed: the pointer names the document and no section |
-| 6 | `SECURITY.md` gained a section that `site/security.html` does not mirror | open, decided: the site describes the product's security model, and the disclosure concerns running this repository's test suite from a checkout — the published extension was never affected. The maintainer can reverse this |
+| 6 | `SECURITY.md` gained a section that `site/security.html` does not mirror | fixed after the rounds: the maintainer asked for every contradiction to be aligned to the correct side, and the map says the page mirrors the policy, so both languages of the page carry the section now |
 | 7 | The release-checklist sentence said CI's secret-scan job does the full-history gitleaks scan every time; the job scans a pull request's own commits on a pull request | fixed: the full-history scan is back as a manual pre-release step, and the sentence says what the job scans on a push and on a pull request |
 | 8 | The record's list of what still says `CLAUDE.md` omitted the documentation map and `.gitignore` | fixed |
 | 9 | "68 places in 51 files" did not reproduce from the diff, and its deriver is not in the tree | fixed: the counts are gone, and the sentence names the areas |
@@ -291,9 +299,33 @@ Same place, consecutive rounds: the card and its spec (round 1's 6 and
 countermeasure is not built here and is an intake item.
 
 **Open after three rounds:** the "right section" half of finding 4,
-finding 6 as decided, finding 13, and a check for section citations.
-None is user-visible, so each is an intake item rather than a
-`KNOWN_LIMITATIONS` paragraph.
+finding 13, and a check for section citations. None is user-visible, so
+each is an intake item rather than a `KNOWN_LIMITATIONS` paragraph.
+
+### After the rounds — the maintainer's own audit
+
+Asked which documents contradict each other and which side of each was
+written later, the tree answered with nine, and the maintainer had all of
+them aligned to the side that is true of it. In every case but one the
+older text had been left behind by a later change; the exception is the
+review loop's shipping rule, where the newer rule — intake first — was
+right and the new document had copied the older one.
+
+| Contradiction | Later side | Aligned to |
+|---|---|---|
+| `SECURITY.md` and its translation described plugins deleted in 0.2.16 | the deletion (0.2.16) | the threat model as `docs/SECURITY_CHECKLIST.md` states it: results read from another process, a JSON wire, the restart path |
+| `docs/EXTENSION_CAPABILITIES.md` (both languages) and `docs/RELEASE_CHECKLIST.md` gate 5 called darwin-arm64 verification manual | the `Packaged Core (darwin-arm64)` job (0.3.2) | what CI runs on every push |
+| `docs/REVIEW_LOOP.md` and `docs/ISSUES.md` disagreed on where an open finding goes | `docs/ISSUES.md`'s intake rule (0.3.0) | intake first, the register once driven, in both |
+| `docs/RELEASE_CHECKLIST.md` gate 14 called the CI secret scan a full-history scan unconditionally | gate 14 (046) overstated what the workflow (0.2.0) does | full history on a push to `main`, the pull request's commits on a pull request |
+| `scripts/preflight.rb` and `scripts/ci_status.rb` said the CI line is "not a tenth check", with thirteen checks | the checks added in 0.3.0 and 0.3.1 | no number |
+| `docs/design/docs/12-release-and-support.md` said the changelog was still to be created | `vscode/CHANGELOG.md`, two days after the sentence | where the changelogs are and what they are for |
+| `docs/DOCUMENTATION_MAP.md` said to read it "again before a release" after this change moved the release steps out | this change | it points at `docs/RELEASE_CHECKLIST.md` |
+| `site/security.html` did not mirror `SECURITY.md`'s new section | this change | both languages of the page carry it |
+| This record's preflight account stopped at the fourth run | this change | it says every later commit ran it |
+
+Ruby 3.3 — a required CI job for a version `docs/SUPPORT_MATRIX.md`
+calls unsupported — is a GitHub setting rather than a contradiction
+between documents, and stays with the owner.
 
 ## 残課題
 
