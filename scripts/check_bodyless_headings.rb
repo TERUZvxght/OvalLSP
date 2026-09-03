@@ -61,9 +61,19 @@ module BodylessHeadings
     match && match[1].length
   end
 
-  # Every heading immediately followed by a heading of the same level,
-  # blank lines aside. Fenced blocks are skipped: a `##` inside ``` is
-  # sample text, and this repository's documents quote Markdown often.
+  # Every heading with nothing under it: one immediately followed by a
+  # heading of the *same* level, blank lines aside, **or one that ends the
+  # file**. Fenced blocks are skipped: a `##` inside ``` is sample text,
+  # and this repository's documents quote Markdown often.
+  #
+  # **The end-of-file arm was missing for one release.** The rule was
+  # written as "followed by a heading of the same level", which a trailing
+  # heading cannot satisfy because nothing follows it -- so a limitation
+  # deleted from the *end* of a page left a heading this check read as
+  # fine, which is the exact defect it exists to catch. The spec example
+  # named for that case asserted the penultimate heading instead and
+  # passed, so nothing said so. Found by a reader comparing the spec to
+  # the rule, one release later.
   def offenders(text)
     lines = text.split("\n")
     fenced = false
@@ -79,7 +89,8 @@ module BodylessHeadings
       next unless level
 
       following = lines[(index + 1)..].to_a.drop_while { |l| l.strip.empty? }.first
-      next unless following && heading_level(following) == level
+      # `nil` is end of file: a heading with nothing under it at all.
+      next unless following.nil? || heading_level(following) == level
 
       [index + 1, line]
     end
