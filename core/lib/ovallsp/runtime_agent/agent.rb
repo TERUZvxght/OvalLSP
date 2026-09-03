@@ -377,9 +377,44 @@ module Ovallsp
       def each_named_module
         ::ObjectSpace.each_object(::Module) do |mod|
           name = module_name(mod) or next
+          next unless own_constant?(mod, name)
 
           yield mod, name
         end
+      end
+
+      # **Whether this module is the one that name resolves to.**
+      #
+      # A module reports the constant it was assigned to, and Rails'
+      # per-model relation classes override `.name` to answer their
+      # parent's. After `eager_load!` six Module objects say
+      # `ActiveRecord::Relation` -- the real one and five shadows
+      # (`ApplicationRecord::ActiveRecord_Relation`, `User::…`, and so on).
+      # `GemIndex` keys by name and the last writer wins, so the surviving
+      # entry was whichever the walk happened to reach last, and on this
+      # repository's fixture that was a shadow with **no methods of its
+      # own**: a class the index says it knows the whole surface of, with no
+      # surface. `gem_index.rb`'s own header says that state must not exist.
+      #
+      # Measured on that fixture, with `eager_load!` done as it is before
+      # `#gem_index_result` can be asked:
+      #
+      #     entries seen:            2098
+      #     kept by const-identity:  2078
+      #     dropped (shadows):       20   (4 distinct names)
+      #     files loaded by the walk: 0
+      #
+      # That last line is the one that decided the shape. `const_get` on a
+      # qualified name can trigger an autoload, and an index walk with a
+      # side effect would be a worse defect than the one it fixes -- so it
+      # was measured rather than reasoned about, and after eager loading it
+      # loads nothing. `024.305`.
+      #
+      # The alternative, keeping whichever copy has the most methods, was
+      # measured too and is a wash: 228 completion items against 227, thirteen
+      # delegation names traded for twelve real ones.
+      def own_constant?(mod, name)
+        safely { ::Object.const_get(name).equal?(mod) } ? true : false
       end
 
       # `…/gems/<name>-<version>/` is the shape every installed gem's path

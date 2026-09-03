@@ -16738,6 +16738,60 @@ honest refusal.
 Both halves, because either alone leaves something wrong: without the
 first, the next suite that skips is misreported again; without the
 second, four real decisions go unverified on CI.
+## 024.305 One name, six modules, and the index keeps the empty one
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: no
+user-visible-note: >-
+  Driven, and the observable consequence could not be established.
+  Completion on a relation is 228 items as shipped against 227
+  repaired -- a wash, 13 delegation names traded for 12 real ones --
+  and no diagnostic changed either way. It is recorded because the
+  state is one `gem_index.rb`'s own header says must never exist, and
+  because `024.295` cannot write anything to disk while it does.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/runtime_agent/agent.rb` (`#each_named_module`),
+`core/lib/ovallsp/semantic/gem_index.rb:52`
+
+Rails' per-model relation classes override `.name` to return their
+parent's, so after `eager_load!` **six Module objects report
+`ActiveRecord::Relation`** — one real, five shadows
+(`ApplicationRecord::ActiveRecord_Relation`, `User::…`, and so on).
+`GemIndex#initialize` keys by name and the last writer wins, and the
+copy that survives is a shadow with no methods of its own:
+
+    ActiveRecord::Relation      knows=true  instance_methods=0  ancestors=23
+    …::CollectionProxy          knows=true  instance_methods=0
+    CONTROL ActiveRecord::Base  knows=true  instance_methods=116
+
+So the index holds a class it says it knows the whole surface of, with
+no surface — the one state that file's header says must not exist,
+because a check built on "closed" then asserts something nobody
+established. Four names are affected on this repository's fixture.
+
+The collapse is guaranteed rather than incidental: one module reports
+that name after boot and six after `eager_load!`, and
+`RailsBootstrap#populate_registries` eager-loads before
+`#ensure_gem_index` can fire.
+
+**Two candidate fixes, and the obvious one is a wash.** Keeping the
+copy with the largest method set trades 13 delegation names for 12
+real ones. Keeping the module the constant actually resolves to
+(`Object.const_get(name).equal?(mod)`) drops exactly the 20 shadows
+and no legitimate class — measured, with `ActionController::Metal`
+identical on both sides as the control. That is the better shape and
+it is not free: `const_get` on a qualified name can trigger autoload
+inside the Agent, which is a side effect the walk does not have today.
+Establishing that it is harmless is the work, and it is why this is
+not a patch.
+
+**Fixed in 0.3.2.** The Agent keeps a module only where the name resolves back to it, so a class that overrides `.name` to answer its parent's no longer displaces the real one. Measured on this repository's fixture: 2,098 entries seen, 2,078 kept, 20 shadows dropped across 4 names, and `ActiveRecord::Relation` goes from an entry with **0** instance methods to one with 78, `CollectionProxy` from 0 to 185, with `ActiveRecord::Base` unchanged at 116 as the control. The autoload risk that kept this out of a patch was measured rather than argued: `const_get` over all 2,098 names after `eager_load!` loads **0** files. The alternative -- keep whichever copy has the most methods -- was measured a wash, 228 completion items against 227.
+
 ## 024.306 The 0.3.0 record states as measured that a `:method_call` candidate never resolves to a constant
 
 ```yaml
