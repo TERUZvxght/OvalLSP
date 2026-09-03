@@ -113,8 +113,8 @@ feature failing, and each is a shape it does not reach.
 
 ## Ruby version scope
 
-**The published extension is built for Ruby 3.4.x**, and only 3.4.5 and
-3.4.7 are actually exercised. The VSIX bundles Prism and RBS native
+**The published extension is built for Ruby 3.4.x**, and only 3.4.5,
+3.4.7 and 3.4.10 are actually exercised. The VSIX bundles Prism and RBS native
 extensions compiled for the exact `major.minor` it was built under, so on
 any other Ruby they are not used.
 
@@ -248,16 +248,26 @@ and all are visible on ordinary code, so they are listed here rather
 than left for you to find.
 
 
-**One this list carried until 0.3.2 is gone.** A namespaced type was
-reported incompatible with itself — ``expects RBS::TypeName here, but
-TypeName is given``, where the two names are one class — and over the
-`rbs` gem's own hand-written signatures that was *every* argument-type
-report the engine produced. The cause was not the two spellings: when
-RBS declares a type whose ancestry it cannot build, the check was
-reading the failure as "this class has no ancestors" and concluding a
-mismatch from a question it could not ask. It declines now. Measured
-over rbs 4.2.0 with its own `sig/`: six reports before, none after,
-with the unrelated categories unchanged (024.224, fixed in 0.3.2).
+**A type your `sig/` declares and your Ruby does not can be reported
+incompatible with itself.** If a signature names a class — `module App;
+class Key` — and no Ruby file in the workspace declares that class, a
+call passing one can be reported as ``expects App::Key here, but Key is
+given``, where the two names are the same type. Nothing is wrong with
+your code.
+
+**0.3.2 fixed the larger half of this and 0.3.3 corrected the record**,
+which is worth saying because the paragraph here briefly claimed the
+whole thing was gone. The half that is fixed was the common one: where
+RBS declares a type whose ancestry it cannot build, the check read that
+failure as "this class has no ancestors" and concluded a mismatch from
+a question it could not ask. It declines now.
+
+What is measurable says the remaining half is rare. Every gem installed
+here that ships its own `sig/` — seventeen of them, including three
+versions of `rbs` — was driven with those signatures loaded, and the
+argument-type check reports **nothing** on any of them. The remaining
+shape reproduces in a fixture and in no corpus this project has
+measured. <!-- documents: 024.224 -->
 
 Two that this list used to carry are gone — fixed in earlier releases,
 not this one. **A `*_path`/`*_url` call is no longer reported as a
@@ -465,13 +475,22 @@ characters or more the picker uses an index", which describes a switch
 that does not exist, at "roughly four times" where the measurement says
 2.6.)
 
-## The packaged extension is driven on Linux, and smoke-tested on macOS
+## The packaged extension is driven fully on Linux, and on macOS through the publish gate's own test
 
 The Core Server laid out the way a VSIX lays it out — inside the
 extension, with its runtime gems vendored — is driven through a full
 editor session on every push, alongside the repository copy. That covers
 the bundled-Core load path, which is where the packaged build has
-actually broken before.
+actually broken before. That run is on Linux.
+
+**What macOS gets is narrower, and 0.3.2 is where it stopped being
+nothing.** An Apple Silicon runner vendors the Core for that platform,
+checks the manifest really says so, and drives the result through the
+same semantic smoke test the publish gate runs — a real hover, a real
+document symbol, a real go-to-definition, a clean shutdown. It is not the
+full editor session, and `vsce package` is deliberately not run there. So
+the platform that is published is now built and exercised by CI; it is
+not exercised as thoroughly as the platform that is not.
 
 ## What a version mismatch actually does
 
@@ -595,8 +614,6 @@ is the safer half of that trade until the index can prove the difference.
 `module_function` and `extend self` themselves work: their methods appear
 in completion, hover and go to definition. <!-- documents: 024.106 -->
 
-## Completion offers methods you cannot call
-
 ## The four features disagree at the same position
 
 - `<% @posts.each do |post| %>` then `post.titel` in a view: hover says
@@ -621,7 +638,7 @@ rspec-core, i18n, psych and reline: 16 reports.
   classes in a typical Rails bundle — but the walk that builds that
   index reports only modules whose source sits under a gem directory,
   and `Kernel` is not one. So a core method a gem supplies is still
-  invisible to the check. <!-- documents: 024.290 -->
+  invisible to the check.
 
 This section said *four* shapes and 41 reports until 0.2.16, and two of
 the four had stopped happening some releases earlier — the count was
@@ -655,9 +672,6 @@ Restricted Mode, which is every Rails project until you trust the
 folder. Trusting the workspace is what makes these go
 away. <!-- documents: 024.83 -->
 
-
-## An instance variable set in another method
-
 ## Where a relation stops being a relation
 
 **Nothing is reported about a method called on a relation.**
@@ -665,7 +679,7 @@ away. <!-- documents: 024.83 -->
 deliberate rather than missing: a relation reaches
 `ActiveRecord::AttributeMethods`, which answers at call time, so a
 report there would be a wrong answer. Hover and completion do follow
-the chain past its second link as of 0.3.0. <!-- documents: 024.290 -->
+the chain past its second link as of 0.3.0.
 
 ## Completion on a value that could be two things
 
@@ -718,7 +732,7 @@ does resolve. This is the commonest shape in a scaffolded app's views
 
 ## What the signature popup shows for a stdlib or gem method
 
-Four, and only the first is about the *label* rather than about which
+Three, and only the first is about the *label* rather than about which
 method was found:
 
 - **A method's own type variable leaks into the label**: `map()`
@@ -866,7 +880,7 @@ exists so that `Relation` reaches `ActiveRecord::Relation` without
 anyone writing the namespace, and for a name nothing else claims it is
 usually right.
 
-Since 0.3.1 it will not do this to a class Ruby itself provides —
+Since 0.3.0 it will not do this to a class Ruby itself provides —
 `Integer`, `Symbol`, `Range` — because the signatures already give
 those names a meaning. It can still do it to one of *yours*, in the
 window before the file declaring it has been read. What that would

@@ -42,6 +42,16 @@ failing.
 Measured, not estimated. Every figure here was taken by driving the real
 server; where a number is from a single run it says so.
 
+> **These four rows are dated 2026-08-19 (`93e4f77`), and none of them
+> has been re-derived here since.** They are the measurement this file
+> was written from, not a live one — the shipped sections in §3 below
+> are where each entry's outcome is recorded. The precision row is known
+> to have moved twice: 0.2.6 published 54 → 6 over the same 213 files,
+> and `024.76`, which that row cites, was re-driven at 23 on its own
+> corpus and moved to 0.4.0 (`056`). Nothing has re-derived the other
+> three rows, which is a gap rather than a reassurance.
+> Re-derive before quoting any of them forward.
+
 | what a user asks | measured today |
 |---|---|
 | "is this call undefined?" — **precision** | **54 reports over 213 files of real gem source; 53 wrong** (`024.76`) |
@@ -83,10 +93,10 @@ instances:
 
 Each step states the axis it serves. Sizes are relative, not schedules.
 
-### 0.2.6 — negative diagnostics get a proof model *(axis B)*
+### 0.2.6 — negative diagnostics get a proof model *(axis B)* — **shipped**
 
-The review's recommended scope, which this project accepts as the shape
-but will re-measure item by item:
+The review's recommended scope, which this project accepted as the shape
+and re-measured item by item:
 
 1. preserve ancestor-reference uncertainty instead of dropping it;
 2. carry lexical context for ancestor constant references, or return
@@ -101,7 +111,10 @@ but will re-measure item by item:
 **Success is measured, not declared:** re-run the 213-file corpus. The
 target is not zero reports; it is that a report that survives is one a
 Ruby developer would agree with, and that `Model.scope.first.missing` is
-caught.
+caught. Both were met: `vscode/CHANGELOG.md`'s 0.2.6 section publishes
+54 → 6 over that same corpus, one run per revision, and records that a
+call that does not exist through a relation — reported by nothing before
+— is now reported.
 
 Also in it: `024.73` (`Marshal.load` on plugin output — axis A),
 `024.78`, `024.79`.
@@ -249,34 +262,149 @@ mutating. `024.122` is the task, and its third step is the one that has to
 come last: the policy is written into `CLAUDE.md` *after* the tree obeys
 it, not before, so the rule does not arrive with 72 exceptions.
 
-### 0.3.0 — the first release that may add capability *(axis B)* — **next, on `feat/0.3.0`**
+### 0.2.14 — the record, and the checks that keep it true *(axis A)* — **shipped**
 
-Enumerated now, in
-[`045-0.3.0-scope.md`](045-0.3.0-scope.md), because the foundation is
-measured: 042's D5, D10 and the parser's half of D2 shipped in 0.2.13,
-and the 16-gem corpus went 506 → 389 with the one real latent
-`NoMethodError` in it still reported.
+[`046-0.2.14-making-the-record-true.md`](046-0.2.14-making-the-record-true.md),
+prepared on `feat/0.2.14`. Every line it touches in the engine is a
+comment. It is here because the project's own record had drifted from
+the product, and because several of the checks meant to notice that
+could not fail — the one asking "did the suite actually run" counted
+examples, and a fully skipped file still reports examples. A limitation
+this product does not have had been published to users in both
+languages, and is withdrawn. Three review rounds, and it ships under
+`CLAUDE.md`'s bound with its open findings written down.
 
-Nine promises in `docs/ROADMAP.md`, and **five of them wait on the same
-one** (`024.R7`, the gem index). The scope file starts with `024.85` —
-the smallest thing a user meets daily that needs nothing new — and puts
-`024.R7` last and on its own, so the release is not one long piece of
-work with nothing shippable in the middle.
+### 0.2.15 — answers the engine already had *(axis B)* — **shipped**
 
-Two of the nine are blocked by 042's **D3**, and the scope file says so
+[`047-0.2.15-scope.md`](047-0.2.15-scope.md). Seventeen entries, every
+one a case where the engine had the answer and something between it and
+the reply threw it away; no capability added. **It exists because 0.3.0
+could not be two things** — the release that adds capability and the one
+that absorbs everything unscheduled — which is a split the 0.3.0 section
+below did not anticipate when it was written.
+
+### 0.2.16 — the backlog, driven *(axis B)* — **shipped**
+
+[`051-0.2.16-shipped.md`](051-0.2.16-shipped.md), with
+[`050`](050-where-0.2.16-stands.md) recording the pause in the middle of
+it. 111 open findings reproduced against the tree rather than read: 94
+reproduced exactly as recorded, 13 differently, and 4 were reported
+already fixed — two of which an independent check overturned. Reading an
+entry is not driving it, and 0.3.1 and 0.3.2 both open by saying so.
+
+### 0.2.17 — a rename that does not break the file *(axis B)* — **shipped**
+
+[`052-0.2.17-the-backlog-was-relabelled.md`](052-0.2.17-the-backlog-was-relabelled.md).
+42 entries. Nine shapes of local-variable rename were wrong and every
+one had a passing spec beside it — because a spec asserts an edit list,
+and whether the program still parses and still means what it meant is a
+property no fixture here was asking about. `scripts/rename_oracle.rb`
+asks it: over 1,043 files and 3,123 renames, files that no longer parse
+went 6 → 0 and files that parse and mean something else 711 → 58.
+
+### 0.2.18 — the 0.2.x line closes *(axis A)* — **shipped**
+
+[`053-0.2.18-the-line-closes.md`](053-0.2.18-the-line-closes.md), on
+`main`. A latency figure published for seventeen releases in both
+languages was one this project's own register had already retracted:
+re-analysing a 2,574-line file costs 2.7 seconds, not the 2.1 published,
+and `uri/generic.rb` costs 3.9. Corrected with the method and the old
+figures explained rather than quietly swapped. At the end **no open
+entry targets any 0.2.x version**.
+
+### 0.3.0 — the first release that adds capability *(axis B)* — **shipped, on `release/0.3.0`**
+
+Enumerated in [`045-0.3.0-scope.md`](045-0.3.0-scope.md) and recorded in
+[`054-0.3.0-the-first-release-that-adds.md`](054-0.3.0-the-first-release-that-adds.md),
+because the foundation was measured: 042's D5, D10 and the parser's half
+of D2 shipped in 0.2.13, and the 16-gem corpus went 506 → 389 with the
+one real latent `NoMethodError` in it still reported.
+
+> **This heading read "next, on `feat/0.3.0`" until 0.3.3's record pass,
+> and the branch it names is gone.** It existed -- the reflog has two
+> checkouts of it on 2026-08-22 -- and it is not in the repository now.
+> The work was assembled on
+> `release/0.3.0`, under the convention `CLAUDE.md` dates to 2026-09-01
+> that retired the `feat/` prefix — so the one file written to survive a
+> compaction was sending a resuming session to a branch that is not
+> there, which is the failure `028` records and that rule exists to
+> prevent.
+
+Nine promises in `docs/ROADMAP.md`, and **two of them wait on the same
+one** (`024.R7`, the gem index). This read "five of them", which is the
+count of the rows needing only what already exists with the wrong
+predicate attached (`024.292`, which corrected `045` and not this file).
+`024.R7` is `done | 0.3.0`. The scope file starts with `024.85` — the
+smallest thing a user meets daily that needs nothing new, and which in
+the event shipped in 0.2.16 — and puts `024.R7` last and on its own, so
+the release is not one long piece of work with nothing shippable in the
+middle.
+
+Two of the nine were blocked by 042's **D3**, and the scope file said so
 rather than letting it be discovered: `Article.all.` completing and
 `@ivar` completion both answer *about a position*, and D3 records that
 "one query per position" was built as one query about a *type*.
 
+**What shipped:** eight capabilities — document highlight, call
+hierarchy, go to type definition, inlay hints, quick fixes, `@ivar`
+completion, `@ivar` hover across the whole class, and completion on a
+chained relation — plus `undefined method` on a class that inherits from
+a gem, which is what the Agent's gem index made possible. A four-stage
+review before release produced 168 findings; 69 reproduced inside the
+release's own code and 38 were fixed, and the eight shapes these answers
+do not reach are published in `KNOWN_LIMITATIONS` rather than carried
+quietly.
+
+### 0.3.1 — what a restart forgets *(axis B)* — **shipped, on `release/0.3.1`**
+
+[`055-0.3.1-what-a-restart-forgets.md`](055-0.3.1-what-a-restart-forgets.md).
+A patch. A `bundle install` restarts the Runtime Agent, and the gem
+index the old process had reported was kept across it — so the
+undefined-method check went on judging code against gems that were gone,
+and a method that exists in the version just installed was reported as
+one that does not. It is dropped with the application it described now.
+
+**Both of the entries targeted at it were wrong about their own
+subject**, and driving them before working on them is what found it. One
+said the check never acts on an instance-variable receiver; it does, and
+has since 0.3.0, and the limitation published for it was false in both
+languages.
+
+### 0.3.2 — the backlog the 0.3 line owes *(axis B)* — **shipped, on `release/0.3.2`**
+
+[`056-0.3.2-the-backlog-the-0.3-line-owes.md`](056-0.3.2-the-backlog-the-0.3-line-owes.md).
+The thirty-four register entries targeted at 0.3.2 when it opened, every
+one of them driven: **nineteen fixed; fifteen moved to 0.4.0 with the
+measurement that says why a patch cannot hold them.** Three of the
+thirty-four came out differently from their own records.
+
+A namespaced type reported incompatible with itself was *every*
+`argument-type` report over a corpus with hand-written signatures, and
+none of them was about the user's code; Ruby 4.0 puts a name on `Object`
+the bundled signatures do not declare, so every class in a workspace
+picked it up as a mistake; and the macOS package is built and driven by
+CI now, on an Apple Silicon runner, where every packaged run before it
+was Linux while what is published is `darwin-arm64`.
+
+**The 0.3 line is closed**: no open register entry targets any 0.3.x,
+and `docs/ROADMAP.md` has only 0.4.0 and 1.0.0 sections left.
+
 ### Before 1.0.0 — the environment half *(axis A, and PUBLISHING.md)*
 
 - published, verified artifacts for the targets beyond `darwin-arm64`
-  (`024.R4`);
-- a plain Ruby project guaranteed, not only a Rails one (`024.R1`);
-- `024.69` — the two suites that drive a real editor run only on the
-  maintainer's machine; before 1.0.0 they run somewhere else too;
+  (`024.R4`, still open at 1.0.0). What 0.3.2 closed is the adjacent
+  entry, not this one: `024.283`, the packaged Core being driven only on
+  Linux while what is published is `darwin-arm64`;
+- a plain Ruby project guaranteed, not only a Rails one (`024.R1`, open
+  at 1.0.0);
+- ~~`024.69` — the two suites that drive a real editor run only on the
+  maintainer's machine; before 1.0.0 they run somewhere else too~~ —
+  **done**: `024.69` is fixed, in 0.2.12;
 - `024.71` — the shared Rails fixture blocks parallelisation, which is
-  what makes the above affordable.
+  what makes the above affordable. Still open, and retargeted to 0.4.0
+  in 0.3.2: driven, the two real-Rails suites already run concurrently
+  with the fixture byte-identical, so the reason to expect breakage is
+  weaker than when this was written.
 
 ## 4. What decides that 1.0.0 has arrived
 
@@ -299,6 +427,12 @@ ships.
 
 ## 5. What this file is not
 
-Not a schedule, and not a promise about content beyond 0.2.6 — 0.2.7 and
-0.3.0 are named so the direction is visible, and they will be re-argued
-from measurement when they open. It is deleted when 1.0.0 ships.
+Not a schedule, and not a promise about content beyond what has shipped.
+This sentence read "beyond 0.2.6 — 0.2.7 and 0.3.0 are named so the
+direction is visible" and was never updated; the file itself was last
+touched at `41555b1` ("0.2.13, and 0.3.0 scoped"), and **eight releases
+shipped past it before 0.3.3's record pass** — 0.2.14 through 0.3.2.
+§3's sections now run to 0.3.2, and everything after them — the
+environment half, and whatever 0.4.0 turns out to be — is named so the
+direction is visible and will be re-argued from measurement when it
+opens. It is deleted when 1.0.0 ships.

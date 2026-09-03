@@ -115,6 +115,16 @@ CHECKS = [
     why: "a path resolving to nothing sends the next reader somewhere that does not exist",
     dir: ROOT, command: %w[ruby scripts/check_doc_links.rb]
   ),
+  # Three times a limitation was fixed, its paragraph deleted, and the
+  # heading left standing -- and with no body the heading *is* the claim.
+  # The publication guard could not see any of them: it matches the
+  # `<!-- documents: -->` marker, which lives inside the body and leaves
+  # with it.
+  Check.new(
+    name: "no heading is left standing without a body",
+    why: "the marker that would flag it lives in the body, so it leaves with the body",
+    dir: ROOT, command: %w[ruby scripts/check_bodyless_headings.rb]
+  ),
   # 024.R9 split the register by state, and that split is only true while
   # resolving an entry moves it. The move is a script rather than a hand
   # edit -- this file's own class of accident, `024.225` -- and this is

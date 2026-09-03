@@ -1286,7 +1286,8 @@ end
       with_file("app/models/rel_diag.rb", source) do |uri|
         messages = @client.diagnostic_messages(uri).join(" ")
 
-        # **Recorded either way.** `024.87` calls this half unconfirmed; a
+        # **Recorded either way.** `024.87` called this half unconfirmed
+        # until this example settled it; a
         # relation is an Active Record object and `ActiveRecord::Relation`
         # delegates through `method_missing`, so silence here is the
         # correct answer and not a gap -- which is what the expectation

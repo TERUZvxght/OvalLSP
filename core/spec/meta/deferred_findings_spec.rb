@@ -576,6 +576,31 @@ RSpec.describe "deferred findings metadata" do
       expect(DeferredFindings.undocumented(entry("024.30", status: "open", kind: "defect"), "none")).to eq(["024.30"])
     end
 
+    # **The kind filter this guard used to carry, and the shape of its
+    # repair.** It read `open_defects`, so an open `friction` entry
+    # declaring a user-visible half was never required to be published --
+    # and seven were open when this was written. `024.173` found and fixed
+    # the identical filter in the shipped-target guard and did not reach
+    # here, which is the same place twice.
+    #
+    # The pair below is what makes the repair checkable rather than
+    # asserted: `friction` must be demanded, `roadmap` must not, and
+    # neither half can be dropped without the other example failing.
+    it "demands a friction entry that declares a user-visible half" do
+      friction = entry("024.30", status: "open", kind: "friction", user_visible: "yes")
+
+      expect(DeferredFindings.undocumented(friction, "no citations here")).to eq(["024.30"])
+    end
+
+    # A plan is not a limitation, and a roadmap entry carries no
+    # `user-visible` field -- so without this exclusion the nil-permissive
+    # rule above would demand a limitation paragraph for every one.
+    it "does not demand one for a roadmap entry" do
+      plan = entry("024.R9", status: "open", kind: "roadmap")
+
+      expect(DeferredFindings.undocumented(plan, "no citations here")).to be_empty
+    end
+
     # Each half stated with the case that must *fail*, or it cannot tell a
     # working rule from one that answers the same either way.
     it "reports a resolved entry that is still cited as a limitation" do

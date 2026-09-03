@@ -13,8 +13,13 @@ require "stringio"
 #
 # Find References and F2 both read it, so a click on a word in a comment
 # offered to rename the method around it. Occurrence highlighting would
-# have made it continuous; that capability is deferred to 0.3.0, and this
-# rule stays because the two readers that remain are wrong without it.
+# have made it continuous; that capability was deferred to 0.3.0 and
+# shipped there, so the readers are no longer the two this sentence was
+# written for. `#symbol_id_and_range_at` now has six call sites across
+# five capabilities -- show type evidence, Find References,
+# documentHighlight, prepareCallHierarchy and Rename (prepare and
+# rename) -- and this rule stays because every one of them is wrong
+# without it.
 #
 # The rule is that the cursor must be on the declaration's *name*. Fixed
 # here rather than in each reader, because all three had it and a fourth
