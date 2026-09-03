@@ -432,10 +432,69 @@ examples for the same reason — the drive's feature branch sits exactly
 on `origin/main`, so allowing it is correct, and nothing had pinned the
 case where the branch has actually moved.
 
+### Round 6 — `reproduce`
+
+Every round-5 reproduction re-run against `34137d2`, then a read of the
+fix diff, then the flow driven end to end on an archive copy and on a
+real clone. Round 5's thirteen all reproduce as fixed. Six new findings,
+one of them the same window B2 was about, arriving through a different
+door.
+
+| # | Finding | Disposition |
+|---|---|---|
+| C1 | HIGH — preflight was still red between `open` and `bump`. B2 fixed `check_changelog.rb`, and the same question was asked by two examples the core suite runs: `changelog_parity_spec`'s "documents the version this build ships as" and `changelog_shape_spec`'s "reports nothing about the changelogs this repository ships", both measuring against `Ovallsp::VERSION`. | Fixed. Both ask `CheckChangelog.expected_version` for the version to measure against, reading the branch the way the check reads it — so the three now agree by construction rather than by having been edited together. Two more examples pin the composition itself. |
+| C2 | MEDIUM — `refuse_off_main` had a dead branch and a gap. `git` already turns a failed `rev-parse` into `Refused`, and the `rescue Refused; raise` in front of the catch-all re-raised it, so the remedy that branch existed to print was unreachable and the refusal showed a bare `fatal: ambiguous argument`. And it returned on the *name* `main` without comparing anything, so a local `main` nobody had pulled would have cut — and published — a release missing what had merged. | Fixed. One rule: HEAD against `origin/main`, whatever the branch is called; a clone without `origin/main` is refused by name, with `git fetch origin`. Both ends have an example asserting the message, not the exit code. |
+| C3 | LOW — `--accept`'s reason reached only `core/tmp/`, which is untracked, and `quotable_block` did not mention it, so "this release does not owe `024.N`, because …" survived in neither the record nor the commit message. | Fixed. It is written into the release record `open` created, above `## 残課題`, and listed in the quotable block. |
+| C4 | LOW — `docs/PUBLISHING.md`'s sequence read `bump` then `gate` with nothing between, while `gate` now refuses a dirty tree. | Fixed in all three documents. The two commits are in the sequence where they happen, with the reason: gating an uncommitted bump means `release.sh` refuses at publish, and committing then moves the index out from under the gate. |
+| C5 | LOW/MEDIUM — a failing delegation relayed the last twenty lines and nothing else, so a `gate` whose preflight failed three checks showed the tail of one and named neither of the others. The refusal's own "its own output says which check" was not true of what it had shown, and finding out cost another fifteen-minute run. | Fixed. The lines that name a failure are relayed in front of the tail. The tail stays, because a command with no summary of its own says why at the end; the named lines are added because a command that does summarise puts that summary out of the tail's reach. |
+| C6 | LOW/MEDIUM — `record` was not idempotent. A second run appended a second identical row and *then* failed on git's own `fatal: tag 'v0.3.4' already exists` — a side effect in front of a failure that named no remedy, in the one step whose outputs must not be duplicated: the Marketplace artifacts reference the tag's SHA. | Fixed. `record` refuses a version already tagged before it writes anything, and says where the row is and that it will rewrite neither. The mismatch message's "Nothing is tagged" is now true by construction rather than by assertion, because that guard runs first. |
+
+**The measurement.** C1 reproduced first, in a throwaway the drive had
+left in the open-to-bump window: the two examples failed on the lines
+named. On the same throwaway rebuilt from the fixed tree, 23 examples, 0
+failures. C2's three cases, driven: no `origin/main` refuses naming
+`git fetch origin`; a local `main` one commit behind refuses naming
+`git checkout main && git pull` and leaves the branch where it was; a
+local `main` level with `origin/main` opens `release/0.3.4`.
+
+**And the flow driven end to end**, which nothing had done before this
+round. On an archive copy — one commit, no history, no tags, no
+`node_modules` — `open` → `bump` (as a patch, against a planted
+`v0.3.3`) → the dirty-tree refusal → commit → `gate`, which stopped at
+preflight with 3 of 16 failing. All three belong to the archive rather
+than to the tool: the home-path guard reads annotated tag bodies and
+there are none, `release_artifacts` finds nothing tagged,
+`measured_claims` reads the register at a revision the copy does not
+have, and the deleted-file markers `check_doc_links` honours need the
+history to resolve; the environment-dependent suites skipped two
+client-behaviour examples for want of `vscode/node_modules`.
+
+On a **real clone** at the same revision — history, tags `v0.3.0`
+through `v0.3.3`, `origin/main` present — the same sequence runs
+through: `open` writes `060-0.3.4-…` and names the roadmap pages, `bump`
+passes as a patch with the capability rows compared against the real
+`v0.3.3`, and `gate` lists the five history files without refusing, with
+gitleaks clean over the whole history. Preflight was 15 of 16 there for
+the same missing `node_modules`; with it installed, **`gate` passes end
+to end** — all 16 checks, `0.3.4 is gated`, the quotable block printed,
+and `core/tmp/release-0.3.4.json` holding the index tree it gated on.
+`status` then reports `gated yes, on this index`; `record` with a wrong
+`--served` refuses and tags nothing; and `publish`, after a further
+commit, refuses "the index has moved" before handing over to
+`release.sh`. That is the whole flow, and it is the first time it has
+been walked.
+
+Fifty-two mutations are pinned for this task. One of round 6's pinned
+nothing, and for a new reason: it replaced only the first line of a
+two-line refusal, so the second line still carried the remedy the
+example looks for. Widened to span both.
+
 ## What is still owed
 
-`release.rb`'s three side-effecting steps have never been run: no
-release has been cut through it. The first one that is will be the
-measurement, and the refusals in front of each action are what make that
-safe to try. `docs/RELEASE_CHECKLIST.md`'s rows 17 and 20 stay manual
-and say so.
+**`publish` and `record` have never been run for real.** Round 6 walked
+everything up to and including `gate` on a real clone, and drove
+`record`'s refusals and `publish`'s moved-index refusal — but nothing
+has published a VSIX or fetched one from the Marketplace through this
+tool. The first release cut through it is the measurement that remains,
+and the refusals in front of each action are what make that safe to try.
+`docs/RELEASE_CHECKLIST.md`'s rows 17 and 20 stay manual and say so.

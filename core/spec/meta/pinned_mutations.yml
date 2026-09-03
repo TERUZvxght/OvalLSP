@@ -1231,3 +1231,15 @@
   to: "    [<<~TEXT.rstrip].join(\"\\n\")\n"
   spec: spec/meta/release_flow_spec.rb
   example: "lists an accepted entry in the block a commit message can quote"
+- why: "A failing delegation relays the lines that name each failure as well as the tail; the tail alone showed one failed check of three and named neither of the others."
+  file: scripts/release.rb
+  from: "    shown = (named + lines.last(tail)).uniq\n"
+  to: "    shown = lines.last(tail)\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "names every failed check, not only what the tail happened to hold"
+- why: "`record` refuses a version already tagged before it writes anything; a second run appended a second row and then failed on git's own tag error, in the one step whose outputs must not be duplicated."
+  file: scripts/release.rb
+  from: "    if tagged?(version)\n"
+  to: "    if false\n"
+  spec: spec/meta/release_flow_spec.rb
+  example: "refuses a second run rather than writing a second row"

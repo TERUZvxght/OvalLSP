@@ -82,7 +82,30 @@ module Release
     out = out.dup.force_encoding(Encoding::UTF_8).scrub("?")
     return out if status.success?
 
-    raise Refused, "#{why}\n  #{command.join(' ')} said:\n#{out.rstrip.lines.last(20).map { |l| "    #{l}" }.join}"
+    raise Refused, "#{why}\n  #{command.join(' ')} said:\n#{relay(out)}"
+  end
+
+  # **The lines that name a failure, and then the tail.**
+  #
+  # This relayed the last twenty lines and nothing else, so a preflight
+  # that failed three checks showed the tail of the third and named
+  # neither of the others -- and the refusal's own "its own output says
+  # which check" was not true of what it had shown. The only way left to
+  # learn which checks failed was to run preflight again, which is
+  # fifteen minutes.
+  #
+  # The tail is kept because a command with no summary of its own says
+  # why at the end; the named lines are added in front of it because a
+  # command that does summarise puts that summary out of the tail's
+  # reach.
+  SUMMARY = /FAILED|\A=== |\A\s*\d+ (?:of|examples?)\b|refused|not caught/i
+
+  def relay(output, tail: 20)
+    lines = output.rstrip.lines
+    named = lines.grep(SUMMARY)
+    shown = (named + lines.last(tail)).uniq
+
+    shown.map { |line| "    #{line.rstrip}\n" }.join
   end
 
   # --- the evidence one step leaves the next ------------------------
@@ -505,6 +528,18 @@ module Release
   # rewritten, because the Marketplace artifacts reference its SHA.
   def record(served: nil)
     version = require_release_branch
+    # **Before anything is written.** A second run appended a second
+    # identical row and then failed on git's own "tag already exists" --
+    # a side effect in front of a failure that named no remedy, in the
+    # one step whose outputs must not be duplicated: the Marketplace
+    # artifacts reference the tag's SHA, so republishing a tag breaks
+    # them.
+    if tagged?(version)
+      raise Refused, "v#{version} is already tagged, so #{version} has been recorded. Its row is in " \
+                     "docs/RELEASE_ARTIFACTS.md.\n  If it is wrong, fix the row and the tag by hand — " \
+                     "this will not rewrite either."
+    end
+
     vsix = Dir.glob(File.join(ROOT, "vscode", "*#{version}*.vsix")).first
     unless vsix
       raise Refused, "no VSIX for #{version} in vscode/. Run: ruby scripts/release.rb publish"
@@ -515,6 +550,8 @@ module Release
     unless published == digest
       raise Refused, "what was built and what is served do not match:\n" \
                      "  built  #{digest}  (#{File.basename(vsix)})\n  served #{published}\n" \
+                     # True because the guard above refuses a version already tagged, so this
+                     # branch is only reachable while nothing has been recorded.
                      "  Nothing is tagged. docs/RELEASE_ARTIFACTS.md has the command that fetches it by hand."
     end
 

@@ -424,6 +424,26 @@ RSpec.describe "scripts/release.rb" do
       expect(RepoFiles.capture(root, %w[tag --list]).strip).to eq("")
     end
 
+    # **Recording happens once.** A second run appended a second
+    # identical row and then failed on `fatal: tag ... already exists` —
+    # a side effect before a failure that names no remedy, in the one
+    # step whose outputs must not be duplicated or rewritten, because the
+    # Marketplace artifacts reference the tag's SHA.
+    it "refuses a second run rather than writing a second row" do
+      branch("release/#{prepared}")
+      bump_version_files
+      digest = build_a_vsix
+      write("docs/RELEASE_ARTIFACTS.md",
+            "# Artifacts\n\n## Published\n\n| Version | SHA-256 | Channel |\n|---|---|---|\n")
+      expect(run("record", "--served", digest)).to eq(0)
+
+      expect { run("record", "--served", digest) }.to output(/already/).to_stderr
+
+      body = File.read(File.join(root, "docs", "RELEASE_ARTIFACTS.md"), encoding: "UTF-8")
+      expect(body.scan("| #{prepared} |").length).to eq(1)
+      expect(RepoFiles.capture(root, %w[tag --list]).strip).to eq("v#{prepared}")
+    end
+
     it "records the row and tags when the two agree" do
       branch("release/#{prepared}")
       bump_version_files
@@ -434,6 +454,46 @@ RSpec.describe "scripts/release.rb" do
       expect(run("record", "--served", digest)).to eq(0)
       expect(File.read(File.join(root, "docs", "RELEASE_ARTIFACTS.md"), encoding: "UTF-8")).to include(digest)
       expect(RepoFiles.capture(root, %w[tag --list]).strip).to eq("v#{prepared}")
+    end
+  end
+
+  # **What a failing delegation relays.** It relayed the last twenty
+  # lines, so a preflight that failed three checks showed the tail of the
+  # third and named neither of the others — and "its own output says
+  # which check" was not true of what was shown. Finding out cost another
+  # fifteen-minute run.
+  describe "a failing delegation" do
+    def noisy(failures)
+      path = File.join(root, "noisy.sh")
+      named = failures.map { |name| "echo \"preflight: #{name}... FAILED\"" }.join("\n")
+      File.write(path, "#!/bin/sh\n#{named}\n" \
+                       "i=0; while [ $i -lt 60 ]; do echo \"noise $i\"; i=$((i+1)); done\n" \
+                       "echo tail-line\nexit 1\n")
+      File.chmod(0o755, path)
+      path
+    end
+
+    it "names every failed check, not only what the tail happened to hold" do
+      script = noisy(%w[alpha beta gamma])
+
+      expect { Release.delegate(script, why: "it failed.") }
+        .to raise_error(Release::Refused, /alpha.*beta.*gamma/m)
+    end
+
+    it "still shows the tail, which is where a command with no summary says why" do
+      script = noisy([])
+
+      expect { Release.delegate(script, why: "it failed.") }.to raise_error(Release::Refused, /tail-line/)
+    end
+
+    # **The control.** A relay that printed everything always would
+    # satisfy both examples above; this one says the command that
+    # succeeds raises nothing at all.
+    it "relays nothing when the command succeeds" do
+      File.write(File.join(root, "quiet.sh"), "#!/bin/sh\necho fine\nexit 0\n")
+      File.chmod(0o755, File.join(root, "quiet.sh"))
+
+      expect { Release.delegate(File.join(root, "quiet.sh"), why: "unused") }.not_to raise_error
     end
   end
 
