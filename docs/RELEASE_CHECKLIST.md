@@ -34,8 +34,11 @@ ruby scripts/deferred_findings.rb --targeting <version>
 ```
 
 `024` の open エントリのうち、そのバージョンを `target:` にしているもの
-を Area 付きで列挙します。**列挙されたエントリの再現手順を、切ろうと
-している tree に対して実際に走らせ、結果をエントリへ書き戻すこと。**
+を Area 付きで列挙します。`release.rb open` も同じ一覧を印字し、`gate`
+は一つでも open のまま残っていれば拒否する(`--accept` は理由付きでのみ、
+理由はリリースの記録に書かれる)。**列挙されたエントリの再現手順を、
+切ろうとしている tree に対して実際に走らせ、結果をエントリへ書き戻す
+こと。** これは道具が代行しない部分で、判断のまま残る。
 
 `046` の C3b。`024.41` の再現は15リリースにわたって引用され続け、記録
 されていた6ケースのうち2つが逆方向に動いていました — 1つはもうその欠陥
@@ -43,12 +46,12 @@ ruby scripts/deferred_findings.rb --targeting <version>
 誰も走らせ直さなかったのは、どのエントリを走らせ直すべきかを言うものが
 無かったからです。
 
-`AGENTS.md`'s "Branches, commits, releases" の行がこの文書を指す。同じ
-タイミングで、自動化されていない 4 手順を手で行う。058 で
-`docs/DOCUMENTATION_MAP.md` からここへ移した。そこにあった 5 手順のうち
-parity と coverage の spec だけは preflight の full suite が毎回行っている。
-CI の secret-scan job は `main` への push では全履歴を、pull request では
-その PR のコミットを走査するので、リリース前の全履歴走査は手元で行う。
+`AGENTS.md`'s "Branches, commits, releases" の行がこの文書を指す。058 で
+`docs/DOCUMENTATION_MAP.md` からここへ移した 4 手順は、当時「手で行う」
+ものだったが、次の段落のとおり 059 で `release.rb gate` の実行になった。
+parity と coverage の spec は preflight の full suite が毎回行う。全履歴の
+`gitleaks` は `gate` が、push の送出範囲は pre-push hook が走らせるので、
+リリース前に手で走らせるものは残っていない。
 
 この 4 手順は **`ruby scripts/release.rb gate` が実行する**ようになった
 (059)。手で行うものとしてここに残さない — 順序を人が覚えている限り、
@@ -109,7 +112,7 @@ Marketplace Preview公開)固有の22項目のゲートを設ける。各項目�
 | 11 | SBOM name/version match PASS | ✅ `scripts/verify_sbom_against_vsix.rb`(既存、Task 022由来、本タスクでは変更なし) |
 | 12 | LICENSE/Third Party Notice match PASS | ✅ `vscode/LICENSE`(既存)+本タスクで追加した`vscode/THIRD_PARTY_NOTICES.md`が`docs/SBOM.md`と一致することを目視確認済み |
 | 13 | Privacy doc matches actual code | ✅ `vscode/PRIVACY.md`の記述を`grep`でtelemetry/network呼び出しの不在を確認してから作成(Task 023.6) |
-| 14 | secret scan PASS | ✅ CI の `secret-scan` ジョブ(`gitleaks-action`。`main` への push では `fetch-depth: 0` の全履歴を、pull request ではその PR のコミットを走査。`.gitleaks.toml` でテストフィクスチャのみ許可リスト化)+ 同ジョブの `check_home_paths.rb --messages`(commit message は tree scan からは見えない) |
+| 14 | secret scan PASS | ✅ CI の `secret-scan` ジョブ(`gitleaks-action`。`main` への push では `fetch-depth: 0` の全履歴を、pull request ではその PR のコミットを走査。`.gitleaks.toml` でテストフィクスチャのみ許可リスト化)+ 同ジョブの `check_home_paths.rb --messages`(commit message は tree scan からは見えない)。手元では 059 から `release.rb gate` が全履歴を、`preflight.rb --install-prepush` の pre-push hook が送出範囲と commit message を走査する |
 | 14.1 | 出荷する artifact 自身へのパス検査 | ✅ 0.2.5 で追加 | `release.sh` が unpack 後の実 artifact に `$HOME` 検査を掛け、native 拡張以外に一致があれば publish を拒否する。**それまで CI は ubuntu ビルドしか見ておらず**（`$HOME` が `/home/runner`、vendoring される native 拡張も別物）、実際に配布する darwin-arm64 成果物は一度も検査されていなかった。`grep` はシェルが解決する名前ではなく `/usr/bin/grep` を絶対パスで呼ぶ — ugrep ラッパーはバイナリを無言で飛ばす。`core/spec/meta/release_script_guard_spec.rb` がこのステップの存在を pin する(コメントアウトでも落ちることを実測確認済み) |
 | 15 | `vsce ls --tree`内容検査PASS | ✅ CI の `package-contents-inspection` ジョブ + `release.sh` の `vsce ls --tree` でmkmf.log等のテキストベースのリーク(Task 023.6で修正済み)はhard failで検出する。`prism.bundle`/`rbs_extension.bundle`自体がこのビルドマシンのrbenv libruby絶対パスを`LC_LOAD_DYLIB`として埋め込んでいる件(`otool -L`で確認)は、独立レビュー(Review B)で「別マシンでの動的リンク解決を壊す可能性が高い」と指摘され、実際にこのマシン上の異なるRuby 3.4.xインストール間で`LoadError`を再現して確認した。1回目の修正案(`DYLD_LIBRARY_PATH`を設定するがrbenv shim自体をそのまま起動)は同じレビューで「macOSは`/bin/bash`を経由するプロセスに対し`DYLD_*`環境変数を無効化するため効果がない」と再度指摘され、実際にrbenv shim経由で無効化されることを確認した。最終的に、解決されたRubyの`RbConfig::CONFIG["bindir"]`/`["libdir"]`を問い合わせ、shimではなく実体の`<bindir>/ruby`を直接起動する方式(`vscode/src/platformCompatibility.ts#queryRubyConfigPaths`、Task 023.8)へ修正し、実際のrbenv shim経由での再現・修正確認まで完了した。埋め込みパス自体は残るがwarningとして報告し続け、機能的な影響は解消済み |
 | 16 | darwin-arm64 target確認 | ✅ `vscode/package.json` の `package` スクリプト自体が `--target darwin-arm64` 固定 + `release.sh` が生成された VSIX のファイル名を検証する |

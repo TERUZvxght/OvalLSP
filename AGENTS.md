@@ -18,8 +18,8 @@ extension's own data, the user's machine — named there or not.
 ## Where the rules are
 
 This file is the card: the rules to hold in mind, one line each, with what
-enforces it — *check*: `preflight` or CI fails; *judgement*: nothing does —
-and the number of the record that holds its history. The documents behind
+enforces it — *check*: a command, `preflight` or CI refuses; *judgement*:
+nothing does — and the record that holds its history. The documents behind
 the lines carry the rest of the rules and the how-to; when to open them:
 
 - Setting up, running the suites, committing, branching: `docs/DEVELOPMENT.md`
@@ -34,11 +34,10 @@ the lines carry the rest of the rules and the how-to; when to open them:
 
 ## When a session starts
 
-- Read section 0. Then `git fetch --all --prune` and read the
-  highest-numbered `docs/design/tasks/NNN-*.md` on every branch whose name
-  or record claims the release — list the directory; never trust a number
-  written elsewhere. The current work, its findings and its decisions
-  live there and nowhere else. *judgement*; 024.109, 028
+- Read section 0, then `git fetch --all --prune` and read the
+  highest-numbered `docs/design/tasks/NNN-*.md` on every branch claiming the
+  release; never trust a number written elsewhere. The work, its findings
+  and decisions live there and nowhere else. *judgement*; 024.109, 028
 - After a context compaction or handoff, re-read this file and anything
   under `.claude/` that applies. *judgement*
 - Read `docs/design/tasks/042-second-enumeration.md` before touching code
@@ -77,26 +76,27 @@ the lines carry the rest of the rules and the how-to; when to open them:
 
 ## Documents and the record
 
-- Before finishing a change a user could notice, walk
-  `docs/DOCUMENTATION_MAP.md`'s trigger table. User-facing documents are
-  bilingual; internal ones are one language. *check*, in part
-- A new issue starts in `docs/ISSUES.md`'s intake, is driven, then gets a
-  register entry in the legend's shape; the index is generated. *check*,
-  in part; 024.130
+- `docs/DOCUMENTATION_MAP.md`'s trigger table: preflight enforces the rows
+  whose trigger is a file, you walk the rest. User-facing documents are
+  bilingual; internal ones one language. *check* for file rows; 059
+- A new issue starts in `docs/ISSUES.md`'s intake and is driven; then
+  `ruby scripts/issues.rb promote` writes its register entry and `close`
+  retires it, each refusing a decision left unmade. *check*; 024.130, 059
 - Promoting a finding — a target, a user-visible flag, a
   `KNOWN_LIMITATIONS` paragraph — means re-running its reproduction on the
   tree it is promoted into. *judgement*; 024.131
-- A review round's findings go into the task file as the round produces
-  them. Before reverting anything, grep the tree for it. *judgement*;
-  024.109, 024.47
+- A round's findings go into the table `review_round.rb start` opened, as
+  the round produces them. Before reverting anything, grep the tree for it.
+  *judgement*; 024.109, 024.47
 - An incident produces a check or a register entry, never a paragraph
   here; a new line has to fit this file's budget. *check*; 058
 
 ## Review loop
 
-- A round closes when a reviewer that has not seen the change set, using
-  a method the previous round did not — diff, drive, attack, reproduce —
-  reports nothing. *judgement*; 028
+- A round closes when a reviewer that has not seen the change set, using a
+  method the previous round did not, reports nothing. `review_round.rb`
+  refuses a repeated method and a tree that moved under a round; the rest
+  is *judgement*; 028, 059
 - After three rounds that find defects, ship with the open findings
   recorded. During a loop, fix; do not add. *judgement*; section 0.4, 026
 - The same place found in two consecutive rounds gets a mechanical
@@ -114,7 +114,7 @@ the lines carry the rest of the rules and the how-to; when to open them:
 - `ruby scripts/preflight.rb` before every commit, `--install-prepush`
   once for the scans a push needs. Nothing personal in a tree, message or
   tag: no secret, no home path, a noreply address. *check*; 024.195, 028
-- A release is `ruby scripts/release.rb`: one command per step, each
-  refusing when the one before left no evidence. A patch ships without
-  asking if `docs/PUBLISHING.md`'s privacy checks passed; a minor or major
-  asks. *judgement*; maintainer 0.2.4, 024.231
+- A release is `ruby scripts/release.rb`, one command per step, each refusing
+  when the one before left no evidence; `bump` decides what a patch is and
+  `gate` runs the privacy checks. A patch then ships without asking; a minor
+  or major asks. *check* up to the asking; maintainer 0.2.4, 024.231, 059

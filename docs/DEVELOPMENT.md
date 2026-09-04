@@ -149,7 +149,10 @@ This repository is public. Never commit or push secrets, credentials,
 private URLs, personal information or a real home path — in source,
 fixtures, generated files, logs, copied command output or commit messages.
 Use a public noreply address for commit metadata. Before a push, inspect
-the complete outgoing diff and commit range, and run the secret scan:
+the complete outgoing diff and commit range; the pre-push hook above runs
+the secret scan over that range and the message scan, and refuses the push
+on either. Over the whole history, `ruby scripts/release.rb gate` runs the
+scan before a release. By hand, it is:
 
     gitleaks detect --config .gitleaks.toml
 
