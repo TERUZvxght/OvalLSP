@@ -844,8 +844,39 @@ RSpec.describe "deferred findings metadata" do
       .not_to include(a_string_including("9.9.9"))
   end
 
+  # **The release being prepared has not shipped, and its changelog section
+  # exists from the moment `release.rb open` runs.** That step writes the
+  # section deliberately -- it is where the release's bullets accumulate --
+  # so from `open` until the tag, every entry the release is *working on*
+  # read as one naming a shipped version. Preflight would be red for the
+  # whole window, which is `059`'s B2 exactly, one reader over:
+  # `check_changelog.rb` was taught that the branch is the evidence of what
+  # is being prepared and this guard was not.
+  #
+  # Stated with the case that must fail: on `main` nothing is being
+  # prepared, so a stale entry is still caught.
+  it "leaves an entry alone when its target is the release the branch is preparing" do
+    planted = deferred + "\n" + entry_with(target: "9.9.9")
+    changelog_naming_it = "## 9.9.9 — being written now\n"
+
+    expect(DeferredFindings.open_entries_targeting_a_shipped_release(
+             planted, artifacts, changelog_naming_it, preparing: "9.9.9"
+           )).not_to include(a_string_including("9.9.9"))
+  end
+
+  it "still catches it when no release is being prepared" do
+    planted = deferred + "\n" + entry_with(target: "9.9.9")
+    changelog_naming_it = "## 9.9.9 — already out\n"
+
+    expect(DeferredFindings.open_entries_targeting_a_shipped_release(
+             planted, artifacts, changelog_naming_it, preparing: nil
+           )).to include(a_string_including("9.9.9"))
+  end
+
   it "has no open entry naming a release that has already shipped" do
-    stale = DeferredFindings.open_entries_targeting_a_shipped_release(deferred, artifacts, changelog)
+    stale = DeferredFindings.open_entries_targeting_a_shipped_release(
+      deferred, artifacts, changelog, preparing: DeferredFindings.preparing_version
+    )
 
     expect(stale).to be_empty,
                      "open findings targeting a released version: #{stale.join(", ")}. " \

@@ -1267,3 +1267,9 @@
   to: "    rescue Errno::EACCES\n"
   spec: spec/meta/release_flow_spec.rb
   example: "refuses, naming the tool and how to install it"
+- why: "The release being prepared is not shipped; without it, `release.rb open` writes the changelog section and every entry the release is working on reads as stale, so preflight is red from `open` until the tag."
+  file: scripts/deferred_findings.rb
+  from: "    shipped = (published_versions(artifacts) | changelog_versions(changelog)) - [preparing].compact\n"
+  to: "    shipped = published_versions(artifacts) | changelog_versions(changelog)\n"
+  spec: spec/meta/deferred_findings_spec.rb
+  example: "leaves an entry alone when its target is the release the branch is preparing"

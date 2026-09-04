@@ -6,6 +6,62 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.4.0 — what this release is for
+
+> **Skeleton.** `release.rb open` listed everything `target: 0.4.0` owes so
+> nothing is lost track of. It is not a promise: `061` records that the
+> forty-four are a queue rather than a scope. Rewrite this section as work
+> lands — `bump` refuses until it is what shipped.
+
+- **A reopened core class looks closed, in both directions** `024.13`
+- **The unassigned-`@ivar` check cannot enumerate what it needs to** `024.18`
+- **The argument-type check judges against a class the receiver is not** `024.19`
+- **`contains?` treats an exclusive end offset as inclusive** `024.20`
+- **The unassigned-`@ivar` check is silent in an application `rails new` produces** `024.22`
+- **Rename refuses on a macro-declared method rather than editing it** `024.28`
+- **The argument-type check reports nothing on measured real Ruby** `024.37`
+- **`scope_at` copies the whole environment once per descent step** `024.38`
+- **`LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread** `024.39`
+- **A signature label leaks the method's own type variable** `024.42`
+- **A partial's local is not resolved, and C11's stated basis names it** `024.44`
+- **Re-analysis after a keystroke is seconds on a large file, against a stated 300 ms** `024.45`
+- **A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal** `024.47`
+- **Two per-file stores are separated by nothing but their payload** `024.62`
+- **One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised** `024.71`
+- **Fifty-four `unknown-method` reports over real gem source, and all of them false** `024.76`
+- **The undefined-method check is loudest exactly where no Runtime Agent can answer** `024.83`
+- **Completion unions a union's members; the diagnostic intersects them** `024.88`
+- **The four features answer from different code paths and disagree at one position** `024.100`
+- **A module's singleton calls go unchecked — `module_function` and `extend self` producing nothing is withdrawn** `024.106`
+- **Nothing measures how much of this tree no test would notice changing** `024.121`
+- **No undefined-method report on a core-library receiver** `024.129`
+- **A scope defined in a concern's `included do` has no type** `024.132`
+- **`WorkspaceIndex#search` holds the index lock for the whole walk** `024.137`
+- **A check can be disabled, and no check notices — closed on one instalment in 0.3.2, reopened** `024.151`
+- **A block whose receiver cannot be vouched for contains a `private` that Ruby would let through** `024.221`
+- **A type declared only in `sig/` is reported incompatible with itself — the half 0.3.2 did not fix** `024.224`
+- **Four shapes stopped reporting by declining on the body, not by reading it** `024.237`
+- **Signature help says nothing for a receiverless call inside a module body** `024.243`
+- **A class that includes an unread module is not checked at class level, so a typo there is silent** `024.289`
+- **Nothing is reported about a call whose receiver is `Object`** `024.290`
+- **A template's `@ivar` receiver is not checked, and its type is one action's** `024.294`
+- **The gem index is fetched on every boot and persisted nowhere** `024.295`
+- **Call hierarchy lists no callee reached through `send`, `super` or a macro** `024.297`
+- **An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initialize`'s** `024.298`
+- **Completion on a relation offers none of the model's own scopes or class methods** `024.299`
+- **`@ivar` completion offers nothing from a superclass or an included concern** `024.300`
+- **The route-helper quick fix ignores the `_path`/`_url` split and the helper's arity** `024.301`
+- **The `def` quick fix is offered for one receiver shape of three** `024.302`
+- **A multiple assignment's targets get no inlay hint** `024.303`
+- **The gem-backed check is silenced by any class-body call the parser cannot read** `024.304`
+- **A workspace directory shaped like a gem path would be attributed to a gem** `024.318`
+- **A bare name no signature declares is still read as the one gem class sharing its last segment** `024.319`
+- **No check knows which lock guards what** `024.320`
+
+### Details
+
+TODO
+
 ## 0.3.3 — the record said one thing and the product did another
 
 Nothing you can notice changes in the extension itself. This release
