@@ -1303,3 +1303,15 @@
   to: "        occupant = Index::SymbolId.new(kind: :local_variable, owner: symbol_id.owner,\n"
   spec: spec/ovallsp/rename/planner_spec.rb
   example: "refuses an ivar renamed onto one already in use"
+- why: "A generated-method macro the parser read is not a candidate: without it, reading `delegate :size, to: :inner` closes the surface and the check then reports `delegate` itself on a class whose `size` it just declared."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        record_method_call_candidate(node) unless read_as_a_macro\n"
+  to: "        record_method_call_candidate(node)\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "does not report a generated-method macro whose declarations it read"
+- why: "A call guarded by a receiverless `respond_to?` is one the author has already said may not be there; without the exemption the check reports the idiom written to be safe about exactly what it reports."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          next if guarded.include?(candidate.name.to_s)\n"
+  to: "          next if false\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "does not report a call the file guards with respond_to?"

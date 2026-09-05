@@ -86,6 +86,76 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     end
   end
 
+  # **A macro the parser read, and then reported.** `delegate` is one of
+  # three DSLs `#record_generated_methods` understands: the parser reads
+  # `delegate :size, to: :inner` and declares `size` from it. It then
+  # emitted the `delegate` call itself as an ordinary method-call
+  # candidate, so the check reported the very macro whose meaning the
+  # parser had just used:
+  #
+  #     class W
+  #       delegate :size, to: :inner    # W has no method named `delegate`
+  #       def inner; []; end
+  #     end
+  #
+  # Either the call is a macro this engine understands, in which case
+  # reporting it is wrong, or it is not, in which case declaring `size`
+  # from it was. `@recorded_a_declaration` already holds which -- it is
+  # what `#record_open_surface` reads two lines below.
+  #
+  # The control is the same class with a name nothing recorded: a macro
+  # the parser cannot read must still leave the surface open rather than
+  # silently exempting its own call.
+  it "does not report a generated-method macro whose declarations it read" do
+    expect(unknown_methods("class W\n  delegate :size, to: :inner\n  def inner; []; end\nend\n")).to be_empty
+    expect(unknown_methods("class W\n  enum :status, %i[on off]\nend\n")).to be_empty
+    expect(unknown_methods("class W\n  scope :recent, -> { 1 }\nend\n")).to be_empty
+  end
+
+  # **The control**, and it has to be a typo the check actually reaches:
+  # an unrecognised *class-body* call is deliberately silent, because it
+  # opens the surface. That asymmetry is the mechanism here -- reading
+  # the macro is what closes the surface and exposes the macro's own call
+  # to the check -- so the control is a typo inside a method body, where
+  # the surface is closed for the ordinary reason.
+  it "still reports an ordinary typo beside a macro it read" do
+    expect(unknown_methods("class W\n  delegate :size, to: :inner\n  def inner; []; end\n  def go; definitely_absent; end\nend\n"))
+      .to include(a_string_including("definitely_absent"))
+  end
+
+  # **A call the file guards with `respond_to?` is a call the author
+  # already knows may not be there.** It is the idiom written to be safe
+  # about exactly what this check reports, and reporting it tells the
+  # author something they have said in the code that they know:
+  #
+  #     def go
+  #       return unless respond_to?(:maybe_there)
+  #       maybe_there
+  #     end
+  #
+  # The same shape as the `defined?(@x)` exemption the unassigned-ivar
+  # check already carries, and read the same way: by *name*, because a
+  # file defensive about a name is defensive about it, and the typo this
+  # check exists for appears in no `respond_to?`.
+  it "does not report a call the file guards with respond_to?" do
+    expect(unknown_methods("class W\n  def go\n    return unless respond_to?(:maybe_there)\n    maybe_there\n  end\nend\n"))
+      .to be_empty
+    expect(unknown_methods("class W\n  def go\n    maybe_there if respond_to?(\"maybe_there\")\n  end\nend\n"))
+      .to be_empty
+  end
+
+  # **The controls.** A guard on one name says nothing about another, and
+  # a guard with a receiver is about *that* object rather than self.
+  it "still reports a different name beside a respond_to? guard" do
+    expect(unknown_methods("class W\n  def go\n    return unless respond_to?(:maybe_there)\n    definitely_absent\n  end\nend\n"))
+      .to include(a_string_including("definitely_absent"))
+  end
+
+  it "still reports when the guard is about another object" do
+    expect(unknown_methods("class W\n  def go(other)\n    return unless other.respond_to?(:maybe_there)\n    maybe_there\n  end\nend\n"))
+      .to include(a_string_including("maybe_there"))
+  end
+
   it "does not report `include` or `extend` in a class body" do
     index("module Helper\nend\n", uri: "file:///helper.rb")
 

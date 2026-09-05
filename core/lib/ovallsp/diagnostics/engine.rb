@@ -111,9 +111,19 @@ module Ovallsp
         # `puts` as unknown, this whole check simply doesn't run.
         return [] unless context.signatures
 
+        # A call the file guards with `respond_to?` is one the author has
+        # already said may not be there, which is the same shape as the
+        # `defined?(@x)` exemption the unassigned-ivar check carries. By
+        # name rather than by position: a file defensive about a name is
+        # defensive about it, and the typo this check exists for appears
+        # in no `respond_to?`.
+        guarded = names_guarded_by_respond_to(document)
+        return [] if guarded.nil?
+
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call
           next if resolved_locations[candidate.location]
+          next if guarded.include?(candidate.name.to_s)
           # A name Ruby gives every object that the signature set does
           # not declare on `::Object` (`024.91` shape D). Asked before
           # the receiver because everything inherits from `Object`.
@@ -292,6 +302,50 @@ module Ovallsp
         collector.names
       rescue StandardError
         nil
+      end
+
+      # Every name a *receiverless* `respond_to?` names with a literal
+      # symbol or string, in one parse of the document.
+      #
+      # **Receiverless**, because `other.respond_to?(:x)` is a statement
+      # about `other` and says nothing about what `self` answers to.
+      # **Literal**, because a computed name is exactly what cannot be
+      # read, and a guard this cannot read must not be treated as one.
+      #
+      # `nil` on any failure, which every caller turns into "do not
+      # assert": enumerating is what decides whether to speak, so a
+      # failure to enumerate has to decline (`024.122`).
+      def names_guarded_by_respond_to(document)
+        collector = RespondToGuardCollector.new
+        Prism.parse(document.text).value.accept(collector)
+        collector.names
+      rescue StandardError
+        nil
+      end
+
+      class RespondToGuardCollector < Prism::Visitor
+        attr_reader :names
+
+        def initialize
+          @names = []
+          super
+        end
+
+        def visit_call_node(node)
+          collect(node) if node.name == :respond_to? && node.receiver.nil?
+          super
+        end
+
+        private
+
+        def collect(node)
+          Array(node.arguments&.arguments).each do |argument|
+            case argument
+            when Prism::SymbolNode then @names << argument.unescaped.to_s
+            when Prism::StringNode then @names << argument.unescaped.to_s
+            end
+          end
+        end
       end
 
       class DefinedIvarCollector < Prism::Visitor

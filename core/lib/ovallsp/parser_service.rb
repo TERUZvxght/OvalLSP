@@ -685,6 +685,7 @@ module Ovallsp
       # was never opened -- so the visibility has to travel with the
       # nesting, the way `@pending_visibility_names` carries `private def`.
       def visit_call_node(node)
+        read_as_a_macro = false
         # The call a block belongs to, so `#visit_block_node` can ask what
         # its receiver is: Prism hands the visitor a `BlockNode` with no
         # way back to the call that owns it. Set here and restored on the
@@ -718,6 +719,7 @@ module Ovallsp
           # *name* was on the exempt list, so `Bag#a` was reported missing.
           # What matters is whether anything was actually recorded.
           @recorded_a_declaration = @declarations.size > declared_before
+          read_as_a_macro = @recorded_a_declaration
           wrapped_visibility = inline_attribute_visibility_for(node)
         end
         # Before `#record_open_surface`, not after: a `class_methods do`
@@ -734,7 +736,18 @@ module Ovallsp
         # Outside the receiverless branch: `singleton_class.send` and
         # `self.class_eval` metaprogram this owner too (see there).
         record_open_surface(node)
-        record_method_call_candidate(node)
+        # **Not the macro this parser has just read** (`024.327`). A
+        # recognised DSL that recorded something leaves the surface
+        # *closed*, correctly -- and that is exactly what exposed the
+        # macro's own call to the undefined-method check, which reported
+        # `W has no method named 'delegate'` on a class whose `size` it
+        # had declared from that very call. Either the call is a macro
+        # this engine understands, in which case reporting it is wrong,
+        # or it is not, in which case declaring from it was.
+        #
+        # An unrecognised class-body call is silent for a different
+        # reason and stays that way: it opens the surface.
+        record_method_call_candidate(node) unless read_as_a_macro
 
         # `module_function def a; end`. The argument is a definition, not a
         # name, so `#apply_module_function_arguments` cannot see it -- and

@@ -17241,6 +17241,46 @@ target: 0.4.0
 ---
 
 
+## 024.327 A generated-method macro the parser read is reported as an unknown method
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/parser_service.rb
+
+- found by: core/lib/ovallsp/parser_service.rb#visit_call_node
+- record_generated_methods reads delegate/enum/scope and declares what they define; the same visit then emitted the macro call itself as a method-call candidate. Recognising the macro is what leaves the surface CLOSED -- correctly, since the parser read it -- and that is exactly what exposed the macro's own call to the undefined-method check: 'W has no method named delegate' on a class whose size had just been declared from that call. Either the call is a macro this engine understands, in which case reporting it is wrong, or it is not, in which case declaring from it was. An unrecognised class-body call stays silent for the different reason that it opens the surface. Found also: @recorded_a_declaration is recomputed only in the receiverless branch, so a first attempt that read it directly silenced W.new.definitely_absent later in the same file; the value is call-local now.
+
+**Direction:** Fixed in 0.4.0. The wider shape stays open as its own question: the surface is closed or open per owner, and a macro that is read contributes both a closure and a call, so any future DSL added to the recognised set inherits this unless the candidate is suppressed at the same place.
+
+---
+
+
+## 024.328 A call guarded by respond_to? is still reported as an unknown method
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/diagnostics/engine.rb
+
+- found by: core/lib/ovallsp/diagnostics/engine.rb#unknown_method_findings
+- return unless respond_to?(:maybe_there) followed by maybe_there was reported. That guard is the idiom written to be safe about exactly what this check reports, so the report tells the author something the code already says they know. The unassigned-ivar check has carried the same exemption for defined?(@x) since it was written; this one had none. Read by name rather than by position, for the reason that exemption gives: a file defensive about a name is defensive about it, and the typo this check exists for appears in no respond_to?. Only a receiverless guard with a literal symbol or string counts -- other.respond_to?(:x) is about other, and a computed name is what cannot be read.
+
+**Direction:** Fixed in 0.4.0. Deliberately not extended to the other guards a defensive author writes -- rescue NoMethodError, method_defined?, a try/&. chain -- because each is a different question and the by-name rule is only defensible where the guard names the method literally.
+
+---
+
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml
