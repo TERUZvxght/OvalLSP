@@ -35,6 +35,10 @@ module Ovallsp
 
     Outcome = Data.define(:analyzed, :truncated, :superseded)
 
+    # `generation` is a callable answering the index generation *now*. It
+    # is read before each file is opened, so the number that dates a
+    # result is older than the content it describes rather than newer --
+    # `024.345`, and `024.338`'s shape.
     # `analyze` receives a TextDocument and returns `[findings,
     # generation]` -- the generation as a pair rather than inside the
     # findings, because an empty result carries no `Finding#generation`
@@ -43,10 +47,15 @@ module Ovallsp
     # `(uri, findings, document:, generation:)`. Both are the Server's,
     # injected rather than reached for, so a pass can be tested without a
     # Server.
-    def initialize(analyze:, publish:, open_in_buffer:, logger:, max_files: DEFAULT_MAX_FILES)
+    def initialize(analyze:, publish:, open_in_buffer:, logger:, generation: nil,
+                   max_files: DEFAULT_MAX_FILES)
       @analyze = analyze
       @publish = publish
       @open = open_in_buffer
+      # **The number that dates a result, read before the result exists.**
+      # See `#publish_for`. Optional so a spec can build a pass without
+      # one; the Server always supplies it.
+      @index_generation = generation
       @logger = logger
       @max_files = max_files
       @generation = 0
@@ -122,12 +131,35 @@ module Ovallsp
       return false unless path && File.file?(path)
       return false if @open.call(uri)
 
+      # **Before the read, not after it** (`024.345`). `@analyze` takes the
+      # generation inside its own index snapshot, which is *later* than
+      # the content this result is about -- so anything that bumps the
+      # generation in the gap (another file indexed, this one reindexed,
+      # this one deleted) stamped a result computed from old text with a
+      # number equal to or above the fresh result's, and every rule in the
+      # publish funnel then admitted it: `<` is refused, `<=` after a
+      # clear, and equal is accepted because a later pass usually knows
+      # more.
+      #
+      # This is `024.338` one layer up -- `ColdIndexer` took its
+      # `read_sequence` after reading, for the same reason, and was fixed
+      # in this release. The remedy is the same. `024.342`'s examples all
+      # give the stale result an *older* generation, which is the
+      # assumption that fails here, so nothing caught it.
+      #
+      # The window is between this background thread's `File.read` and its
+      # acquiring `@index_mutation_mutex`, which another analysis can hold
+      # for the seconds `024.45` records.
+      read_generation = @index_generation&.call
+
       document = TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8),
                                    version: nil, language_id: language_id_for(path))
       # `[findings, generation]`: an empty result has no finding to read a
       # generation from, and it is the one that most needs ordering
-      # against a stale warning (`024.342`).
-      findings, generation = @analyze.call(document)
+      # against a stale warning (`024.342`). The analysis's own number is
+      # the fallback for a caller that supplies no getter.
+      findings, analysed_generation = @analyze.call(document)
+      generation = read_generation || analysed_generation
       # Asked again after the analysis, which takes long enough for a
       # `didOpen` to arrive inside it. The buffer path publishes correct
       # diagnostics for that URI on the dispatch thread, and this would

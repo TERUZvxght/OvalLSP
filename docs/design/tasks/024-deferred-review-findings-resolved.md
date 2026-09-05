@@ -17625,6 +17625,26 @@ target: 0.4.0
 ---
 
 
+## 024.345 A disk result is dated after its content is read, so a reindex in the gap gives stale content a fresh generation
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/workspace_diagnostics.rb
+
+- found by: core/lib/ovallsp/workspace_diagnostics.rb, core/lib/ovallsp/server.rb
+- publish_for reads the file and then calls @analyze, which takes the index generation inside its own snapshot -- so the number meant to date the result is taken after the content it dates. Anything bumping the generation in that gap stamps a result computed from old text with a generation at or above the fresh result's, and every rule in the funnel then admits it. 024.338's shape one layer up; 024.342's examples all give the stale result an older generation, which is the assumption that fails. Demonstrated in four orderings (change-twice, delete-recreate, close-mid-flight, delete-then-other-change) through the real Server; wrong on 9c17dc2 too, so not a regression.
+
+**Direction:** stale-answer
+
+---
+
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

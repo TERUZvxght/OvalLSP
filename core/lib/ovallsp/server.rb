@@ -117,6 +117,9 @@ module Ovallsp
       @workspace_diagnostics = WorkspaceDiagnostics.new(
         analyze: method(:workspace_findings_for),
         publish: method(:publish_findings),
+        # Read before each file is opened, so a result is dated by what
+        # was known when its content was read (`024.345`).
+        generation: -> { @workspace_index.generation },
         open_in_buffer: ->(uri) { !@document_store.fetch(uri: uri).nil? },
         logger: @logger
       )

@@ -146,6 +146,90 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
       .to be_empty
   end
 
+  # **The guard is the *true* branch, not the body it was written in.**
+  # `024.335` scoped a guard to its enclosing `def`/`class`/file, and said
+  # so: a guard in the false arm exempted the true arm as well. The
+  # 2026-09-05 review's condition for R07 asked for the true branch alone,
+  # and a follow-up review's verdict was that documenting the gap does not
+  # satisfy the condition. It does not. Ruby, 3.4.10:
+  #
+  #   $ ruby -e '
+  #   class W
+  #     def guarded_true;  if respond_to?(:maybe) then maybe else 0 end; end
+  #     def guarded_false; if respond_to?(:maybe) then 0 else maybe end; end
+  #     def early;         return 1 unless respond_to?(:maybe); maybe; end
+  #     def andform;       respond_to?(:maybe) && maybe; end
+  #   end
+  #   %i[guarded_true guarded_false early andform].each do |m|
+  #     begin
+  #       W.new.send(m); puts "#{m}: ran"
+  #     rescue NameError => e
+  #       puts "#{m}: NameError"
+  #     end
+  #   end'
+  #   # => guarded_true: ran
+  #   #    guarded_false: NameError
+  #   #    early: ran
+  #   #    andform: ran
+  #   # ruby 3.4.10
+  #
+  # So three of the four shapes are guarded and one raises, and the
+  # implementation must tell them apart.
+  describe "which side of the condition the guard covers" do
+    it "exempts the true branch of an if" do
+      expect(unknown_methods("class W\n  def go\n    if respond_to?(:maybe)\n      maybe\n    end\n  end\nend\n"))
+        .to be_empty
+    end
+
+    it "reports the same call in the else branch" do
+      source = "class W\n  def go\n    if respond_to?(:maybe)\n      1\n    else\n      maybe\n    end\n  end\nend\n"
+
+      expect(unknown_methods(source)).to include("maybe")
+    end
+
+    # `unless` is the mirror: its `else` is the guarded side.
+    it "reports the statements of an unless and exempts its else" do
+      guarded = "class W\n  def go\n    unless respond_to?(:maybe)\n      1\n    else\n      maybe\n    end\n  end\nend\n"
+      reported = "class W\n  def go\n    unless respond_to?(:maybe)\n      maybe\n    end\n  end\nend\n"
+
+      expect(unknown_methods(guarded)).to be_empty
+      expect(unknown_methods(reported)).to include("maybe")
+    end
+
+    # **The commonest spelling in Ruby, and the one a branch rule loses if
+    # it only reads the arms.** `return unless` leaves the guard true for
+    # everything after it, so the scope is the rest of the enclosing body.
+    %w[return raise\ "x" next break].each do |jump|
+      it "exempts the rest of the body after `#{jump} unless`" do
+        source = "class W\n  def go\n    #{jump} unless respond_to?(:maybe)\n    maybe\n  end\nend\n"
+
+        expect(unknown_methods(source)).to be_empty
+      end
+    end
+
+    # Its control: an `unless` whose body does *not* leave guards nothing
+    # after it, and Ruby agrees -- execution falls through.
+    it "still reports after an unless whose body does not leave" do
+      source = "class W\n  def go\n    1 unless respond_to?(:maybe)\n    maybe\n  end\nend\n"
+
+      expect(unknown_methods(source)).to include("maybe")
+    end
+
+    it "exempts the right of an and, and the body of an or-return" do
+      expect(unknown_methods("class W\n  def go\n    respond_to?(:maybe) && maybe\n  end\nend\n")).to be_empty
+      expect(unknown_methods("class W\n  def go\n    respond_to?(:maybe) or return\n    maybe\n  end\nend\n")).to be_empty
+    end
+
+    it "reports the right of an or, which runs when the guard is false" do
+      expect(unknown_methods("class W\n  def go\n    respond_to?(:maybe) || maybe\n  end\nend\n")).to include("maybe")
+    end
+
+    # A `respond_to?` that is not a condition at all guards nothing.
+    it "reports a call beside a bare respond_to? that decides nothing" do
+      expect(unknown_methods("class W\n  def go\n    respond_to?(:maybe)\n    maybe\n  end\nend\n")).to include("maybe")
+    end
+  end
+
   # **The controls.** A guard on one name says nothing about another, and
   # a guard with a receiver is about *that* object rather than self.
   it "still reports a different name beside a respond_to? guard" do

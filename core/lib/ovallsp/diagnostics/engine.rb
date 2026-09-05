@@ -329,27 +329,62 @@ module Ovallsp
         nil
       end
 
-      # **A guard says something about `self`, in the body it is written
-      # in.** The first version of this collected bare names and the check
-      # read them file-wide, which said two things it had no grounds for:
-      # that a guard in one method covers an unguarded call to the same
-      # name in another, and that a guard on `self` covers
-      # `Other.new.maybe_there`. Both were measured on real shapes by two
-      # independent cold reviews and by the 2026-09-05 critical review
-      # (R07) -- and the first is the *forgotten guard*, which is the
-      # mistake a reader would most want reported.
+      # **A guard says something about `self`, on the side of the condition
+      # that runs when it is true.**
       #
-      # So a guard carries the line range of the innermost body enclosing
-      # it: its `def`, or failing that its `class`/`module`, or failing
-      # that the file. That is where `self` means what the guard tested.
+      # Two versions preceded this. The first collected bare names and the
+      # check read them file-wide, which said that a guard in one method
+      # covers an unguarded call in another and that a guard on `self`
+      # covers `Other.new.maybe_there`. The second scoped a guard to the
+      # body it was written in and *documented* that it did not model the
+      # branch -- and a follow-up review's verdict was that documenting
+      # the gap does not satisfy the condition. It does not: a guard in
+      # the false arm exempted the true arm, and Ruby raises there.
       #
-      # **What this still does not model is the branch.** A guard in the
-      # *false* arm exempts the true arm as well, because the scope is the
-      # body rather than the condition's consequent. Narrower than the
-      # file by the two shapes above; wider than Ruby by that one. Stated
-      # rather than left to be discovered.
+      #   $ ruby -e '
+      #   class W
+      #     def guarded_true;  if respond_to?(:maybe) then maybe else 0 end; end
+      #     def guarded_false; if respond_to?(:maybe) then 0 else maybe end; end
+      #     def early;         return 1 unless respond_to?(:maybe); maybe; end
+      #     def andform;       respond_to?(:maybe) && maybe; end
+      #   end
+      #   %i[guarded_true guarded_false early andform].each do |m|
+      #     begin
+      #       W.new.send(m); puts "#{m}: ran"
+      #     rescue NameError => e
+      #       puts "#{m}: NameError"
+      #     end
+      #   end'
+      #   # => guarded_true: ran
+      #   #    guarded_false: NameError
+      #   #    early: ran
+      #   #    andform: ran
+      #   # ruby 3.4.10
+      #
+      # So the scope is the *consequent*, in four shapes:
+      #
+      # - `if` (block and modifier alike, which Prism gives as one node):
+      #   the statements. Its `subsequent` is not guarded.
+      # - `unless`: the `else_clause` -- **and**, when its statements
+      #   cannot fall through (`return`, `raise`, `next`, `break`,
+      #   `throw`), everything after it in the enclosing body. That is
+      #   `return unless respond_to?(:x)`, the commonest spelling in Ruby
+      #   and the one a rule that only reads the arms would lose.
+      # - `and`: the right operand.
+      # - `or` whose right cannot fall through: everything after it.
+      #
+      # A `respond_to?` that is not a condition at all guards nothing,
+      # which is the one case the body-scoped version got backwards.
+      #
+      # Line ranges rather than node identity, because the check compares
+      # against a `ReferenceCandidate`'s location and has no node.
       class RespondToGuardCollector < Prism::Visitor
         Guard = Struct.new(:name, :first_line, :last_line)
+
+        # A statements node that cannot fall through to what follows it.
+        # `return` and `raise` are the two this idiom is written with;
+        # `next` and `break` are the same claim inside a block.
+        LEAVES = [Prism::ReturnNode, Prism::NextNode, Prism::BreakNode].freeze
 
         attr_reader :guards
 
@@ -364,8 +399,24 @@ module Ovallsp
         def visit_module_node(node) = within(node) { super }
         def visit_singleton_class_node(node) = within(node) { super }
 
-        def visit_call_node(node)
-          collect(node) if node.name == :respond_to? && about_self?(node)
+        def visit_if_node(node)
+          record(node.predicate, node.statements)
+          super
+        end
+
+        def visit_unless_node(node)
+          record(node.predicate, node.else_clause)
+          record(node.predicate, rest_of_body_after(node)) if leaves?(node.statements)
+          super
+        end
+
+        def visit_and_node(node)
+          record(node.left, node.right)
+          super
+        end
+
+        def visit_or_node(node)
+          record(node.left, rest_of_body_after(node)) if leaves?(node.right)
           super
         end
 
@@ -383,16 +434,67 @@ module Ovallsp
           @bodies.pop
         end
 
-        def collect(node)
-          body = @bodies.last
-          first = body ? body.location.start_line : 0
-          last = body ? body.location.end_line : Float::INFINITY
+        # Every literal name a receiverless `respond_to?` inside
+        # `condition` tests. Inside rather than "is": `a && respond_to?(:x)`
+        # and `respond_to?(:x) && b` both make the consequent conditional
+        # on it.
+        def guarded_names(condition)
+          return [] unless condition
 
-          Array(node.arguments&.arguments).each do |argument|
-            case argument
-            when Prism::SymbolNode, Prism::StringNode then @guards << Guard.new(argument.unescaped.to_s, first, last)
+          names = []
+          walk(condition) do |node|
+            next unless node.is_a?(Prism::CallNode) && node.name == :respond_to? && about_self?(node)
+
+            Array(node.arguments&.arguments).each do |argument|
+              names << argument.unescaped.to_s if argument.is_a?(Prism::SymbolNode) || argument.is_a?(Prism::StringNode)
             end
           end
+          names
+        end
+
+        def record(condition, consequent)
+          return unless consequent
+
+          names = guarded_names(condition)
+          return if names.empty?
+
+          names.each do |name|
+            @guards << Guard.new(name, consequent.location.start_line, consequent.location.end_line)
+          end
+        end
+
+        # Whether `node` transfers control rather than falling through, so
+        # that reaching the line after it means the condition was true.
+        # A `raise` is a call, not a node type, which is why it is named.
+        def leaves?(node)
+          return false unless node
+
+          statements = node.is_a?(Prism::StatementsNode) ? node.body : [node]
+          last = statements.last
+          return false unless last
+          return true if LEAVES.any? { |kind| last.is_a?(kind) }
+
+          last.is_a?(Prism::CallNode) && last.receiver.nil? && %i[raise throw fail exit abort].include?(last.name)
+        end
+
+        # From just after `node` to the end of the body it is written in.
+        # A struct with the two line numbers rather than a Prism node,
+        # because there is no node for "the rest of this body".
+        def rest_of_body_after(node)
+          body = @bodies.last
+          return nil unless body
+
+          last_line = body.location.end_line
+          return nil if node.location.end_line >= last_line
+
+          Range.new(node.location.end_line + 1, last_line).then do |lines|
+            Struct.new(:location).new(Struct.new(:start_line, :end_line).new(lines.first, lines.last))
+          end
+        end
+
+        def walk(root, &block)
+          block.call(root)
+          root.compact_child_nodes.each { |child| walk(child, &block) }
         end
       end
 

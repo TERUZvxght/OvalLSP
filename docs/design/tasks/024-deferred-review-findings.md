@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**341 entries below** <!-- measured: register-entries = 341 -->,
+**342 entries below** <!-- measured: register-entries = 342 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -517,6 +517,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.342`](024-deferred-review-findings-resolved.md#024342-2026-09-05-review-r06-disk-diagnostics-can-overwrite-newer-results-and-a-deletion-clear) | fixed | 0.4.0 | 2026-09-05 review R06: Disk diagnostics can overwrite newer results … |
 | [`024.343`](024-deferred-review-findings-resolved.md#024343-2026-09-05-review-r13-the-enabled-setting-is-read-only-during-activation) | fixed | 0.4.0 | 2026-09-05 review R13: The enabled setting is read only during activ… |
 | [`024.344`](024-deferred-review-findings-resolved.md#024344-2026-09-05-review-r05-dependency-and-rbs-changes-do-not-republish-caller-diagnostics) | fixed | 0.4.0 | 2026-09-05 review R05: Dependency and RBS changes do not republish c… |
+| [`024.345`](024-deferred-review-findings-resolved.md#024345-a-disk-result-is-dated-after-its-content-is-read-so-a-reindex-in-the-gap-gives-stale-content-a-fresh-generation) | fixed | 0.4.0 | A disk result is dated after its content is read, so a reindex in th… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | 1.0.0 | Feature parity roadmap, measured against Pylance |
@@ -2221,6 +2222,42 @@ measurement establishes is that the cost is in *repeating* work rather
 than in any one answer, which is the direction the next attempt should
 take -- and that a profile, not a count, is what found it, for the third
 time in this entry.
+
+### The latency this entry's own condition asks for, measured
+
+The 2026-09-05 critical review's R15 asked for two numbers this entry had
+never produced: **the wall clock from a save to its diagnostics**, and
+**what a hover waits while that is in flight**. A follow-up review's
+verdict on R15 was "not met -- acceptance not demonstrated", and it was
+right: everything above measures `analyze` in isolation, which is the
+cost and not the latency.
+
+Driven through the real Server -- one open buffer, warmed, then one
+`didChange` plus the settle drain, and a `hover` issued on another thread
+while that runs:
+
+| file | lines | save -> publish | hover during it |
+|---|---|---|---|
+| `net/http.rb` | 2,608 | 4.22 s | 4.33 s |
+| `uri/generic.rb` | 1,592 | 11.25 s | 12.79 s |
+
+So the answer to "does the analysis block the editor" is **yes, for its
+whole duration**. `#with_index_snapshot` is `@index_mutation_mutex`
+held around the block, the dispatch loop wraps *every* request in it
+(hover, completion, definition, signature help, rename -- 19 sites), and
+`#publish_diagnostics` wraps the whole analysis in the same lock. A hover
+landing in that window queues behind it.
+
+**The first version of this measurement said 0.000 and was wrong**, which
+is worth recording because the mistake is easy: it called `#hover_result`
+directly, and the lock is taken by the *dispatch loop* one level above.
+Bypassing the lock measures the hover's own work, which is microseconds,
+and says nothing about the wait.
+
+`docs/design/docs/01-product-requirements.md` states `p95 <= 300ms` for
+single-file re-analysis. Save-to-publish is 14-37x that, and the hover
+wait is the same figure -- the two are one number, because the analysis
+is the only thing in the interval.
 
 ### Where the time actually is, for whoever takes this
 

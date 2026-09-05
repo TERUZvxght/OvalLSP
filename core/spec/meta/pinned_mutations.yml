@@ -1381,12 +1381,36 @@
   to: "          in_class_body = current_owner\n"
   spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
   example: "declares nothing from a macro written inside a method body"
-- why: "A `respond_to?` guard scopes to the body it is written in: file-wide by name, a guard in one method silences the same name called unguarded in another, which is the forgotten-guard mistake."
+- why: "A `respond_to?` guard scopes to a line range: without it, a guard silences the same name called unguarded anywhere in the file, which is the forgotten-guard mistake."
   file: core/lib/ovallsp/diagnostics/engine.rb
   from: "        guards.any? { |guard| guard.name == name && line >= guard.first_line && line <= guard.last_line }\n"
   to: "        guards.any? { |guard| guard.name == name }\n"
   spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
   example: "does not carry the guard into another method"
+- why: "The guard covers the consequent, not the whole body: scoped to the enclosing body, a guard written in the false arm exempts the true arm, where Ruby raises."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        def visit_if_node(node)\n          record(node.predicate, node.statements)\n"
+  to: "        def visit_if_node(node)\n          record(node.predicate, @bodies.last)\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "reports the same call in the else branch"
+- why: "An `unless` whose body leaves guards everything after it: `return unless respond_to?(:x)` is the commonest spelling of this idiom, and a rule that reads only the arms loses it."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          record(node.predicate, rest_of_body_after(node)) if leaves?(node.statements)\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "exempts the rest of the body after `return unless`"
+- why: "An `unless` whose body does NOT leave guards nothing after it: without the check, execution falling through the unless is treated as though the guard had held."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          return true if LEAVES.any? { |kind| last.is_a?(kind) }\n"
+  to: "          return true\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "still reports after an unless whose body does not leave"
+- why: "A disk result is dated by what was known when its content was read: taken after the analysis, a reindex in the gap gives stale content a fresh generation and every rule in the funnel admits it."
+  file: core/lib/ovallsp/workspace_diagnostics.rb
+  from: "      generation = read_generation || analysed_generation\n"
+  to: "      generation = analysed_generation\n"
+  spec: spec/ovallsp/workspace_diagnostics_spec.rb
+  example: "is taken before the content is read, not after"
 - why: "A guard is about `self`, so it exempts only calls on self: by name alone it silenced the same name on another object, about which the guard says nothing."
   file: core/lib/ovallsp/diagnostics/engine.rb
   from: "        return false unless candidate.receiver.nil? || written_self?(candidate)\n"
