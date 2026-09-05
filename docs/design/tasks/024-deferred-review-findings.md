@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**317 entries below** <!-- measured: register-entries = 317 -->,
+**319 entries below** <!-- measured: register-entries = 319 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -493,6 +493,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.318`](#024318-a-workspace-directory-shaped-like-a-gem-path-would-be-attributed-to-a-gem) | open | 0.4.0 | A workspace directory shaped like a gem path would be attributed to … |
 | [`024.319`](#024319-a-bare-name-no-signature-declares-is-still-read-as-the-one-gem-class-sharing-its-last-segment) | open | 0.4.0 | A bare name no signature declares is still read as the one gem class… |
 | [`024.320`](#024320-no-check-knows-which-lock-guards-what) | open | 0.4.0 | No check knows which lock guards what |
+| [`024.321`](#024321-the-rbs-environment-loads-core-only-so-json-date-uri-logger-csv-and-digest-are-unknown) | open | 0.4.0 | The RBS environment loads core only, so JSON, Date, URI, Logger, CSV… |
+| [`024.322`](#024322-the-server-never-passes-bundle-context-so-gem-rbs-is-never-loaded-while-the-cache-fingerprint-hashes-the-lockfile-that-decides-it) | open | 0.4.0 | The server never passes bundle_context, so gem RBS is never loaded -… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | 1.0.0 | Feature parity roadmap, measured against Pylance |
@@ -5286,6 +5288,44 @@ mutex needs its guarded state written down and argued, which is what
 ---
 
 
+## 024.321 The RBS environment loads core only, so JSON, Date, URI, Logger, CSV and Digest are unknown
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/signatures/environment.rb
+
+- found by: core/lib/ovallsp/signatures/environment.rb:119 and :305
+- RBS::EnvironmentLoader.new is used with no add(library:), which loads Ruby's core signatures and no stdlib library. Driven: env.load(workspace_root: nil) then declares? is true for String/Integer/Array/Hash/Set/Time/File and false for JSON/Date/URI/Logger/CSV/Digest, with 0 ancestors for each. Costs answers rather than correctness -- a fixture requiring json and date produced no diagnostics at all in :safe mode, so the engine declines rather than reporting wrongly. What a user loses is hover, completion and go-to-definition on the stdlib beyond core.
+
+**Direction:** Add the stdlib libraries RBS ships to the loader, and decide the set deliberately rather than by listing what came to mind: RBS::Repository knows what is available, and loading everything costs startup time this project measures. The control that matters is that no *new* report appears -- the gap costs answers, not correctness, so the fix must not turn a silence into a wrong answer. Drive it with a corpus run before and after, with unknown-method as the control.
+
+---
+
+
+## 024.322 The server never passes bundle_context, so gem RBS is never loaded -- while the cache fingerprint hashes the lockfile that decides it
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: core/lib/ovallsp/server.rb:1681 and :1704
+- Signatures::Environment#load takes bundle_context: for gem RBS directories, and add_gem_signatures returns immediately when it is nil. Both production call sites -- server.rb:1704 and :3853 -- pass only workspace_root:, so no gem RBS is ever loaded; the parameter is exercised by specs alone. Thirty lines above the first of them, the cache fingerprint deliberately includes rbs_collection.lock.yaml with a comment saying the lockfile decides which gem RBS get loaded. One file states that the lockfile matters and then loads nothing it names.
+
+**Direction:** Either pass a bundle_context the server actually builds -- resolving rbs_collection.lock.yaml to its gem signature directories, which add_gem_signatures already knows how to consume -- or remove the parameter and the lockfile from the cache fingerprint, so one file stops saying the lockfile decides something and then ignoring it. Decide which before writing either. The control is the same as the stdlib entry's: gem RBS arriving must not turn a silence into a wrong answer.
+
+---
+
+
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml
@@ -5350,7 +5390,7 @@ kind: roadmap
 target: 1.0.0
 ```
 
-roadmap. Its three 0.2.0 rows are done; the table below carries a **shipped in** column so the entry can be read as a record rather than only as a plan. Two of the three shipped outright; whole-project diagnostics shipped without a capability row, because the E2E example written for it did not pass (024.14) -- README marks that row ⚠️ and both changelogs say so.
+roadmap. Its three 0.2.0 rows are done; the table below carries a **shipped in** column so the entry can be read as a record rather than only as a plan. All three shipped outright. This sentence said whole-project diagnostics shipped *without* a capability row because its E2E example did not pass -- true of 0.2.0, retracted in 0.2.1 when `024.14` closed as "it does not reproduce, and did not need fixing". Row `G17` reads PASS with an example, and README marks the row ✅, not ⚠️. `024.14`'s correction reached five documents and not this one; caught in 0.4.0's opening.
 
 Pylance is the closest well-known reference point for "what a language
 server is expected to do" in a dynamically typed language with optional
@@ -5368,7 +5408,7 @@ still absent.
 
 | Pylance capability | OvalLSP before it | Planned for | Shipped in | Notes |
 |---|---|---|---|---|
-| Diagnostics across the whole project | Open files only | **0.2.0** | 0.2.0, no capability row (024.14) | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
+| Diagnostics across the whole project | Open files only | **0.2.0** | 0.2.0 (`G17`) | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
 | Docstrings in hover and completion | Type, origin and definition location only | **0.2.0** | 0.2.0 | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
 | Semantic highlighting (semantic tokens) | None | **0.2.0** | 0.2.0 | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
 | Inlay hints (inferred types, parameter names) | None | **0.3.0** | 0.3.0 | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |

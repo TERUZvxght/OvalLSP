@@ -713,6 +713,34 @@ argument the cursor is in".
 argument. That is fixed; the signature is now spelled the way you wrote
 it.*
 
+## The stdlib beyond Ruby's core is not described to the engine
+
+Hover, completion and go to definition answer from RBS — Ruby's own
+signature files. The engine loads Ruby's **core** set (`String`,
+`Integer`, `Array`, `Hash`, `Set`, `Time`, `File` and their neighbours)
+and no stdlib **library**. So `JSON`, `Date`, `URI`, `Logger`, `CSV` and
+`Digest` are names it has never heard of: hovering `Date.today` or
+completing after `JSON.` gets nothing from signatures.
+
+**It costs answers, not correctness.** Driven on a file requiring `json`
+and `date`: no diagnostic of any kind is produced for those calls. The
+engine declines on a receiver it cannot describe rather than guessing, so
+nothing false is reported — you simply get silence where you wanted an
+answer. <!-- documents: 024.321 -->
+
+## Gem signatures are not loaded at all
+
+If your project uses `rbs collection` to pull in signatures for the gems
+you depend on, the engine does not read them. The machinery to load them
+exists and the server never asks it to.
+
+The same is true of the cache: the engine treats
+`rbs_collection.lock.yaml` as an input worth noticing when it changes,
+which is a promise about a file whose contents currently reach nothing.
+As above, the cost is answers rather than wrong ones — a gem whose
+signatures are missing is a receiver the engine declines to judge, not
+one it judges wrongly. <!-- documents: 024.322 -->
+
 ## Smaller things
 
 - A typo on a core-library receiver is not reported: `"hello".upcse` and
