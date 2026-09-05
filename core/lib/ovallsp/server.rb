@@ -2745,6 +2745,17 @@ module Ovallsp
       # layout; it is the same match the Runtime Agent uses to attribute
       # a module to a gem.
       return [] if INSTALLED_GEM_PATH.match?(target[:uri].to_s)
+      # **And not into a class that has no `end`.** `#insertion_for` aims
+      # at `range.end.character - 3`, which is where a one-line class
+      # keeps its `end`. `Widget = Class.new(Base)` ends in `se)`, so the
+      # `def` went inside the superclass expression and the file stopped
+      # parsing -- in the *declaring* file, which need not be the one the
+      # diagnostic was reported on. `024.82` is why this is indexed as a
+      # class at all, so the diagnostic is right and only the fix was
+      # wrong. A keyword class's location starts at `class`, strictly
+      # before its name; an assignment's starts at the name itself, which
+      # is the whole difference and is measured across four shapes.
+      return [] if declared_by_assignment?(target)
 
       [{ title: "Define `#{candidate.name}` in #{Index::SymbolId.bare_name(owner)}",
          kind: "quickfix", diagnostics: [diagnostic],
@@ -2765,6 +2776,18 @@ module Ovallsp
     #
     # The `end` is the one landmark this has without the class's body,
     # which `WorkspaceIndex#class_declarations` does not carry.
+    # A declaration whose location begins at its own name was written as
+    # an assignment (`Widget = Class.new(Base)`, `Point = Struct.new(:x)`)
+    # and has no `end` for `#insertion_for` to aim at. Declining is what
+    # `024.302` settled for the same shape: offering nothing is correct
+    # where the edit would be wrong.
+    def declared_by_assignment?(target)
+      name_range = target[:name_range]
+      return false unless name_range
+
+      target[:range][:start] == name_range[:start]
+    end
+
     def insertion_for(target, candidate)
       range = target[:range]
       # The parameters the call actually passes. Without them, applying

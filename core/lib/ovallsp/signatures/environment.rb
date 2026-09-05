@@ -83,6 +83,12 @@ module Ovallsp
           env = load_environment(workspace_root, bundle_context, diagnostics)
 
           @rbs_environment = env
+          # Kept so provenance can tell the project's own signatures from
+          # a library's: `#assertable_roots` trusts core and this, and
+          # nothing else (`024.321`).
+          @workspace_root = workspace_root && File.expand_path(workspace_root)
+          @assertable_roots = nil
+          @core_declared = nil
           @definition_builder = RBS::DefinitionBuilder.new(env: env)
           @definition_cache = {}
           @rbi_methods = load_rbi_methods(workspace_root, diagnostics)
@@ -114,9 +120,14 @@ module Ovallsp
         load_stdlib_only(diagnostics)
       end
 
+      # The libraries come too, or this fallback's own header -- "stdlib
+      # method resolution survives a broken project sig/" -- becomes false
+      # for every library the moment `024.321` added them.
       def load_stdlib_only(diagnostics)
         env = RBS::Environment.new
-        RBS::EnvironmentLoader.new.load(env: env)
+        loader = RBS::EnvironmentLoader.new
+        add_stdlib_libraries(loader)
+        loader.load(env: env)
         env.resolve_type_names
       rescue StandardError => e
         diagnostics << { severity: :error, message: "failed to load even stdlib-only RBS environment: #{e.message}",
@@ -190,6 +201,44 @@ module Ovallsp
         return nil if Environment.unavailable?(chain)
 
         !chain.empty?
+      end
+
+      # **Declared somewhere other than a stdlib library** -- Ruby's core,
+      # the project's own `sig/`, or an RBI. Same three answers as
+      # `#declares?`, and the same meanings.
+      #
+      # `024.321` loaded all 61 stdlib libraries so hover, completion and
+      # definition could answer about `JSON`, `Date` and the rest. That is
+      # a widening of what can be *answered from*. It must not be a
+      # widening of what can be *asserted against*, and the difference is
+      # not a matter of taste -- each of these was driven, and each is a
+      # silence that became a wrong report when `declares?` alone decided:
+      #
+      #   include Singleton   `.instance` reported as a typo. RBS writes
+      #                       it `def self.instance` on the module and
+      #                       cannot express the `included` hook that puts
+      #                       it on the class.
+      #   include Open3       `popen2e` reported. Ruby 3.4.10 has it; RBS
+      #                       4.0.3 omits it, with `pipeline*`.
+      #   Shellwords.escape   a `Pathname` argument reported as wrong.
+      #                       `shellwords.rbs` says `(String str)`; the
+      #                       implementation calls `to_s`.
+      #
+      # Core signatures earn the trust by being the ones this engine has
+      # always asserted from; library signatures have not been measured
+      # and demonstrably lag the runtime. So a library may answer and may
+      # not judge.
+      #
+      # `nil` -- declared, chain unbuildable -- is carried through
+      # unchanged, because a caller that must decline on `nil` must still
+      # decline for the same reason (`024.223`).
+      def declared_outside_stdlib?(name)
+        declared = declares?(name)
+        return declared unless declared == true
+
+        return nil unless assertable_roots
+
+        assertably_declared?(Index::SymbolId.qualify_owner(name))
       end
 
       # Every method name (including inherited ones) starting with
@@ -303,9 +352,79 @@ module Ovallsp
 
       def build_loader(workspace_root, bundle_context, diagnostics)
         loader = RBS::EnvironmentLoader.new
+        add_stdlib_libraries(loader)
         add_project_sig(loader, workspace_root, diagnostics)
         add_gem_signatures(loader, bundle_context, diagnostics)
         loader
+      end
+
+      # **Every stdlib library RBS ships** (`024.321`).
+      #
+      # `RBS::EnvironmentLoader.new` loads Ruby's *core* and nothing else,
+      # so `String` and `Hash` were described and `JSON`, `Date`, `URI`,
+      # `Logger`, `CSV` and `Digest` were names this engine had never
+      # heard of. Hover, completion and go-to-definition answered nothing
+      # across most of the standard library.
+      #
+      # Measured before choosing "all": core alone is 0.06 s and 334
+      # class/module declarations; core plus all 61 is 0.16 s and 938.
+      # Resident memory is the cost a load-time figure hides -- +17.7 MB
+      # becomes +39.3 MB per environment, and this loads again on root
+      # adoption and on every `sig/` change.
+      #
+      # **What this does NOT do is widen what may be asserted.** A library
+      # signature is good enough to answer *from* and not good enough to
+      # judge *against*: RBS cannot express an `included` hook, so
+      # `include Singleton` would make `.instance` a reported typo, and
+      # RBS 4.0.3 omits `Open3.popen2e` and types `Shellwords.escape` as
+      # taking a `String` where Ruby takes anything with `to_s`. Each of
+      # those was driven and each turned a silence into a wrong report.
+      # `#declared_outside_stdlib?` is the predicate the two asserting
+      # readers use instead; see it below.
+      #
+      # `RBS::Repository#gems.keys` rather than a directory listing: same
+      # 61 names, asked of the API, so a change in RBS's layout is not a
+      # silent empty list.
+      def add_stdlib_libraries(loader)
+        stdlib_library_names.each { |library| loader.add(library: library, version: nil) }
+      end
+
+      def stdlib_library_names
+        RBS::Repository.new.gems.keys.map(&:to_s).sort
+      rescue StandardError
+        # An empty list is core-only, which is what shipped before this
+        # and is the safe direction. It cannot be silent: `#load` records
+        # a diagnostic when the environment it produces is short.
+        []
+      end
+
+      # **Where a declaration may be asserted from**: Ruby's own core
+      # signatures, and the project's own `sig/`. Everything else -- RBS's
+      # stdlib directory, and a bundled gem that ships signatures in its
+      # own `sig/` -- may be answered from and not judged against.
+      #
+      # Stated as the two roots that *are* trusted rather than the one
+      # that is not, because the untrusted set has more than one home:
+      # `bigdecimal` puts `String#to_d` in its own gem `sig/`, nowhere
+      # near RBS's `stdlib/`, and a rule written as "not under stdlib"
+      # let it through.
+      #
+      # `nil` for the core root -- RBS not saying where it keeps its own
+      # signatures -- makes every caller decline rather than guess.
+      def assertable_roots
+        @assertable_roots ||= begin
+          core = RBS::EnvironmentLoader::DEFAULT_CORE_ROOT&.to_s
+          core.nil? ? nil : [core, @workspace_root].compact
+        end
+      rescue StandardError
+        nil
+      end
+
+      def assertable_declaration?(path)
+        roots = assertable_roots
+        return false if roots.nil? || path.to_s.empty?
+
+        roots.any? { |root| path.to_s.start_with?(root) }
       end
 
       def load_rbi_methods(workspace_root, diagnostics)
@@ -510,7 +629,9 @@ module Ovallsp
         # same door as a type RBS does not carry.
         return unavailable_or(rbi_member_names(type_name_string, singleton), type_name) unless definition
 
-        rbs_names = definition.methods.reject { |_, method| public_only && method.accessibility == :private }
+        rbs_names = definition.methods
+                              .reject { |_, method| public_only && method.accessibility == :private }
+                              .reject { |_, method| reopening_of_a_core_type?(type_name, method) }
                               .keys.map(&:to_s)
         rbi_names = rbi_member_names(type_name_string, singleton)
         (rbs_names + rbi_names).uniq.sort
@@ -522,6 +643,46 @@ module Ovallsp
         # the false report -- so it is marked instead.
         record_signature_failure("members of #{type_name_string}", e)
         unavailable_or(rbi_member_names(type_name_string, singleton), type_name)
+      end
+
+      # **A library may introduce a namespace; it may not reopen a core
+      # class** (`024.321`).
+      #
+      # Loading all 61 stdlib libraries brings their reopenings: `json`
+      # puts `to_json` on `Object`, `pp` puts `pretty_inspect` there,
+      # `shellwords` puts `shellescape` on `String`. Ruby has none of them
+      # unless the program required the library --
+      # `ruby -e 'class A; end; A.new.to_json'` raises NoMethodError --
+      # so offering them completes a label that raises when picked, hovers
+      # a signature the receiver has not got, and silences the correct
+      # report that the method is absent. Three such reports vanished on a
+      # plain fixture before this.
+      #
+      # The test is per *member*, not per type: `Date` is a library's own
+      # class and keeps everything, while `Object` keeps only what core
+      # declared. `#stdlib_root` answering `nil` keeps every member, which
+      # is the pre-`024.321` answer and cannot invent an absence.
+      def reopening_of_a_core_type?(type_name, method)
+        return false unless assertable_roots
+        return false unless core_declares?(type_name)
+
+        sources = method.defs.map { |definition| definition.member.location&.buffer&.name.to_s }
+        !sources.empty? && sources.none? { |path| assertable_declaration?(path) }
+      rescue StandardError
+        false
+      end
+
+      # Whether Ruby's own core signatures declare this type at all --
+      # the question that decides whether there is a core answer to
+      # prefer. Memoised per load: `#compute_member_names` asks it once
+      # per member.
+      def core_declares?(type_name)
+        @core_declared ||= {}
+        return @core_declared[type_name] if @core_declared.key?(type_name)
+
+        @core_declared[type_name] = declaration_paths(type_name).any? { |path| assertable_declaration?(path) }
+      rescue StandardError
+        false
       end
 
       # The RBI half is a genuinely narrower answer, so it wins when it
@@ -552,6 +713,36 @@ module Ovallsp
       # `024.223` is about, pointing the other way. `class_decls` holds
       # module entries as well as class ones (probed: `::Kernel` and
       # `::Comparable` are both `true`).
+      # True when at least one declaration of the type sits in a root this
+      # engine may assert from -- Ruby's core, or the project's own
+      # `sig/`. A class is often declared in more than one place (`json`
+      # reopens `String` to add `to_json`), so this asks whether *any*
+      # declaration is trusted, not whether all are.
+      def assertably_declared?(qualified)
+        type_name = rbs_type_name(qualified)
+        return false unless type_name
+
+        declaration_paths(type_name).any? { |path| assertable_declaration?(path) }
+      rescue StandardError
+        # Declining reads as "stdlib alone declares it", which keeps the
+        # asserting readers where they were before `024.321`. A failure
+        # here cannot widen what may be asserted, only narrow it.
+        false
+      end
+
+      # Every file a type is declared in, so provenance is asked once and
+      # in one place rather than by each of the three readers that need it.
+      def declaration_paths(type_name)
+        entry = @rbs_environment&.class_decls&.[](type_name)
+        return [] unless entry
+
+        paths = []
+        entry.each_decl { |decl| paths << decl.location&.buffer&.name.to_s }
+        paths.reject(&:empty?)
+      rescue StandardError
+        []
+      end
+
       def rbs_declares?(type_name)
         return false unless @rbs_environment && type_name
 

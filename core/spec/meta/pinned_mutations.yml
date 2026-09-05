@@ -1273,3 +1273,9 @@
   to: "    shipped = published_versions(artifacts) | changelog_versions(changelog)\n"
   spec: spec/meta/deferred_findings_spec.rb
   example: "leaves an entry alone when its target is the release the branch is preparing"
+- why: "The Define quick fix on a class made by assignment: without the refusal it inserts at `end - 3`, which on `Widget = Class.new(Base)` lands inside the superclass expression and leaves a file that does not parse."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] if declared_by_assignment?(target)\n"
+  to: "      return [] if false\n"
+  spec: spec/ovallsp/server_code_action_spec.rb
+  example: "offers no definition fix for a class made by assignment with a parent"

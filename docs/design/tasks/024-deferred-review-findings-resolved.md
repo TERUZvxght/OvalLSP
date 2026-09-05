@@ -17161,6 +17161,26 @@ for closing the rest.
 
 **Fixed in 0.3.2.** Three of the six closed, and the three that remain are named rather than left as a count. The extension id is compared against `vscode/package.json`, which is the only place it is true; SECURITY gets the parity check PRIVACY has had, on structure and the reporting route rather than on prose; and the Ruby patch releases named as tested must agree across both support matrices and both Marketplace READMEs -- a set the matrices had three of and the READMEs two for a whole release. What is left is two rows that ask for a judgement no scanner can make (whether a revert left documentation behind, whether a review round found the same place twice) and one that could be mechanised in the rescue-verdicts shape but is a release of its own: every `Mutex.new` in `core/lib` accounted for in the architecture document. `024.320` carries that.
 
+## 024.323 The Define quick fix writes a file that does not parse, on a class made by assignment
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: core/lib/ovallsp/server.rb#insertion_for
+- insertion_for aims at range.end.character - 3, which is where a one-line class keeps its end. A class made by assignment has none: the last three characters of 'Widget = Class.new(Base)' are 'se)', so one click produced 'Widget = Class.new(Badef missing_thing / end / se)' -- source the user did not write and Ruby cannot parse. The edit lands in the declaring file, which need not be the file the diagnostic was reported on. Driven on three shapes: with a parent, with none, and across lines. 024.82 is why this is indexed as a class at all, so the diagnostic is right and only the fix was wrong. Fixed by declining: a keyword class's location starts at 'class', strictly before its name; an assignment's starts at the name itself, and class_declarations now carries name_range so the two can be told apart.
+
+**Direction:** Fixed in 0.4.0 by declining. What is left is the general shape: every quick fix computes an insertion point from a declaration's range, and a declaration that is not a keyword body has no interior position to name. Struct.new and Data.define are the same shape and are silent today only because opening their member surface stops the diagnostic being reported at all -- so the guard is load-bearing for them the moment that changes.
+
+---
+
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

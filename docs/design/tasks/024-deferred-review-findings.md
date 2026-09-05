@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**319 entries below** <!-- measured: register-entries = 319 -->,
+**320 entries below** <!-- measured: register-entries = 320 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -493,8 +493,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.318`](#024318-a-workspace-directory-shaped-like-a-gem-path-would-be-attributed-to-a-gem) | open | 0.4.0 | A workspace directory shaped like a gem path would be attributed to … |
 | [`024.319`](#024319-a-bare-name-no-signature-declares-is-still-read-as-the-one-gem-class-sharing-its-last-segment) | open | 0.4.0 | A bare name no signature declares is still read as the one gem class… |
 | [`024.320`](#024320-no-check-knows-which-lock-guards-what) | open | 0.4.0 | No check knows which lock guards what |
-| [`024.321`](#024321-the-rbs-environment-loads-core-only-so-json-date-uri-logger-csv-and-digest-are-unknown) | open | 0.4.0 | The RBS environment loads core only, so JSON, Date, URI, Logger, CSV… |
+| [`024.321`](#024321-a-stdlib-class-can-be-answered-about-but-not-judged-against-the-half-0-4-0-left) | open | 0.4.0 | A stdlib class can be answered about but not judged against — the ha… |
 | [`024.322`](#024322-the-server-never-passes-bundle-context-so-gem-rbs-is-never-loaded-while-the-cache-fingerprint-hashes-the-lockfile-that-decides-it) | open | 0.4.0 | The server never passes bundle_context, so gem RBS is never loaded -… |
+| [`024.323`](024-deferred-review-findings-resolved.md#024323-the-define-quick-fix-writes-a-file-that-does-not-parse-on-a-class-made-by-assignment) | fixed | 0.4.0 | The Define quick fix writes a file that does not parse, on a class m… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | 1.0.0 | Feature parity roadmap, measured against Pylance |
@@ -5288,7 +5289,7 @@ mutex needs its guarded state written down and argued, which is what
 ---
 
 
-## 024.321 The RBS environment loads core only, so JSON, Date, URI, Logger, CSV and Digest are unknown
+## 024.321 A stdlib class can be answered about but not judged against — the half 0.4.0 left
 
 ```yaml
 status: open
@@ -5306,6 +5307,48 @@ target: 0.4.0
 
 ---
 
+
+
+## Half of this shipped in 0.4.0, and the half that did not is a decision
+
+**Fixed:** the loader adds every stdlib library RBS ships — 61 of them,
+listed through `RBS::Repository#gems.keys` rather than a directory guess.
+`JSON`, `Date`, `URI`, `Logger`, `CSV` and `Digest` are names the engine
+knows, so hover, completion and go-to-definition answer about them.
+Measured on activesupport + i18n, 335 files: `unresolved-constant`
+916 → 741, `unknown-method` 19 → 11, **0 introduced across every
+category**, corpus-sha256 identical on both sides.
+
+**Open, and this is what the entry is now about:** the diagnostics do not
+use those signatures. A library signature is good enough to answer *from*
+and not good enough to judge *against*, and that is measured rather than
+cautious. Three silences became wrong reports the moment `declares?`
+alone decided, each driven:
+
+    include Singleton   `.instance` reported as a typo. RBS writes it
+                        `def self.instance` on the module and cannot
+                        express the `included` hook.
+    include Open3       `popen2e` reported. Ruby 3.4.10 has it; RBS
+                        4.0.3 omits it, with `pipeline*`.
+    Shellwords.escape   a `Pathname` argument reported wrong.
+                        `shellwords.rbs` says `(String str)`; the
+                        implementation calls `to_s`.
+
+And the libraries reopen core classes, which is a second shape: `json`
+puts `to_json` on `Object`, `pp` puts `pretty_inspect` there,
+`shellwords` puts `shellescape` on `String`, `bigdecimal` puts `to_d`
+there from its own gem `sig/`. Ruby has none of them unless the program
+required the library. Offered, they complete a label that raises when
+picked; asserted, they silenced three correct `unknown-method` reports on
+a plain fixture. So a member declared only outside core and the project's
+own `sig/` is dropped from a type core declares.
+
+**What is left is to make a library's signature judgeable when the
+project actually loads it.** The parser already sees every `require`, and
+the Runtime Agent already reports what the running application defines —
+either could say which libraries are real for this project, which is the
+fact both rules are standing in for. That is an experiment to design, not
+a hunk, so it moves rather than closing.
 
 ## 024.322 The server never passes bundle_context, so gem RBS is never loaded -- while the cache fingerprint hashes the lockfile that decides it
 

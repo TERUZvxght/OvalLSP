@@ -243,7 +243,12 @@ module Ovallsp
         # for a type RBS *does* declare and could not build, so a type it
         # has never heard of comes back `false` and keeps the answer
         # below.
-        declared = signatures.declares?(entry.name)
+        # `#declared_outside_stdlib?`, not `#declares?` (`024.321`). A
+        # stdlib library may be answered *from* and not judged *against*:
+        # RBS cannot express an `included` hook, so `include Singleton`
+        # would make `.instance` a reported typo -- which is the report
+        # 0.2.6 fixed, arriving again by a different door.
+        declared = signatures.declared_outside_stdlib?(entry.name)
         return false if declared.nil?
         return true if entry.kind
 

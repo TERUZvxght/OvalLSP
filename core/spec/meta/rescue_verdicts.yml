@@ -175,6 +175,12 @@
 "core/lib/ovallsp/signatures/environment.rb#compute_ancestors": "contained: returns UNAVAILABLE, an empty chain a caller about to conclude not-declared-anywhere can tell from the [] an unknown type gives (024.223 -- the previous verdict here was wrong, and two consumers did turn the emptiness into an assertion)"
 "core/lib/ovallsp/signatures/environment.rb#rbs_type_name": "contained: nil reads as a type RBS does not name"
 "core/lib/ovallsp/signatures/environment.rb#rbs_declares?": "contained: false means treat this as an ordinary absence, which is the behaviour that existed before the sentinel -- it can only lose the new distinction, never invent an UNAVAILABLE"
+"core/lib/ovallsp/signatures/environment.rb#stdlib_library_names": "contained: an empty list is core-only, which is exactly what shipped before 024.321 and is the safe direction -- it can lose answers, never widen what may be asserted"
+"core/lib/ovallsp/signatures/environment.rb#assertable_roots": "contained: nil makes #declared_outside_stdlib? answer nil, so every asserting reader declines rather than guessing at provenance"
+"core/lib/ovallsp/signatures/environment.rb#assertably_declared?": "contained: false reads as 'only a library declares it', which holds the asserting readers where they were before 024.321 -- a failure here narrows what may be asserted and cannot widen it"
+"core/lib/ovallsp/signatures/environment.rb#declaration_paths": "contained: an empty list reads as 'no assertable declaration', which holds the asserting readers where they were before 024.321 -- a failure here narrows what may be asserted and cannot widen it"
+"core/lib/ovallsp/signatures/environment.rb#reopening_of_a_core_type?": "contained: false keeps the member, which is the pre-024.321 answer -- a failure here can only leave an answer in place, never invent an absence"
+"core/lib/ovallsp/signatures/environment.rb#core_declares?": "contained: false means no core answer to prefer, so every member of the type is kept -- the pre-024.321 behaviour"
 "core/lib/ovallsp/signatures/rbi_parser.rb#parse": surfaces
 "core/lib/ovallsp/signatures/rbi_parser.rb#handle_sig": surfaces
 "core/lib/ovallsp/signatures/rbi_parser.rb#convert_type_expr": "contained: Types::UNKNOWN, the engine's own not-knowing"

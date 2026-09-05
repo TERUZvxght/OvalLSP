@@ -270,7 +270,7 @@ module Ovallsp
           %i[class module].include?(sid.kind) && sid.name == qualified_name
         })
         matching.each do |symbol_id|
-          @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
+          @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location, name_range: decl.name_location } }
         end
         results
       end

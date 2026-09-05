@@ -713,20 +713,29 @@ argument the cursor is in".
 argument. That is fixed; the signature is now spelled the way you wrote
 it.*
 
-## The stdlib beyond Ruby's core is not described to the engine
+## The stdlib is described, but only Ruby's core is judged against
 
-Hover, completion and go to definition answer from RBS — Ruby's own
-signature files. The engine loads Ruby's **core** set (`String`,
-`Integer`, `Array`, `Hash`, `Set`, `Time`, `File` and their neighbours)
-and no stdlib **library**. So `JSON`, `Date`, `URI`, `Logger`, `CSV` and
-`Digest` are names it has never heard of: hovering `Date.today` or
-completing after `JSON.` gets nothing from signatures.
+0.4.0 loaded every stdlib library RBS ships, so `JSON`, `Date`, `URI`,
+`Logger`, `CSV` and the rest are names the engine knows: hover,
+completion and go to definition answer about them where before they said
+nothing.
 
-**It costs answers, not correctness.** Driven on a file requiring `json`
-and `date`: no diagnostic of any kind is produced for those calls. The
-engine declines on a receiver it cannot describe rather than guessing, so
-nothing false is reported — you simply get silence where you wanted an
-answer. <!-- documents: 024.321 -->
+**Diagnostics deliberately do not use them.** A library signature is good
+enough to answer *from* and not good enough to judge *against*, and that
+is measured rather than cautious: RBS cannot express an `included` hook,
+so `include Singleton` would have made `.instance` a reported typo; RBS
+4.0.3 omits `Open3.popen2e`, which Ruby has; and it types
+`Shellwords.escape` as taking a `String` where the implementation accepts
+anything with `to_s`. Each of those was driven, and each turned a silence
+into a wrong report before the rule was put in.
+
+So a mistake in a call on a stdlib class is not reported. That is the
+same trade this page describes elsewhere — a missed report rather than a
+wrong one.
+
+One thing to know if you read ancestor chains: every object now shows
+`PP::ObjectMixin`, because the `pp` library reopens `Object` to add it.
+Ruby agrees once anything requires `pp`, which Rails does. <!-- documents: 024.321 -->
 
 ## Gem signatures are not loaded at all
 

@@ -687,6 +687,14 @@ module Ovallsp
         signature = declared_signature_for(receiver_type, candidate, context, binding_only: true)
         return nil unless signature
         return nil unless signature.overloads.size == 1
+        # **A stdlib library may be answered from and not judged against**
+        # (`024.321`). Loading all 61 took the parameters this check can
+        # judge from 368 to 1,699, and library signatures lag the runtime:
+        # `shellwords.rbs` types `escape` as taking a `String` where the
+        # implementation calls `to_s`, so `Shellwords.escape(pathname)` --
+        # correct Ruby -- was reported. Core and the project's own `sig/`
+        # keep judging; a library only answers.
+        return nil unless context.signatures&.declared_outside_stdlib?(signature.symbol_id.owner) == true
 
         overload = signature.overloads.first
         # A `*rest` parameter makes the positional list a prefix rather
@@ -1107,7 +1115,12 @@ module Ovallsp
         # suppressed here.
         return true if context.hierarchy_index.gem_index.knows?(name)
 
-        context.signatures&.declares?(name) == true
+        # `#declared_outside_stdlib?`, not `#declares?`: `024.321` loaded
+        # 61 stdlib libraries so the engine could *answer* about them, and
+        # a library signature is not evidence a surface is complete enough
+        # to call a name absent. Driven: `include Open3` made `popen2e` a
+        # reported typo, because RBS 4.0.3 omits it.
+        context.signatures&.declared_outside_stdlib?(name) == true
       end
 
       # Every Ruby class inherits from BasicObject, so a chain that does
