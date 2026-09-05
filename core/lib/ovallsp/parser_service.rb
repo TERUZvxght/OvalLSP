@@ -64,6 +64,7 @@ module Ovallsp
         reference_candidates: visitor.reference_candidates,
         generated_method_facts: visitor.generated_method_facts,
         open_surface_owners: visitor.open_surface_owners.to_a,
+        macro_call_ranges: visitor.macro_call_ranges.to_a,
         pattern_bound_names: visitor.pattern_bound_names.uniq,
         module_function_names: visitor.module_function_names.to_a
       ).then { |summary| withdraw_forward_aliases(summary) }
@@ -195,7 +196,7 @@ module Ovallsp
       ANCESTOR_RELATIONS = { include: :include, prepend: :prepend, extend: :extend }.freeze
 
       attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts,
-                  :open_surface_owners, :module_function_names, :pattern_bound_names
+                  :open_surface_owners, :module_function_names, :pattern_bound_names, :macro_call_ranges
 
       # Receiverless calls that can be written in a class body without
       # adding anything to that class's method surface. Membership is a
@@ -256,10 +257,15 @@ module Ovallsp
         @reference_candidates = []
         @generated_method_facts = []
         @open_surface_owners = Set.new
+        # The ranges of receiverless calls this visitor read as a macro
+        # and declared something from. A Set of ranges rather than of
+        # names: `delegate` in one class body may be the macro and in
+        # another an ordinary method the project defines, and a name would
+        # silence both.
+        @macro_call_ranges = Set.new
         @module_function_names = Set.new
         @included_hook_parameter = nil
         @block_owning_call = nil
-        @recorded_a_declaration = false
         # How many block or lambda bodies enclose the node being visited.
         # A block's meaning belongs to the call that owns it, so
         # #record_open_surface looks at that call and not at what is
@@ -546,6 +552,8 @@ module Ovallsp
             node.parameters&.requireds&.first&.name
           end
 
+        record_unmodelled_hook_surface(node) if singleton && %i[included prepended].include?(node.name)
+
         # Tracks "we are inside a method body", so a `private :target`
         # written there -- which never runs at class level in Ruby -- does
         # not retroactively rewrite a declaration. Restored rather than
@@ -718,8 +726,7 @@ module Ovallsp
           # arguments -- and the surface stayed closed anyway because the
           # *name* was on the exempt list, so `Bag#a` was reported missing.
           # What matters is whether anything was actually recorded.
-          @recorded_a_declaration = @declarations.size > declared_before
-          read_as_a_macro = @recorded_a_declaration
+          read_as_a_macro = @declarations.size > declared_before
           wrapped_visibility = inline_attribute_visibility_for(node)
         end
         # Before `#record_open_surface`, not after: a `class_methods do`
@@ -735,19 +742,30 @@ module Ovallsp
 
         # Outside the receiverless branch: `singleton_class.send` and
         # `self.class_eval` metaprogram this owner too (see there).
-        record_open_surface(node)
-        # **Not the macro this parser has just read** (`024.327`). A
-        # recognised DSL that recorded something leaves the surface
-        # *closed*, correctly -- and that is exactly what exposed the
-        # macro's own call to the undefined-method check, which reported
-        # `W has no method named 'delegate'` on a class whose `size` it
-        # had declared from that very call. Either the call is a macro
-        # this engine understands, in which case reporting it is wrong,
-        # or it is not, in which case declaring from it was.
+        record_open_surface(node, read_as_a_macro)
+        # **The candidate is recorded, and the report is what stops**
+        # (`024.327`). A recognised DSL that recorded something leaves the
+        # surface *closed*, correctly -- and that is exactly what exposed
+        # the macro's own call to the undefined-method check, which
+        # reported `W has no method named 'delegate'` on a class whose
+        # `size` it had declared from that very call. Either the call is a
+        # macro this engine understands, in which case reporting it is
+        # wrong, or it is not, in which case declaring from it was.
+        #
+        # **The first fix dropped the candidate, and that was too much.**
+        # The candidate is what hover, go to definition, references and
+        # highlight all read, and `#record_attribute_methods` bumps the
+        # same counter -- so `attr_reader` lost its RBS documentation and
+        # its definition at `module.rbs:320`, and a project that defines
+        # its own `scope` or `delegate` lost all four answers on the call.
+        # None of that was the defect. Marking the range leaves every
+        # other feature exactly as it was and stops only the report, which
+        # is the whole of what was wrong. Found by cold review.
         #
         # An unrecognised class-body call is silent for a different
         # reason and stays that way: it opens the surface.
-        record_method_call_candidate(node) unless read_as_a_macro
+        record_method_call_candidate(node)
+        record_macro_call_range(node) if read_as_a_macro
 
         # `module_function def a; end`. The argument is a definition, not a
         # name, so `#apply_module_function_arguments` cannot see it -- and
@@ -1946,6 +1964,75 @@ module Ovallsp
       # It is not -- the receiver is a method parameter -- and that claim
       # was written from a summary rather than checked, which turned a
       # generation of real concerns into false reports for one round.
+      # **A hook that does anything else to `base` opens the including
+      # class's surface.** `#record_concern_hook` above reads exactly one
+      # statement -- `base.extend(Const)` -- and everything else a hook
+      # can do to the class it is passed was read as nothing at all, so
+      # the class looked fully enumerated and its new methods were
+      # reported missing. Ruby, 3.4.10, on the three measured shapes:
+      #
+      #   module H2; def self.included(base) = base.include(Helpers); end
+      #   class W2; include H2; end
+      #   W2.new.respond_to?(:from_helpers)          # => true, reported
+      #
+      #   module H4
+      #     def self.included(base) = base.class_eval { def from_ce; end }
+      #   end
+      #   W4.new.respond_to?(:from_ce)               # => true, reported
+      #
+      # The surface opens on the *module*, not on the class: the class is
+      # in another file this visitor never sees, and the module is on its
+      # ancestor chain, which is where `MethodResolver#open_surface?` asks.
+      #
+      # **Any mention of the parameter counts, not only a call on it.**
+      # `Registry.install(base)` hands the class to code this parser
+      # cannot follow, and reading only receivers would call that hook
+      # fully modelled. So: every read of the parameter in the body, minus
+      # the ones `#record_concern_hook` accounts for, and a remainder
+      # opens the surface.
+      def record_unmodelled_hook_surface(node)
+        return unless current_owner && @cref.module_owner?
+
+        parameter = node.parameters&.requireds&.first&.name
+        return unless parameter && node.body
+
+        reads = hook_parameter_reads(node.body, parameter)
+        return if reads.zero?
+
+        modelled = modelled_hook_calls(node.body, parameter)
+        return if reads == modelled
+
+        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), :instance]
+      end
+
+      def hook_parameter_reads(root, parameter)
+        walk_nodes(root).count do |candidate|
+          candidate.is_a?(Prism::LocalVariableReadNode) && candidate.name == parameter
+        end
+      end
+
+      # The reads `#record_concern_hook` turns into a fact: the receiver
+      # of a `base.extend(Const)`. Counted the same way they are recorded,
+      # so a shape that stops being modelled there stops being counted
+      # here rather than quietly staying exempt.
+      def modelled_hook_calls(root, parameter)
+        walk_nodes(root).count do |candidate|
+          next false unless candidate.is_a?(Prism::CallNode) && candidate.name == :extend
+          next false unless candidate.receiver.is_a?(Prism::LocalVariableReadNode)
+          next false unless candidate.receiver.name == parameter
+
+          target = candidate.arguments&.arguments&.first
+          !!(target && raw_constant_name(target))
+        end
+      end
+
+      def walk_nodes(root)
+        return enum_for(:walk_nodes, root) unless block_given?
+
+        yield root
+        root.compact_child_nodes.each { |child| walk_nodes(child) { |n| yield n } }
+      end
+
       def record_concern_hook(node)
         return unless node.name == :extend && @cref.module_owner?
         return unless node.receiver.is_a?(Prism::LocalVariableReadNode)
@@ -2105,7 +2192,7 @@ module Ovallsp
         :singleton
       end
 
-      def record_open_surface(node)
+      def record_open_surface(node, read_as_a_macro = false)
         if (kind = method_defining_surface(node))
           # **The name, when there is one** (`024.116`). `define_method(:x)`
           # names its method as plainly as a `def` does, and recording
@@ -2141,7 +2228,24 @@ module Ovallsp
         # `#record_dynamic_ancestor` already opens the surface for the
         # ones it cannot read.
         return if ANCESTOR_RELATIONS.key?(node.name)
-        return if RECORDING_CALLS.include?(node.name) && @recorded_a_declaration
+        # **`read_as_a_macro`, passed in, not an ivar read back.** This was
+        # `@recorded_a_declaration`, which is recomputed only in the
+        # receiverless branch above and is therefore sticky across every
+        # call that has a receiver:
+        #
+        #   class Sticky
+        #     attr_reader :first                    # sets the flag
+        #     self.delegate(*NAMES, to: :inner)     # receiver, so no reset
+        #   end
+        #
+        # `delegate` is on this list, the stale flag said a declaration had
+        # been recorded, and the surface stayed closed over a call whose
+        # splat this parser cannot read -- so every method it defines was
+        # reported missing. The call-local value is false for anything
+        # with a receiver, which is the answer this exemption wants: it is
+        # about a macro *this call* recorded, not about an earlier one.
+        # Found by cold review, one reader over from `024.327`'s own.
+        return if RECORDING_CALLS.include?(node.name) && read_as_a_macro
 
         kind = open_surface_kind(node)
         return if kind.nil?
@@ -2827,6 +2931,12 @@ module Ovallsp
       # `user.name = x`) is included the same as any other call; whether
       # that's a meaningful "reference" for Find References is a call-site
       # policy decision, not something worth filtering out here.
+      def record_macro_call_range(node)
+        return unless node.message_loc
+
+        @macro_call_ranges << Index::SourceLocation.to_range(node.message_loc, @lines)
+      end
+
       def record_method_call_candidate(node)
         return unless node.message_loc
 

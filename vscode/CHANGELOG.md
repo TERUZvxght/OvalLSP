@@ -13,6 +13,9 @@ the disproved approaches are kept below it under **Details**.
 > forty-four are a queue rather than a scope. Rewrite this section as work
 > lands — `bump` refuses until it is what shipped.
 
+- **A macro this parser reads is no longer reported as a method that does not exist** `024.327`
+- **A call guarded by `respond_to?` is no longer reported** `024.328`
+- **A `self.included` hook that includes, `class_eval`s or extends is read** `024.329`
 - **A reopened core class looks closed, in both directions** `024.13`
 - **The unassigned-`@ivar` check cannot enumerate what it needs to** `024.18`
 - **The argument-type check judges against a class the receiver is not** `024.19`

@@ -17281,6 +17281,26 @@ target: 0.4.0
 ---
 
 
+## 024.329 A self.included hook doing anything but base.extend(Const) is read as nothing
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/parser_service.rb
+
+- found by: core/lib/ovallsp/parser_service.rb, core/lib/ovallsp/semantic/hierarchy_index.rb
+- Three shapes measured false on ruby 3.4.10: base.include(M), base.class_eval { def x; end }, and base.extend(M) where M is not the concern's own ClassMethods (the recorded hook target was discarded and '#{module}::ClassMethods' synthesised in its place). Ruby says all three methods exist; the check reported all three. A fourth shape -- self.extended's hook calling base.include -- Ruby says false and the report on it is correct.
+
+**Direction:** wrong-report
+
+---
+
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

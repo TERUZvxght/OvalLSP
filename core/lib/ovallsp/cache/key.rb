@@ -59,6 +59,13 @@ module Ovallsp
       # into a shape with one member fewer, which is what this number
       # exists to refuse.
       #
+      # 8: `FileSummary` gained `macro_call_ranges` in 0.4.0 -- where a
+      # recognised class-body macro was written, so the undefined-method
+      # check stops reporting the macro's own call without any other
+      # feature losing the candidate (`024.327`). A cache written under 7
+      # unmarshals into a shape with one member fewer, which is what this
+      # number exists to refuse.
+      #
       # **Not a bump, and deliberately not numbered.** 0.3.0 also added
       # `singletonAncestors`, and 0.3.1 the visibility split, to what the
       # Agent reports; neither is a FileSummary shape and neither needs a
@@ -66,9 +73,9 @@ module Ovallsp
       # a change the constant is not about -- and it carries no number,
       # because every number above is a value the constant has actually
       # had. One numbered `7:` for a bump that did not happen invites the
-      # next real bump to take 8, and the list would then skip a value it
-      # is the record of.
-      SCHEMA_VERSION = 7
+      # next real bump to take the number, and the list would then skip a
+      # value it is the record of. The real bump to 8 is above.
+      SCHEMA_VERSION = 8
 
       module_function
 

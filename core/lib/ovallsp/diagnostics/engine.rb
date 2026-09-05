@@ -124,6 +124,12 @@ module Ovallsp
           next unless candidate.kind == :method_call
           next if resolved_locations[candidate.location]
           next if guarded.include?(candidate.name.to_s)
+          # The call this parser read as a macro, at the range it was
+          # written. A recognised `delegate`/`scope`/`enum` leaves the
+          # class's surface closed -- correctly, the parser read it -- and
+          # that is what exposed the macro's own call here (`024.327`).
+          # By range, so `delegate` stays reportable where it is not one.
+          next if summary.macro_call_ranges.include?(candidate.location)
           # A name Ruby gives every object that the signature set does
           # not declare on `::Object` (`024.91` shape D). Asked before
           # the receiver because everything inherits from `Object`.

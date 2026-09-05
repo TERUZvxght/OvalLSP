@@ -100,8 +100,10 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   #
   # Either the call is a macro this engine understands, in which case
   # reporting it is wrong, or it is not, in which case declaring `size`
-  # from it was. `@recorded_a_declaration` already holds which -- it is
-  # what `#record_open_surface` reads two lines below.
+  # from it was. What holds the answer is a *call-local* value, computed
+  # where the declarations are counted and passed to the two readers that
+  # want it -- see the two examples below, each of which is a defect the
+  # ivar form had and no example caught.
   #
   # The control is the same class with a name nothing recorded: a macro
   # the parser cannot read must still leave the surface open rather than
@@ -154,6 +156,77 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   it "still reports when the guard is about another object" do
     expect(unknown_methods("class W\n  def go(other)\n    return unless other.respond_to?(:maybe_there)\n    maybe_there\n  end\nend\n"))
       .to include(a_string_including("maybe_there"))
+  end
+
+  # **The candidate survives; only the report stops.** The first fix
+  # withheld the method-call candidate for any call that recorded a
+  # declaration, and `#record_attribute_methods` records them too -- so
+  # `attr_reader` lost the candidate that hover, go to definition,
+  # references and documentHighlight all read, and so did a `scope` or
+  # `delegate` in a workspace that defines one of its own. None of that
+  # was the defect. Marked by range instead, which stops the report and
+  # touches nothing else.
+  #
+  # Asserted on the summary rather than through a feature, because that is
+  # where the loss was: every one of the four reads this list.
+  it "keeps the method-call candidate for a macro it read" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///c.rb", version: 1, language_id: "ruby",
+      text: "class W\n  attr_reader :one\n  delegate :size, to: :inner\n  def inner; []; end\nend\n"
+    )
+    summary = Ovallsp::ParserService.new.summarize(document)
+    names = summary.reference_candidates.select { |c| c.kind == :method_call }.map(&:name)
+
+    expect(names).to include("attr_reader", "delegate")
+    expect(summary.macro_call_ranges.length).to eq(2)
+  end
+
+  # **The sticky-ivar defect, in the reader `024.327` itself added.** The
+  # flag was an ivar recomputed only in the receiverless branch, so a
+  # later call *with* a receiver read a stale `true` and had its candidate
+  # withheld. `W.new.definitely_absent` lost its report entirely, on a
+  # class the macro above had nothing to do with.
+  #
+  # **In one file**, because that is the whole of the defect: the visitor
+  # is per-document, so a fresh one starting with the flag unset hides it
+  # entirely. The first version of this example indexed the macro and then
+  # analysed the call as a separate document and passed under the sticky
+  # form, which is `024.109`'s shape and is why this file has mutations.
+  it "still reports a call with a receiver written after a macro" do
+    expect(unknown_methods("class W\n  delegate :size, to: :inner\n  def inner; []; end\nend\nW.new.definitely_absent\n"))
+      .to include("definitely_absent")
+  end
+
+  # **The same staleness, one reader over**, and this one predates
+  # `024.327`. `#record_open_surface` exempts a call on `RECORDING_CALLS`
+  # when a declaration was recorded, and read the same ivar:
+  #
+  #     class Sticky
+  #       attr_reader :first                  # sets the flag
+  #       self.delegate(*NAMES, to: :inner)   # receiver, so no reset
+  #     end
+  #
+  # The splat is exactly what this parser cannot read, so `delegate`
+  # declared nothing and the surface had to open. The stale flag said a
+  # declaration had been recorded and it stayed closed, so every method
+  # the macro defines was reported missing. Found by cold review.
+  #
+  # The control is the same file without the `attr_reader`: nothing sets
+  # the flag, the surface opens, and `x` is silent on both trees -- so the
+  # example that matters is this one, which is silent only with the fix.
+  it "opens the surface for an unreadable macro written after a readable one" do
+    source = "class Sticky\n  NAMES = %i[x y].freeze\n  attr_reader :first\n  def inner; []; end\n" \
+             "  self.delegate(*NAMES, to: :inner)\n  def go; x; end\nend\n"
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
+  # Its control: with the surface genuinely closed, the same call *is*
+  # reported. Without this, a change that opened every class's surface
+  # would pass the example above.
+  it "still reports the same call when no macro opened the surface" do
+    expect(unknown_methods("class Sticky\n  attr_reader :first\n  def go; x; end\nend\n"))
+      .to include("x")
   end
 
   it "does not report `include` or `extend` in a class body" do

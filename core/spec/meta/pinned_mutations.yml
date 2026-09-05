@@ -1303,12 +1303,60 @@
   to: "        occupant = Index::SymbolId.new(kind: :local_variable, owner: symbol_id.owner,\n"
   spec: spec/ovallsp/rename/planner_spec.rb
   example: "refuses an ivar renamed onto one already in use"
-- why: "A generated-method macro the parser read is not a candidate: without it, reading `delegate :size, to: :inner` closes the surface and the check then reports `delegate` itself on a class whose `size` it just declared."
+- why: "A generated-method macro the parser read is marked at its range: without the mark, reading `delegate :size, to: :inner` closes the surface and the check then reports `delegate` itself on a class whose `size` it just declared."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        record_method_call_candidate(node) unless read_as_a_macro\n"
-  to: "        record_method_call_candidate(node)\n"
+  from: "        record_macro_call_range(node) if read_as_a_macro\n"
+  to: ""
   spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
   example: "does not report a generated-method macro whose declarations it read"
+- why: "The mark stops the report and nothing else: withholding the candidate instead takes hover, definition, references and highlight off `attr_reader` and off a workspace's own `scope`/`delegate`."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        record_method_call_candidate(node)\n        record_macro_call_range(node) if read_as_a_macro\n"
+  to: "        record_method_call_candidate(node) unless read_as_a_macro\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "keeps the method-call candidate for a macro it read"
+- why: "`read_as_a_macro` is call-local: as an ivar recomputed only in the receiverless branch it went stale, and a later call with a receiver had its candidate withheld on a class the macro had nothing to do with."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "      def visit_call_node(node)\n        read_as_a_macro = false\n"
+  to: "      def visit_call_node(node)\n        read_as_a_macro = @sticky_read_as_a_macro\n      ensure\n        @sticky_read_as_a_macro = read_as_a_macro\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "still reports a call with a receiver written after a macro"
+- why: "`#record_open_surface` reads the same call-local value: the ivar it read before was stale after any call with a receiver, so `self.delegate(*NAMES, to: :inner)` written under an `attr_reader` left the surface closed over a macro this parser cannot read."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        return if RECORDING_CALLS.include?(node.name) && read_as_a_macro\n"
+  to: "        return if RECORDING_CALLS.include?(node.name)\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "opens the surface for an unreadable macro written after a readable one"
+- why: "An `included`/`prepended` hook doing anything this parser cannot model opens the module's instance surface: without it a class whose hook calls `base.include(M)` or `base.class_eval` looks fully enumerated and every method the hook gave it is reported."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), :instance]\n      end\n\n      def hook_parameter_reads"
+  to: "      end\n\n      def hook_parameter_reads"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "declines about a class whose hook includes another module"
+- why: "Every read of the hook parameter counts, not only the receiver of a call: `Registry.install(base)` hands the class to code this parser cannot follow, and counting receivers alone calls that hook fully modelled."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        reads = hook_parameter_reads(node.body, parameter)\n"
+  to: "        reads = modelled_hook_calls(node.body, parameter)\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "declines when the hook passes the class somewhere else"
+- why: "A concern's class methods come from the module its hook actually extends: synthesising `#{module}::ClassMethods` instead is right only when the extended module happens to be spelled that."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "        hooked = @concern_markers_by_owner.fetch(target, []).map do |fact|\n          @workspace_index.nested_type_name(fact.target, nesting: fact.nesting) || fact.target\n        end\n"
+  to: "        hooked = []\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "puts the extended module's methods on the including class"
+- why: "The hook's target is resolved with the hook's own nesting: a workspace-wide pick among every module nesting a `ClassMethods` gives one concern another's class methods."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "          @workspace_index.nested_type_name(fact.target, nesting: fact.nesting) || fact.target\n"
+  to: "          fact.target\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "resolves the hook's target within the module that wrote it"
+- why: "An `extend` the hook names and this workspace cannot resolve is unidentified, not absent: read as absent, a gem mixin's class methods are all reported missing."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "            next [AncestorEntry.unidentified(origin: :extend, location: nil)] if name && !kind_of(name)\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "records the unresolvable target as one entry with no name and no tail"
 - why: "A call guarded by a receiverless `respond_to?` is one the author has already said may not be there; without the exemption the check reports the idiom written to be safe about exactly what it reports."
   file: core/lib/ovallsp/diagnostics/engine.rb
   from: "          next if guarded.include?(candidate.name.to_s)\n"

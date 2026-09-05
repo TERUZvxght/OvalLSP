@@ -599,11 +599,57 @@ module Ovallsp
       # concern's class methods are on the class the same way.
       def concern_class_method_entries(canonical, visited)
         concern_targets(canonical, Set.new).flat_map do |target|
-          class_methods = "#{target}::ClassMethods"
-          next [] unless kind_of(class_methods)
+          concern_class_method_sources(target).flat_map do |name|
+            # An `extend` the hook *names* and this workspace cannot
+            # resolve is not "no class methods" -- the module is a gem's,
+            # and whatever it declares is on the class. Unidentified, so
+            # `#reason_to_decline` declines about the receiver rather than
+            # asserting a method set built without it.
+            #
+            # **The difference does not show through diagnostics**: read
+            # as identified, the name is one no signature set declares, so
+            # `#reason_to_decline` reaches `:ancestor_not_declared_anywhere`
+            # and declines by the other route. What it does show is the
+            # chain, which is where it is pinned -- an identified entry
+            # carrying the whole `Object, Kernel, BasicObject` tail claims
+            # a chain that was never built, and every later reader of
+            # `#ancestors` acts on that claim.
+            next [AncestorEntry.unidentified(origin: :extend, location: nil)] if name && !kind_of(name)
 
-          compute_ancestors_locked(class_methods, singleton: false, visited: visited, origin_for_self: :extend)
+            compute_ancestors_locked(name, singleton: false, visited: visited, origin_for_self: :extend)
+          end
         end
+      end
+
+      # **Where a concern's class methods actually come from.** Two
+      # spellings, and until now only one of them was read:
+      #
+      # - `extend ActiveSupport::Concern` names no module, and Concern's
+      #   own rule is the nested `ClassMethods`. That is the fallback, and
+      #   it is a guess about a name rather than a fact, so a missing
+      #   `ClassMethods` means "no class methods" and not "cannot tell".
+      # - `def self.included(base) = base.extend(X)` names `X`. The parser
+      #   has recorded that name since 0.2.11 and **nothing read it**:
+      #   `#{target}::ClassMethods` was synthesised instead, which is
+      #   right only when `X` happens to be spelled `ClassMethods`. A hook
+      #   extending anything else -- `base.extend(Helpers)` -- put no
+      #   class methods on the class at all, and every one of them was
+      #   reported missing (ruby 3.4.10 says `W3.respond_to?(:from_helpers)`
+      #   is `true`).
+      #
+      # Both, unioned, because a module may carry both markers and the
+      # union is the safe direction. `#nested_type_name` with the fact's
+      # own nesting, as `#ancestor_entries_for` does: `ClassMethods`
+      # written inside `module H1` means `H1::ClassMethods`, and a
+      # workspace-wide pick among every module that nests one is exactly
+      # the ambiguity `024.15` records.
+      def concern_class_method_sources(target)
+        hooked = @concern_markers_by_owner.fetch(target, []).map do |fact|
+          @workspace_index.nested_type_name(fact.target, nesting: fact.nesting) || fact.target
+        end
+
+        nested = "#{target}::ClassMethods"
+        hooked + (kind_of(nested) ? [nested] : [])
       end
 
       # Every concern this owner picks up, **transitively**. A concern

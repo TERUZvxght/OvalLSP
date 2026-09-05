@@ -13,6 +13,9 @@ OvalLSP VS Code拡張機能の注目すべき変更をすべて記録してい�
 > あることは `061` に記録しています。作業が入るたびに書き換えてください。`bump` は
 > 実際に出荷した内容になるまで拒否します。
 
+- **このパーサが読めたマクロを、存在しないメソッドとして報告しなくなりました** `024.327`
+- **`respond_to?` で守られた呼び出しを報告しなくなりました** `024.328`
+- **`self.included` フックの `include`/`class_eval`/`extend` を読むようになりました** `024.329`
 - **A reopened core class looks closed, in both directions** `024.13`
 - **The unassigned-`@ivar` check cannot enumerate what it needs to** `024.18`
 - **The argument-type check judges against a class the receiver is not** `024.19`
