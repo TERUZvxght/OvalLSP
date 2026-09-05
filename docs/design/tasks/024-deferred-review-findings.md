@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**320 entries below** <!-- measured: register-entries = 320 -->,
+**322 entries below** <!-- measured: register-entries = 322 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -496,6 +496,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.321`](#024321-a-stdlib-class-can-be-answered-about-but-not-judged-against-the-half-0-4-0-left) | open | 0.4.0 | A stdlib class can be answered about but not judged against — the ha… |
 | [`024.322`](#024322-the-server-never-passes-bundle-context-so-gem-rbs-is-never-loaded-while-the-cache-fingerprint-hashes-the-lockfile-that-decides-it) | open | 0.4.0 | The server never passes bundle_context, so gem RBS is never loaded -… |
 | [`024.323`](024-deferred-review-findings-resolved.md#024323-the-define-quick-fix-writes-a-file-that-does-not-parse-on-a-class-made-by-assignment) | fixed | 0.4.0 | The Define quick fix writes a file that does not parse, on a class m… |
+| [`024.324`](024-deferred-review-findings-resolved.md#024324-rename-accepts-a-ruby-keyword-as-a-method-s-new-name-and-the-rewritten-call-sites-do-not-parse) | fixed | 0.4.0 | Rename accepts a Ruby keyword as a method's new name, and the rewrit… |
+| [`024.325`](024-deferred-review-findings-resolved.md#024325-privacy-does-not-disclose-that-the-agent-forwards-the-user-s-own-application-output-to-the-log-channel) | fixed | 0.4.0 | PRIVACY does not disclose that the Agent forwards the user's own app… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | 1.0.0 | Feature parity roadmap, measured against Pylance |

@@ -124,6 +124,16 @@ own Bundler context) — it doesn't introduce any new network access or
 external data flow beyond what your own application already does when
 you run it yourself.
 
+**Your application's own output goes to the log channel.** The Agent
+boots your Rails application in a child process, and anything that
+application writes — Rails boot output, your own `puts`, a logger on
+standard output, anything a subprocess of it prints — is forwarded into
+the `OvalLSP: Show Logs` channel, prefixed with the Agent's process id.
+It stays on your machine like the rest of that channel and is never
+transmitted anywhere, but it is your application's output rather than
+OvalLSP's, so anything your application prints at boot is visible there.
+Closing and reopening the output channel clears it.
+
 ## Custom Core Server paths
 
 If you set `ovallsp.server.path` to point at a Core Server build outside

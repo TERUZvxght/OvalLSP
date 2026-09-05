@@ -275,12 +275,31 @@ module Ovallsp
         symbol_id.name.to_s.split("::").last
       end
 
+      # **The kinds a Ruby keyword breaks.** This was `:local_variable`
+      # alone, so `end`, `if` and `class` were accepted as a *method's*
+      # new name and the rewritten call sites did not parse.
+      #
+      # The definition survives -- `def end` is legal Ruby -- and the
+      # receiverless call does not, which is exactly what a rename
+      # produces, since it rewrites the declaration and every reference
+      # including the bare ones:
+      #
+      #   $ ruby -e 'begin; eval(%q{class Z; def if; 1; end; def go; if; end; end}); puts "legal"; rescue SyntaxError; puts "SyntaxError"; end'
+      #   # => SyntaxError
+      #   # ruby 3.4.10
+      #
+      # Constants, classes and modules are absent deliberately rather
+      # than forgotten: their patterns require a leading capital and
+      # every Ruby keyword is lower case, so no keyword can reach them.
+      # `@ivar` and `@@cvar` carry a sigil for the same reason.
+      KEYWORD_WOULD_BREAK = %i[local_variable instance_method singleton_method].freeze
+
       def valid_identifier?(kind, name)
         pattern = IDENTIFIER_PATTERNS[kind]
         return true unless pattern
         return false unless pattern.match?(name.to_s)
 
-        !(kind == :local_variable && reserved_word?(name.to_s))
+        !(KEYWORD_WOULD_BREAK.include?(kind) && reserved_word?(name.to_s))
       end
 
       # **Every Ruby keyword matched the local pattern**, so `end`,

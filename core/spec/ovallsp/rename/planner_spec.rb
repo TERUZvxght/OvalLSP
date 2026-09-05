@@ -67,6 +67,72 @@ RSpec.describe Ovallsp::Rename::Planner do
     end
   end
 
+  # **A Ruby keyword was accepted as a method's new name**, because
+  # `#valid_identifier?` applied `reserved_word?` only when the kind was
+  # `:local_variable`. The method patterns match every keyword, so
+  # `end`, `if`, `class` and `def` all passed.
+  #
+  # Where it breaks is the call site, not the definition. Taken from the
+  # interpreter rather than reasoned about:
+  #
+  #   $ ruby -e 'begin; eval(%q{class Z; def end; 1; end; def go; self.end; end; end}); puts "legal"; rescue SyntaxError; puts "SyntaxError"; end'
+  #   # => legal
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'begin; eval(%q{class Z; def if; 1; end; def go; if; end; end}); puts "legal"; rescue SyntaxError; puts "SyntaxError"; end'
+  #   # => SyntaxError
+  #   # ruby 3.4.10
+  #
+  # So `def end` is legal Ruby and a *receiverless* call to it is not --
+  # which is the shape a rename produces, since it rewrites the
+  # definition and every reference including the bare ones.
+  #
+  # Constants are already safe and not by accident: their pattern
+  # requires a leading capital, and every Ruby keyword is lower case.
+  describe "a Ruby keyword as the new name" do
+    it "refuses it for an instance method" do
+      index_source("class Widget\n  def value\n    1\n  end\n\n  def go\n    value\n  end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "value"),
+                          new_name: "if", generation: 1)
+
+      expect(plan.refused?).to be(true)
+      expect(plan.confirmed_edits).to eq([])
+    end
+
+    it "refuses it for a singleton method" do
+      index_source("class Widget\n  def self.value\n    1\n  end\nend\n")
+
+      plan = planner.plan(sym(kind: :singleton_method, owner: "::Widget", name: "value"),
+                          new_name: "end", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    # **The controls.** Without them, a planner that refused every method
+    # rename would pass both examples above.
+    it "still renames a method to an ordinary name" do
+      index_source("class Widget\n  def value\n    1\n  end\n\n  def go\n    value\n  end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "value"),
+                          new_name: "amount", generation: 1)
+
+      expect(plan.refused?).to be(false)
+      expect(plan.confirmed_edits).not_to be_empty
+    end
+
+    # A name that merely *contains* a keyword is ordinary, and refusing it
+    # would be the rule reaching too far.
+    it "still renames a method to a name a keyword is a prefix of" do
+      index_source("class Widget\n  def value\n    1\n  end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "value"),
+                          new_name: "ending", generation: 1)
+
+      expect(plan.refused?).to be(false)
+    end
+  end
+
   describe "constant rename" do
     it "renames the class declaration and every resolved reference" do
       index_source("class Widget\nend\n\nWidget.new\n")

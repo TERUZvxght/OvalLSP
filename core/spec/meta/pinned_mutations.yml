@@ -1279,3 +1279,9 @@
   to: "      return [] if false\n"
   spec: spec/ovallsp/server_code_action_spec.rb
   example: "offers no definition fix for a class made by assignment with a parent"
+- why: "A Ruby keyword as a method's new name: without the widened set, `end`/`if`/`class` are accepted and the rewritten receiverless call sites do not parse."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        !(KEYWORD_WOULD_BREAK.include?(kind) && reserved_word?(name.to_s))\n"
+  to: "        !(kind == :local_variable && reserved_word?(name.to_s))\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses it for an instance method"

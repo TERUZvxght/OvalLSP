@@ -17181,6 +17181,46 @@ target: 0.4.0
 ---
 
 
+## 024.324 Rename accepts a Ruby keyword as a method's new name, and the rewritten call sites do not parse
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/rename/planner.rb
+
+- found by: core/lib/ovallsp/rename/planner.rb#valid_identifier?
+- reserved_word? was applied only when kind == :local_variable. The instance_method and singleton_method patterns match every Ruby keyword, so 'end', 'if', 'class' and 'def' were accepted. The definition survives -- def end is legal Ruby -- and a receiverless call does not, which is what a rename produces because it rewrites the declaration and every reference including bare ones. Taken from the interpreter: eval('class Z; def if; 1; end; def go; if; end; end') raises SyntaxError on ruby 3.4.10, while the same with self.end is legal. Constants, classes and modules were never exposed: their patterns require a leading capital and every keyword is lower case. Fixed by naming the three kinds a keyword breaks.
+
+**Direction:** Fixed in 0.4.0 by naming the kinds a keyword breaks rather than the one kind that was guarded. What the fix does not settle is the wider shape the hunt found beside it: rename also accepts a name already bound in an enclosing scope, a name a method in the same scope answers to receiverlessly, and a name an ancestor already defines -- each silently changes what the program does without breaking its syntax, so none is caught by a parse check. Those want one refusal rule that asks what the new name already means at each edit site, not four.
+
+---
+
+
+## 024.325 PRIVACY does not disclose that the Agent forwards the user's own application output to the log channel
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** vscode/PRIVACY.md
+
+- found by: vscode/PRIVACY.md and .ja.md, against core/lib/ovallsp/agent_process_manager.rb#log_stderr
+- runtime_agent/boot.rb reopens STDOUT onto STDERR so the protocol pipe on fd 1 stays clean -- correct and deliberate -- and agent_process_manager.rb#log_stderr forwards every line of the agent's stderr into the output channel. Between them the channel carries the workspace application's own output: Rails boot output, the user's puts, a logger on stdout, anything a subprocess writes to the inherited fd. PRIVACY.md described that channel as holding OvalLSP's own diagnostics and its Runtime Agent section disclosed nothing about it, while making exactly this disclosure for the observation feature. Nothing leaves the machine; what was wrong was the document. Disclosed in both languages in 0.4.0.
+
+**Direction:** Disclosed in 0.4.0. The behaviour is deliberate and stays; what changed is that the document says so. If the volume ever becomes a complaint, the fix is a level filter on the forwarded lines rather than dropping them -- the agent's own stderr is how a failed boot is diagnosed.
+
+---
+
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml
