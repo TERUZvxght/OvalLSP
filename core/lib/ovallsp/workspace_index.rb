@@ -675,7 +675,13 @@ module Ovallsp
     def promote_source_locked(summary)
       @summaries[summary.uri] = summary
       @generation += 1
-      @type_resolution_memo.clear
+      # **No memo clear here, and that is not an omission.** The memo
+      # reads `@by_simple_name` and nothing else; this method writes
+      # `@summaries` and nothing else, and only for a summary whose
+      # declarations are byte-identical to the one already indexed. A
+      # clear was written here with the memo and no test could fail on
+      # it either way, which this repository calls a defect whichever
+      # direction it errs in. Found by cold review.
       true
     end
 
@@ -836,10 +842,18 @@ module Ovallsp
     # that one file resolves the *same handful of names* over and over.
     # Measured on `net/http.rb` before writing this.
     #
-    # Keyed by the written name, cleared by every mutation that bumps
-    # `@generation`, and read only under `@mutex` like everything else
-    # here, so a reader cannot see an answer from a shape that has since
-    # changed.
+    # Keyed by the written name, and read only under `@mutex` like
+    # everything else here, so a reader cannot see an answer from a shape
+    # that has since changed.
+    #
+    # **Cleared by every writer of the one input it reads**, which is
+    # `@by_simple_name` -- `#replace_file` and `#remove_file_locked`, and
+    # nothing else. Not "every mutation that bumps `@generation`", which
+    # is what this said until a cold review pointed out that
+    # `#promote_source_locked` bumps the generation, writes nothing this
+    # memo reads, and cleared anyway: a line no example could fail on in
+    # either direction. The input is the thing to enumerate, not the
+    # counter.
     def resolve_type_symbol_locked(name)
       key = name.to_s
       return @type_resolution_memo[key] if @type_resolution_memo.key?(key)

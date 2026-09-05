@@ -238,6 +238,39 @@ RSpec.describe Ovallsp::Semantic::HierarchyIndex do
       expect(index.ancestors("Widget").map(&:name_or_nil)).not_to include("ActiveRecord::Relation")
     end
 
+    # **The gem index is an input too, and swapping it bumps nothing.**
+    # `HierarchyIndex#gem_index=` clears the memo for that reason -- the
+    # Runtime Agent installs its index after construction, and a chain
+    # computed before that reaches a name the gem index would have
+    # answered for. The clear was written with the memo and pinned by
+    # nothing: reverting it left every example in this file and in
+    # `workspace_index_spec` green, because no spec swapped a gem index
+    # after construction. Found by cold review.
+    it "reflects a gem index installed after a chain was computed" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      # A signature environment is required for the gem index to be
+      # consulted at all: `#free_for_a_gem_to_claim?` returns false
+      # without one, so a fixture that omits it never reaches the input
+      # this example is about.
+      signatures = instance_double(Ovallsp::Signatures::Environment)
+      allow(signatures).to receive(:declares?).and_return(false)
+      index = described_class.new(workspace_index: workspace, signatures: signatures)
+      summary = summarize("class Widget < Relation\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to eq(["::Widget", "Relation"])
+
+      index.gem_index = Ovallsp::Semantic::GemIndex.from_agent(
+        { gems: { "ar-1.0.0": { classes: [
+          { name: "ActiveRecord::Relation",
+            ancestors: %w[ActiveRecord::Relation Object Kernel BasicObject],
+            instanceMethods: %w[to_a], singletonMethods: [], definesMethodMissing: false }
+        ] } } }
+      )
+
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to include("ActiveRecord::Relation")
+    end
+
     it "reflects the file being removed entirely" do
       workspace = Ovallsp::WorkspaceIndex.new
       index = described_class.new(workspace_index: workspace)

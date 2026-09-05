@@ -1526,3 +1526,10 @@
   to: "       summary&.ancestor_facts&.map { |fact| [fact.owner, fact.relation, fact.target] }&.to_set,\n"
   spec: spec/ovallsp/server_dependent_refresh_spec.rb
   example: "does not republish every open file for an unrelated watched change"
+
+- why: "The gem index is an input to a chain and swapping it bumps no generation: without the clear, a chain computed before the Runtime Agent installed its index keeps an answer the gem index would have changed."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "          @gem_index = index\n          @ancestors_memo.clear\n"
+  to: "          @gem_index = index\n"
+  spec: spec/ovallsp/semantic/hierarchy_index_spec.rb
+  example: "reflects a gem index installed after a chain was computed"

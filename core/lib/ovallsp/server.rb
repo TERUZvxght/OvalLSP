@@ -335,7 +335,7 @@ module Ovallsp
       # which collaborator was asked. The reload path below already
       # calls `#load` on the environment in place for exactly this
       # reason; this is the same call at the other site.
-      load_signatures_into(@signatures)
+      reload_signatures
     end
 
     def client_workspace_root(params)
@@ -1867,6 +1867,37 @@ module Ovallsp
     rescue StandardError => e
       @logger.error("failed to load RBS signatures: #{e.class}: #{e.message}")
       env
+    end
+
+    # **Reloading the environment and invalidating what read it are one
+    # act, and they were written twice.** `Environment#load` mutates in
+    # place, so nothing is assigned and neither index notices; the
+    # watched-files path knew that and cleared both the method summaries
+    # and the ancestor memo, and `#adopt_client_workspace_root` -- the
+    # other in-place reload -- cleared neither. That is `024.173`'s shape:
+    # one reader taught, its sibling not, and it is how the ancestor memo
+    # came to survive a signature reload in the first place.
+    #
+    # Through a conforming client the adoption site could not produce a
+    # wrong answer -- at `initialize` the memo and the gem index are both
+    # empty, and `gem_index=` clears when the Agent's index arrives -- so
+    # this is a census gap closed rather than a defect measured. Found by
+    # cold review. The caller holds `@index_mutation_mutex` where it has
+    # one; the adoption runs before any other thread exists.
+    #
+    # **No mutation names the adoption site, and that is the point.** No
+    # example can fail on it, because no answer it could spoil exists yet
+    # at that moment -- so a pin there would be a claim this method cannot
+    # make. What is pinned is `#signatures_reloaded` itself, through the
+    # watched-files reload, which reaches it by this same method. The
+    # value here is that there is one of these rather than two.
+    def reload_signatures
+      load_signatures_into(@signatures)
+      @method_summary_store.clear
+      # The signature environment is the third input to an ancestor
+      # chain, through `#canonical_name`'s `declares?` -- and the only
+      # one that changes without either index being written to.
+      @hierarchy_index.signatures_reloaded
     end
 
     # Starts the Runtime Agent on a background thread — never the request
@@ -4060,14 +4091,7 @@ module Ovallsp
       # from the pre-reload environment and store it *after* the clear,
       # leaving a stale entry that nothing else invalidates.
       if needs_signature_reload
-        @index_mutation_mutex.synchronize do
-          @signatures.load(workspace_root: @workspace_root)
-          @method_summary_store.clear
-          # The signature environment is the third input to an ancestor
-          # chain, through `#canonical_name`'s `declares?` -- and the only
-          # one that changes without either index being written to.
-          @hierarchy_index.signatures_reloaded
-        end
+        @index_mutation_mutex.synchronize { reload_signatures }
         # **And then ask for the answers to be said again** (`024.344`).
         # The environment and the summary cache were both updated and
         # nothing published: editing `sig/typed.rbs` from `(Integer)` to

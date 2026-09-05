@@ -124,8 +124,16 @@ because a number is a claim that the thing exists.
   - found by: core/lib/ovallsp/server.rb
   - 024.344 compares declarations, ancestor facts and alias facts. A body edit -- def make = Helper.new becoming Other.new -- changes the caller's inferred receiver type while all three stay identical, so the caller keeps its old diagnostics until its own next edit. Demonstrated by cold review of 46c0cd6 with a forced re-analysis showing the report the whole time. Including body text in the comparison would queue every open file on every keystroke inside any method, which is the cost the same review measured as a regression; a body-level dependency needs the reference index rather than a summary comparison.
   - unverified: not yet driven against the tree
+- **Three comments cite a plugin declaration path that does not exist**
+  - found by: core/lib/ovallsp/workspace_index.rb, core/lib/ovallsp/index/symbol_id.rb
+  - workspace_index.rb around lines 993 and 1018 and symbol_id.rb:113 reason about Server#plugin_declaration / #apply_plugin_context and a plugin:// uri; grep plugin core/lib finds comments only. A reader following them looks for code that is not there. Noticed in passing by the memo-staleness cold review of f7bb22e.
+  - unverified: not yet driven against the tree
+- **HierarchyIndex#aliases reads @gem_index and @signatures outside its own mutex**
+  - found by: core/lib/ovallsp/semantic/hierarchy_index.rb
+  - #aliases calls canonical_name before entering @mutex.synchronize, and canonical_name reads @gem_index and @signatures. Every other reader of those takes the mutex first. Pre-existing and adjacent to the memo work rather than caused by it; no wrong answer demonstrated. Noticed by the memo-staleness cold review of f7bb22e, which otherwise found the memos strictly mutex-disciplined with no lock-order cycle.
+  - unverified: not yet driven against the tree
 
-**Eight items above; the rest was emptied deliberately.** The twenty-one items that had
+**Ten items above; the rest was emptied deliberately.** The twenty-one items that had
 accumulated by 0.3.1 were driven and dispositioned in one pass:
 fourteen became `024.306` through `024.319`, and seven left without a
 number. The seven, and why:
