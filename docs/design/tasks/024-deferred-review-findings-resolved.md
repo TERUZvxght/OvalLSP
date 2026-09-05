@@ -17221,6 +17221,26 @@ target: 0.4.0
 ---
 
 
+## 024.326 Rename changes what the program answers in four ways, none of which breaks its syntax
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/rename/planner.rb
+
+- found by: core/lib/ovallsp/rename/planner.rb#conflicts_for, #binding_conflicts, #method_conflicts
+- The conflict check asked what the new name means in one place -- the target's own scope frame, or the method's own owner -- and the name could already mean something in a neighbouring one. Four shapes, each driven, each printed before and after on ruby 3.4.10: a local renamed onto a name a nested block binds (3 -> 0); a local renamed onto a method called receiverlessly in the same scope (99 -> 0); a method renamed onto a name its superclass declares (['base','own'] -> 'own'); an @ivar renamed onto one already in use (3 -> 4). All four left a file that parses, so no parse check saw them. Fixed as one question -- does the new name already mean something here -- asked per kind: the whole file for a local (scope ids carry no nesting, so the choice is the file or the frame, and the frame is what let this through), the ancestor chain for a method, the same owner for an ivar or cvar.
+
+**Direction:** Fixed in 0.4.0. What is deliberately not solved is precision on the local half: a scope id is counted per file and carries no nesting, so 'encloses or is enclosed by' is not computable from what the index holds, and the refusal is file-wide. That costs a rename onto a name an unrelated method of the same file uses. Narrowing it means recording scope nesting in the reference index, which is a change to what every reference carries.
+
+---
+
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

@@ -135,7 +135,8 @@ module Ovallsp
       )
       @diagnostics_engine = Diagnostics::Engine.new
       @diagnostics_mode = :safe
-      @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index)
+      @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index,
+                                            hierarchy_index: @hierarchy_index)
       @observation_runner = Observation::Runner.new(logger: @logger)
       @observation_test_command = nil
       @cold_indexing = false

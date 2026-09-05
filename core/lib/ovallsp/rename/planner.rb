@@ -33,9 +33,13 @@ module Ovallsp
         constant: /\A[A-Z][a-zA-Z0-9_]*\z/
       }.freeze
 
-      def initialize(workspace_index:, reference_index:)
+      def initialize(workspace_index:, reference_index:, hierarchy_index: nil)
         @workspace_index = workspace_index
         @reference_index = reference_index
+        # Optional so a caller that only plans constant or binding renames
+        # need not assemble one; `nil` keeps the owner-only answer, which
+        # is what shipped before `024.326`.
+        @hierarchy_index = hierarchy_index
       end
 
       # LSP `textDocument/prepareRename`'s answer: is this symbol
@@ -332,20 +336,36 @@ module Ovallsp
       end
 
       # Constant/class/module: does a type by the renamed fully-qualified
-      # name already exist? Method: does the owner already declare a
-      # method by that name? Everything else (local variables, ivars,
-      # cvars) has no cross-symbol collision to check -- a local's own
-      # scope id already keeps it from ever being confused with another
-      # scope's same-named local (Task 014), and Ruby itself allows
-      # redefining/reassigning an ivar/cvar freely.
+      # name already exist? Method: does the owner, or anything it
+      # inherits from, already declare a method by that name? A binding
+      # -- local, `@ivar` or `@@cvar` -- is asked whether the new name is
+      # already written on the same owner.
+      #
+      # **The `else` branch used to take ivars and cvars**, on the
+      # reasoning that "Ruby itself allows reassigning an ivar freely".
+      # It does, and that is not the question a rename asks: merging two
+      # variables into one is legal Ruby that answers differently.
+      #
+      #   $ ruby -e 'class W; def go; @a=1; @b=2; @a+@b; end; end; p W.new.go'
+      #   # => 3
+      #   # ruby 3.4.10
+      #
+      #   $ ruby -e 'class W; def go; @b=1; @b=2; @b+@b; end; end; p W.new.go'
+      #   # => 4
+      #   # ruby 3.4.10
+      #
+      # The same paragraph also said locals have no collision to check
+      # while the code beneath it sent them to a collision check, which
+      # is how the ivar half went un-revisited when 0.3.0 corrected the
+      # local one.
       def conflicts_for(symbol_id, new_name)
         case symbol_id.kind
         when :class, :module, :constant
           constant_conflicts(symbol_id, new_name)
         when :instance_method, :singleton_method
           method_conflicts(symbol_id, new_name)
-        when :local_variable
-          local_conflicts(symbol_id, new_name)
+        when :local_variable, :ivar, :cvar
+          binding_conflicts(symbol_id, new_name)
         else
           []
         end
@@ -370,12 +390,80 @@ module Ovallsp
       # which is the whole check. Reachable in 0.3.0 because recording a
       # parameter's own binding site is what makes rename rewrite the
       # declaration.
-      def local_conflicts(symbol_id, new_name)
-        occupant = Index::SymbolId.new(kind: :local_variable, owner: symbol_id.owner,
+      # `kind: symbol_id.kind`, not a hard-coded `:local_variable`: the
+      # same question is the right one for an `@ivar` and a `@@cvar`, and
+      # asking it under the wrong kind found nothing.
+      def binding_conflicts(symbol_id, new_name)
+        occupant = Index::SymbolId.new(kind: symbol_id.kind, owner: symbol_id.owner,
                                         name: new_name, discriminator: nil)
-        return [] unless @reference_index.references(occupant, minimum_confidence: :high).any?(&:write)
+        return same_scope_conflict(new_name) if @reference_index.references(occupant, minimum_confidence: :high).any?(&:write)
+        return [] unless symbol_id.kind == :local_variable
 
+        elsewhere_in_file(symbol_id, new_name)
+      end
+
+      def same_scope_conflict(new_name)
         [{ reason: "`#{new_name}` is already bound in this scope -- renaming onto it would capture it" }]
+      end
+
+      # **A local is captured by a binding in a scope it does not own.**
+      # `symbol_id.owner` carries the scope id, so the check above sees
+      # only the target's own frame -- and a block parameter in a nested
+      # scope the target is still visible in captures it, with the file
+      # still parsing:
+      #
+      #   $ ruby -e 'def go; total=0; [1,2].each { |x| total += x }; total; end; p go'
+      #   # => 3
+      #   # ruby 3.4.10
+      #
+      #   $ ruby -e 'def go; x=0; [1,2].each { |x| x += x }; x; end; p go'
+      #   # => 0
+      #   # ruby 3.4.10
+      #
+      # A receiverless call to a method of the same name is the same
+      # shape from the other side -- the call becomes a read of the local:
+      #
+      #   $ ruby -e 'class W; def helper; 99; end; def go; total=0; total+helper; end; end; p W.new.go'
+      #   # => 99
+      #   # ruby 3.4.10
+      #
+      #   $ ruby -e 'class W; def helper; 99; end; def go; helper=0; helper+helper; end; end; p W.new.go'
+      #   # => 0
+      #   # ruby 3.4.10
+      #
+      # **Scoped to the file, and deliberately not narrower.** Whether one
+      # scope encloses another is not answerable from a scope id -- they
+      # are counted per file and carry no nesting -- so the choice is the
+      # file or the frame, and the frame is what let all of this through.
+      # The cost is refusing a rename onto a name used in an unrelated
+      # method of the same file, which is a name the reader of that file
+      # is using for something else anyway.
+      def elsewhere_in_file(symbol_id, new_name)
+        # `SymbolId#initialize` qualifies every owner, so the recorded
+        # value is `::<uri>\0<owner>#<scope>` and the leading `::` comes
+        # off before the uri is readable.
+        uri = symbol_id.owner.to_s.delete_prefix("::").split("\u0000", 2).first
+        return [] if uri.to_s.empty?
+
+        occupied = @reference_index.references_in(uri, minimum_confidence: :high).any? do |reference|
+          binds_or_calls?(reference, new_name)
+        end
+        return [] unless occupied
+
+        [{ reason: "`#{new_name}` already means something in this file -- renaming onto it would change what the code does" }]
+      end
+
+      # A binding written elsewhere, or a method the file calls without a
+      # receiver. Both are names a local of that name would shadow.
+      def binds_or_calls?(reference, new_name)
+        symbol_id = reference.symbol_id
+        return false unless symbol_id
+
+        case symbol_id.kind
+        when :local_variable then reference.write && symbol_id.name.to_s == new_name
+        when :instance_method, :singleton_method then symbol_id.name.to_s == new_name
+        else false
+        end
       end
 
       def constant_conflicts(symbol_id, new_name)
@@ -386,12 +474,47 @@ module Ovallsp
         [{ reason: "a type named `#{candidate_full_name}` already exists" }]
       end
 
+      # **The owner is not the whole answer.** This asked only whether the
+      # renamed method's own class declares the new name, so a name an
+      # ancestor declares was invisible and the rename silently began
+      # overriding it:
+      #
+      #   $ ruby -e 'class B; def shared; "base"; end; end; class C < B; def own; "own"; end; end; p [C.new.shared, C.new.own]'
+      #   # => ["base", "own"]
+      #   # ruby 3.4.10
+      #
+      #   $ ruby -e 'class B; def shared; "base"; end; end; class C < B; def shared; "own"; end; end; p C.new.shared'
+      #   # => "own"
+      #   # ruby 3.4.10
+      #
+      # The chain is walked rather than the superclass alone, so an
+      # included module counts too. An unidentified entry is skipped for
+      # the reason `024.80` gives: there is no owner to look a
+      # declaration up under, and a miss computed from a chain with a
+      # hole in it is not evidence of anything.
       def method_conflicts(symbol_id, new_name)
-        existing = @workspace_index.method_symbol_ids(symbol_id.owner, kind: symbol_id.kind)
-                                    .any? { |sid| sid.name == new_name }
-        return [] unless existing
+        owners = [symbol_id.owner] + inherited_owners(symbol_id.owner)
+        owner = owners.uniq.find do |candidate|
+          @workspace_index.method_symbol_ids(candidate, kind: symbol_id.kind).any? { |sid| sid.name == new_name }
+        end
+        return [] unless owner
 
-        [{ reason: "`#{symbol_id.owner}##{new_name}` is already declared" }]
+        return [{ reason: "`#{owner}##{new_name}` is already declared" }] if owner == symbol_id.owner
+
+        [{ reason: "`#{new_name}` is already declared by `#{owner}`, which `#{symbol_id.owner}` inherits from -- " \
+                   "renaming onto it would override it" }]
+      end
+
+      # `[]` without a hierarchy index, which is the owner-only answer
+      # this had before. `Object`, `Kernel` and `BasicObject` are left in:
+      # a workspace method named after one of theirs really would override
+      # it, which is the thing being refused.
+      def inherited_owners(owner)
+        return [] unless @hierarchy_index && owner
+
+        @hierarchy_index.ancestors(owner).select(&:identified?).map(&:name).reject { |name| name == owner }
+      rescue StandardError
+        []
       end
     end
   end

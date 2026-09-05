@@ -1285,3 +1285,21 @@
   to: "        !(kind == :local_variable && reserved_word?(name.to_s))\n"
   spec: spec/ovallsp/rename/planner_spec.rb
   example: "refuses it for an instance method"
+- why: "A local renamed onto a name the same file already binds or calls: without the file-wide look, a nested block parameter captures it and a receiverless call becomes a read of the local, both with the file still parsing."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        elsewhere_in_file(symbol_id, new_name)\n"
+  to: "        []\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses a local renamed onto a name a nested block binds"
+- why: "A method renamed onto a name an ancestor declares: without the chain walk the rename silently begins overriding it, and the owner-only check sees nothing."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        owners = [symbol_id.owner] + inherited_owners(symbol_id.owner)\n"
+  to: "        owners = [symbol_id.owner]\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses a method renamed onto a name its superclass declares"
+- why: "An @ivar renamed onto one already in use merges two variables into one; asking under :local_variable found nothing."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        occupant = Index::SymbolId.new(kind: symbol_id.kind, owner: symbol_id.owner,\n"
+  to: "        occupant = Index::SymbolId.new(kind: :local_variable, owner: symbol_id.owner,\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses an ivar renamed onto one already in use"

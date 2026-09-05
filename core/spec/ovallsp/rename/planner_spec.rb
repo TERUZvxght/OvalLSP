@@ -16,7 +16,10 @@ RSpec.describe Ovallsp::Rename::Planner do
     )
   end
 
-  subject(:planner) { described_class.new(workspace_index: workspace_index, reference_index: reference_index) }
+  subject(:planner) do
+    described_class.new(workspace_index: workspace_index, reference_index: reference_index,
+                        hierarchy_index: hierarchy_index)
+  end
 
   def index_source(text, uri: "file:///a.rb")
     document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
@@ -128,6 +131,118 @@ RSpec.describe Ovallsp::Rename::Planner do
 
       plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "value"),
                           new_name: "ending", generation: 1)
+
+      expect(plan.refused?).to be(false)
+    end
+  end
+
+  # **Four ways a rename changed what the program answers**, none of
+  # which breaks its syntax, so no parse check sees them. Each pair below
+  # is what Ruby prints before and after the rename this planner offered:
+  #
+  #   $ ruby -e 'def go; total=0; [1,2].each { |x| total += x }; total; end; p go'
+  #   # => 3
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'def go; x=0; [1,2].each { |x| x += x }; x; end; p go'
+  #   # => 0
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class W; def helper; 99; end; def go; total=0; total+helper; end; end; p W.new.go'
+  #   # => 99
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class W; def helper; 99; end; def go; helper=0; helper+helper; end; end; p W.new.go'
+  #   # => 0
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class B; def shared; "base"; end; end; class C < B; def own; "own"; end; end; p [C.new.shared, C.new.own]'
+  #   # => ["base", "own"]
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class B; def shared; "base"; end; end; class C < B; def shared; "own"; end; end; p C.new.shared'
+  #   # => "own"
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class W; def go; @a=1; @b=2; @a+@b; end; end; p W.new.go'
+  #   # => 3
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class W; def go; @b=1; @b=2; @b+@b; end; end; p W.new.go'
+  #   # => 4
+  #   # ruby 3.4.10
+  #
+  # The shape they share is that the conflict check asks what the new
+  # name means in *one* place -- the target's own scope frame, or the
+  # method's own owner -- and the name can already mean something in a
+  # neighbouring one.
+  describe "a new name that already means something" do
+    def local_target(source, name)
+      document = index_source(source)
+      summary = Ovallsp::ParserService.new.summarize(document)
+      candidate = summary.reference_candidates.find { |c| c.name.to_s == name }
+      reference_resolver.resolve(document, [candidate], uri: "file:///a.rb", generation: 1).first.symbol_id
+    end
+
+    it "refuses a local renamed onto a name a nested block binds" do
+      target = local_target("def go\n  total = 0\n  [1].each { |x| total += x }\n  total\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "x", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    it "refuses a local renamed onto a method called receiverlessly in the same scope" do
+      target = local_target("class W\n  def helper; 1; end\n  def go\n    total = 0\n    total + helper\n  end\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "helper", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    it "refuses a method renamed onto a name its superclass declares" do
+      index_source("class Base\n  def shared; 1; end\nend\nclass Child < Base\n  def own; 2; end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Child", name: "own"),
+                          new_name: "shared", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    it "refuses an ivar renamed onto one already in use" do
+      target = local_target("class W\n  def go\n    @a = 1\n    @b = 2\n    @a + @b\n  end\nend\n", "@a")
+
+      plan = planner.plan(target, new_name: "@b", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    # **The controls**, and they carry the whole risk of this change:
+    # rename that refuses too readily is its own defect, and `024.28` is
+    # already a live complaint about one refusal. Each of these is a
+    # rename a user legitimately wants.
+    it "still renames a local to a name nothing else uses" do
+      target = local_target("def go\n  total = 0\n  [1].each { |x| total += x }\n  total\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "running_sum", generation: 1)
+
+      expect(plan.refused?).to be(false)
+      expect(plan.confirmed_edits).not_to be_empty
+    end
+
+    it "still renames a method to a name no ancestor declares" do
+      index_source("class Base\n  def shared; 1; end\nend\nclass Child < Base\n  def own; 2; end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Child", name: "own"),
+                          new_name: "mine", generation: 1)
+
+      expect(plan.refused?).to be(false)
+    end
+
+    it "still renames an ivar to one nothing else uses" do
+      target = local_target("class W\n  def go\n    @a = 1\n    @b = 2\n    @a + @b\n  end\nend\n", "@a")
+
+      plan = planner.plan(target, new_name: "@count", generation: 1)
 
       expect(plan.refused?).to be(false)
     end
