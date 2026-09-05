@@ -14,11 +14,11 @@ RSpec.describe Ovallsp::WorkspaceDiagnostics do
 
   def build(root, max_files: described_class::DEFAULT_MAX_FILES, analyze: nil)
     described_class.new(
-      analyze: analyze || ->(document) { analyzed << document.uri; [] },
+      analyze: analyze || ->(document) { analyzed << document.uri; [[], 1] },
       # The document is what the pass analysed, handed to the funnel
       # rather than discarded (037's C3) -- recorded here so an example
       # can assert the answer and the text it came from travel together.
-      publish: ->(uri, findings, document: nil) { published << [uri, findings, document] },
+      publish: ->(uri, findings, document: nil, generation: nil) { published << [uri, findings, document, generation] },
       open_in_buffer: ->(uri) { open_uris.include?(uri) },
       logger: logger, max_files: max_files
     )
@@ -52,7 +52,7 @@ end
       pass = build(root)
       pass.run([uri], pass.begin_pass)
 
-      document = published.first.last
+      document = published.first[2]
       expect(document.text).to eq("class OnlyThisText\nend\n")
       expect(document.uri).to eq(uri)
       # Nil, which is what makes the funnel read it as a disk answer that
@@ -95,7 +95,7 @@ end
       uris = write_files(root, 1)
       pass = build(root, analyze: lambda do |document|
         open_uris << document.uri
-        []
+        [[], 1]
       end)
 
       pass.run(uris, pass.begin_pass)
@@ -129,7 +129,7 @@ end
       pass = nil
       pass = build(root, analyze: lambda do |document|
         pass.begin_pass if document.uri == uris[1]
-        []
+        [[], 1]
       end)
 
       outcome = pass.run(uris, pass.begin_pass)
@@ -205,7 +205,7 @@ end
       pass = build(root, analyze: lambda do |document|
         raise "boom" if document.uri == uris[0]
 
-        []
+        [[], 1]
       end)
 
       outcome = pass.run(uris, pass.begin_pass)
@@ -242,7 +242,7 @@ end
       File.write(path, "<p><%= @user %></p>\n")
       uri = Ovallsp::UriUtil.from_path(path)
       language_ids = []
-      pass = build(root, analyze: ->(document) { language_ids << document.language_id; [] })
+      pass = build(root, analyze: ->(document) { language_ids << document.language_id; [[], 1] })
 
       pass.run([uri], pass.begin_pass)
 

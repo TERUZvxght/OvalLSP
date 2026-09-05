@@ -275,7 +275,16 @@ module Ovallsp
       # modes (a mounted share, a Windows volume) is still a working
       # cache, and refusing to run there would trade a real feature for a
       # protection that filesystem cannot offer anyway.
+      # **A chmod through a symlink changes the target's mode.** The tree
+      # walk below is bounded by the cache, so a link inside it was a way
+      # to reach a file outside it and tighten *that* -- the same escape
+      # as the removal above, in the operation beside it. `File.chmod`
+      # follows links and `File.lchmod` is not portable, so the link is
+      # skipped: its own mode is not what protects the cache, and what it
+      # points at is not the cache's to change.
       def self.tighten(path, mode = 0o700)
+        return if File.symlink?(path)
+
         File.chmod(mode, path)
       rescue StandardError
         nil
@@ -412,8 +421,48 @@ module Ovallsp
       # Strict containment: `root` itself is never removable, and a sibling
       # whose name merely starts with the root's (`/a/bc` against `/a/b`)
       # is not inside it.
+      #
+      # **`expand_path` was not containment, and this is the one place the
+      # difference mattered.** It resolves `..` and `~` and leaves every
+      # symlink exactly as written, while the sweep on the other side
+      # enumerates *through* one -- `Dir.children` reads what a link points
+      # at. So a link in the middle of the cache produced targets that were
+      # inside it by string and outside it by filesystem, and this guard
+      # passed them: a real `prune_generations` call at the default keep
+      # count removed a directory tree outside the cache entirely.
+      # `024.51`'s incident is why containment lives here rather than at
+      # each call site; this is the same class of defect one layer down,
+      # the guard in the right place asking a question that does not mean
+      # what it says. Found by the 2026-09-05 critical review, R01.
+      #
+      # **The parent is resolved and the last component is not.** A
+      # symlink written *directly* in the cache is an ordinary cache
+      # entry: `FileUtils.remove_entry` unlinks the link and never follows
+      # it, so resolving the whole path would refuse to remove a link that
+      # is entirely safe to remove -- and leave it in the cache forever.
+      # `File.realpath` of the dirname plus the basename is precisely that
+      # line.
+      #
+      # Both sides are resolved, because a cache root reached through a
+      # link of its own is ordinary -- macOS puts `/tmp` behind one, and
+      # comparing a resolved path against an unresolved root would refuse
+      # every removal there.
+      #
+      # **This is not a defence against a swap between the check and the
+      # removal.** A link replaced in that window still wins; refusing it
+      # needs the removal to hold a handle on what it checked, which
+      # `FileUtils.remove_entry` does not offer. What this rules out is
+      # the arrangement being *already* in place, which is what was
+      # measured.
       def self.inside?(root, path)
-        File.expand_path(path).start_with?("#{File.expand_path(root)}#{File::SEPARATOR}")
+        real_root = File.realpath(root)
+        resolved = File.join(File.realpath(File.dirname(path)), File.basename(path))
+        resolved.start_with?("#{real_root}#{File::SEPARATOR}")
+      rescue SystemCallError
+        # A root or a parent that cannot be resolved is one nothing can be
+        # removed from anyway -- the ordinary member of this family is a
+        # path another sweep has already taken away.
+        false
       end
 
       def self.children_of(dir)

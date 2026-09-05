@@ -158,6 +158,97 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
       .to include(a_string_including("maybe_there"))
   end
 
+  # **`self.respond_to?` is the same guard.** The parser's own
+  # `#open_surface_kind` reads `nil` and `Prism::SelfNode` alike, and this
+  # collector did not -- so the explicit spelling, which is ordinary in
+  # application code, was still reported. Ruby runs both. Found by two
+  # independent cold reviews and by the 2026-09-05 critical review (R07).
+  it "reads an explicit self on the guard" do
+    expect(unknown_methods("class W\n  def go\n    return unless self.respond_to?(:maybe_there)\n    maybe_there\n  end\nend\n"))
+      .to be_empty
+  end
+
+  # **The exemption is about `self`, so it applies to calls on `self`.**
+  # By name and nothing else, a guard silenced `Other.new.maybe_there`
+  # in the same file -- a different object, about which the guard says
+  # nothing. This is the half of the `defined?(@x)` analogy that does not
+  # carry: an ivar has no receiver and a method call does.
+  it "still reports the guarded name on another object" do
+    index("class Other\nend\n", uri: "file:///other.rb")
+    source = "class W\n  def go\n    return unless respond_to?(:maybe_there)\n    Other.new.maybe_there\n  end\nend\n"
+
+    expect(unknown_methods(source)).to include(a_string_including("maybe_there"))
+  end
+
+  # **A guard scopes to the body it was written in.** File-wide by name,
+  # a guard in one method silenced the same name called *unguarded* in
+  # another -- which is the forgotten-guard mistake, not the typo this
+  # check is framed around, and it is the one a reader would most want
+  # reported.
+  it "does not carry the guard into another method" do
+    source = "class W\n  def guarded\n    maybe_there if respond_to?(:maybe_there)\n  end\n" \
+             "  def unguarded\n    maybe_there\n  end\nend\n"
+
+    expect(unknown_methods(source)).to include(a_string_including("maybe_there"))
+  end
+
+  it "does not carry the guard into another class in the same file" do
+    source = "class A\n  def go\n    maybe_there if respond_to?(:maybe_there)\n  end\nend\n" \
+             "class B\n  def go\n    maybe_there\n  end\nend\n"
+
+    expect(unknown_methods(source)).to include(a_string_including("maybe_there"))
+  end
+
+  # The control for the three above: the guard still works where it is
+  # written, in each of the idiom's three spellings. Without this, a fix
+  # that scoped the guard to nothing would pass all of them.
+  it "still exempts the call in the body the guard is written in" do
+    guard_then_call = "class W\n  def go\n    return unless respond_to?(:maybe_there)\n    maybe_there\n  end\nend\n"
+    trailing_if = "class W\n  def go\n    maybe_there if respond_to?(:maybe_there)\n  end\nend\n"
+    block_form = "class W\n  def go\n    if respond_to?(:maybe_there)\n      maybe_there\n    end\n  end\nend\n"
+
+    expect(unknown_methods(guard_then_call)).to be_empty
+    expect(unknown_methods(trailing_if)).to be_empty
+    expect(unknown_methods(block_form)).to be_empty
+  end
+
+  # **A macro is a class-body call, and the recorders never asked.**
+  # `#record_generated_methods` runs wherever `current_owner` is set, so a
+  # `delegate` written *inside a method body* declared a method from it --
+  # and, once `024.327` marked what the parser read, silenced the call
+  # too. Both are wrong, and Ruby says so:
+  #
+  #   $ ruby -e '
+  #   gem "activesupport"; require "active_support/all"
+  #   class Q
+  #     def inner = []
+  #     def setup; delegate :size, to: :inner; end
+  #   end
+  #   begin; Q.new.setup; rescue NoMethodError => e; puts e.message; end
+  #   p Q.new.respond_to?(:size)
+  #   '
+  #   # => undefined method 'delegate' for an instance of Q
+  #   #    false
+  #   # ruby 3.4.10, activesupport 8.1.3.1
+  #
+  # `delegate` is `Module`'s, so an instance has none, and nothing named
+  # `size` is ever defined. Found independently by two cold reviews.
+  #
+  # `in_method_body?` rather than `#defines_surface?`: a block is the
+  # other thing that method refuses, and `included do ... end` runs in
+  # class context, where the macro really does define what it says.
+  it "declares nothing from a macro written inside a method body" do
+    source = "class Q\n  def inner; []; end\n  def setup\n    delegate :size, to: :inner\n  end\nend\n"
+
+    expect(unknown_methods(source)).to include("delegate")
+  end
+
+  it "still reads a macro written inside a class-context block" do
+    source = "class Q\n  def inner; []; end\n  included do\n    delegate :size, to: :inner\n  end\n  def go = size\nend\n"
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
   # **The candidate survives; only the report stops.** The first fix
   # withheld the method-call candidate for any call that recorded a
   # declaration, and `#record_attribute_methods` records them too -- so

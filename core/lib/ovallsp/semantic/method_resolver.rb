@@ -338,8 +338,19 @@ module Ovallsp
       # declined about, and only that owner.**
       def synthesised_link?(entry) = entry.synthesised?
 
+      # `HOOK_RELATIONS`: an `included`/`prepended` hook runs when the
+      # module is *included* or *prepended*, and not when it is extended.
+      # A class that only `extend`s such a module gets nothing from the
+      # hook, so the surface it opened says nothing about that class --
+      # and reading it flatly declined about every class-level call there
+      # (`concurrent-ruby/promises.rb:47 extend ReInclude`).
+      HOOK_RELATIONS = %i[include prepend].freeze
+
       def open_surface?(entry, singleton)
         return false if synthesised_link?(entry)
+
+        return true if HOOK_RELATIONS.include?(entry.origin) &&
+                       @workspace_index.open_surface?(entry.name, kind: :included_hook)
 
         @workspace_index.open_surface?(entry.name, singleton: entry.origin == :extend ? false : singleton)
       end

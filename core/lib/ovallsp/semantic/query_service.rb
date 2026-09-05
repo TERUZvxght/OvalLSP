@@ -394,10 +394,34 @@ module Ovallsp
         end
       end
 
-      # Declared parameter names for a source method, in call order, so a
+      OFFERABLE_PARAMETER_KINDS = %i[required optional keyword keyword_optional].freeze
+      KEYWORD_PARAMETER_KINDS = %i[keyword keyword_optional].freeze
+
+      # Declared parameters for a source method, in call order, so a
       # completion can offer them as tab stops. Only positional and
       # keyword parameters are offered: a block is written after the call,
       # and a splat has no name worth typing.
+      #
+      # **`[name, keyword?]`, because the name alone was not enough.** This
+      # returned bare names, so `def take(required:)` completed as
+      # `take(${1:required})` -- a tab stop the author fills in, producing
+      # a call that does not bind. Ruby:
+      #
+      #   $ ruby -e '
+      #   class K; def take(required:) = required; end
+      #   begin; K.new.take(1); rescue ArgumentError => e; puts e.message; end
+      #   '
+      #   # => wrong number of arguments (given 1, expected 0; required keyword: required)
+      #   # ruby 3.4.10
+      #
+      # `Parameter#kind` was in hand here and dropped one method later.
+      # Signature help kept it, through `Parameter#label`, which is why
+      # the two disagreed about the same declaration. Found by the
+      # 2026-09-05 critical review, R03.
+      #
+      # A boolean rather than the kind itself: what the caller renders is
+      # `name:` or `name`, and the optional/required distinction is not a
+      # difference in the text.
       def source_parameter_names(receiver_type, method_name, context)
         return [] unless @method_resolver
 
@@ -406,7 +430,9 @@ module Ovallsp
         return [] unless declaration
 
         Array(declaration.parameters).filter_map do |parameter|
-          parameter.name if %i[required optional keyword keyword_optional].include?(parameter.kind)
+          next unless OFFERABLE_PARAMETER_KINDS.include?(parameter.kind)
+
+          [parameter.name, KEYWORD_PARAMETER_KINDS.include?(parameter.kind)]
         end
       end
 

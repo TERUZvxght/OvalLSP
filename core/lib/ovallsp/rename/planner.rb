@@ -303,7 +303,58 @@ module Ovallsp
         return true unless pattern
         return false unless pattern.match?(name.to_s)
 
-        !(KEYWORD_WOULD_BREAK.include?(kind) && reserved_word?(name.to_s))
+        return true unless KEYWORD_WOULD_BREAK.include?(kind)
+        return !reserved_word?(name.to_s) if kind == :local_variable
+
+        usable_as_a_bare_call?(name.to_s)
+      end
+
+      # **A method's name and a local's are different grammars**, and one
+      # question was asked for both. `#reserved_word?` below tests whether
+      # the name can be *assigned to*, which `world!` and `world?` cannot
+      # -- so the commonest naming convention in Ruby was refused as
+      # though it were `end`. Found by the 2026-09-05 critical review, R08.
+      #
+      # The question a method rename actually asks is the one
+      # `KEYWORD_WOULD_BREAK`'s own comment states: a rename rewrites the
+      # definition *and* every reference, bare ones included, so the new
+      # name has to work as a receiverless call.
+      #
+      #   $ ruby -rprism -e '
+      #   %w[world world! world? nil self if end].each do |n|
+      #     r = Prism.parse(n)
+      #     node = r.success? ? r.value.statements&.body&.first : nil
+      #     puts format("%-7s parse=%-5s node=%s", n, r.success?,
+      #                 node ? node.class.name.split("::").last : "-")
+      #   end
+      #   '
+      #   # => world   parse=true  node=CallNode
+      #   #    world!  parse=true  node=CallNode
+      #   #    world?  parse=true  node=CallNode
+      #   #    nil     parse=true  node=NilNode
+      #   #    self    parse=true  node=SelfNode
+      #   #    if      parse=false node=-
+      #   #    end     parse=false node=-
+      #   # ruby 3.4.10, prism 1.9.0
+      #
+      # **Parsing is not enough**, which is the half a success check alone
+      # would miss: `nil` and `self` parse and are not calls, so a method
+      # renamed to either would break every call site while the file still
+      # parsed. The node has to *be* a receiverless call of that name --
+      # the structure, not just the absence of an error.
+      #
+      # `world=` fails this, and keeps failing it: a setter rename has to
+      # answer for arity and call syntax too, which is its own decision
+      # and not one this method should make by accident.
+      def usable_as_a_bare_call?(name)
+        result = Prism.parse(name)
+        return false unless result.success?
+
+        node = result.value.statements&.body
+        return false unless node&.length == 1
+
+        call = node.first
+        call.is_a?(Prism::CallNode) && call.receiver.nil? && call.name.to_s == name
       end
 
       # **Every Ruby keyword matched the local pattern**, so `end`,
@@ -547,6 +598,9 @@ module Ovallsp
       # declaration up under, and a miss computed from a chain with a
       # hole in it is not evidence of anything.
       def method_conflicts(symbol_id, new_name)
+        override = override_binding(symbol_id)
+        return override if override.any?
+
         owners = [symbol_id.owner] + inherited_owners(symbol_id.owner)
         owner = owners.uniq.find do |candidate|
           @workspace_index.method_symbol_ids(candidate, kind: symbol_id.kind).any? { |sid| sid.name == new_name }
@@ -557,6 +611,54 @@ module Ovallsp
 
         [{ reason: "`#{new_name}` is already declared by `#{owner}`, which `#{symbol_id.owner}` inherits from -- " \
                    "renaming onto it would override it" }]
+      end
+
+      # **The name is what binds an override, and renaming one end breaks
+      # it.** This file's own header argued that leaving an override alone
+      # is the safe boundary, because an override has a different
+      # SymbolId. It is not:
+      #
+      #   $ ruby -e '
+      #   class Parent2; def world = 1; end
+      #   class Child2 < Parent2; def hello = super + 1; end
+      #   begin; Child2.new.hello; rescue NoMethodError => e; puts e.message; end
+      #   '
+      #   # => super: no superclass method 'hello' for an instance of Child2
+      #   # ruby 3.4.10
+      #
+      # That is the tree this planner produced: `Parent#hello` renamed to
+      # `world`, the override correctly left alone, and the program
+      # stopped working. From the other end it is quieter and no better --
+      # renaming `Child#hello` makes `Child.new.hello` reach the parent's
+      # instead of raising.
+      #
+      # **Refused rather than extended.** Rewriting every same-named
+      # method on the chain is a different operation: it would have to
+      # decide about ancestors outside the index, about a `super` in a
+      # third class, and about dynamic sends -- and `042`'s D1, resolution
+      # that answers a name *and its basis*, is what a fix that resolves
+      # rather than refuses would be built on. Refusing returns no edits
+      # at all, which is the contract `#plan`'s callers already handle.
+      # Found by the 2026-09-05 critical review, R02.
+      #
+      # Both directions from one question: an owner that declares this
+      # same name and is on a chain with this one, whichever way round.
+      # `include` counts as much as a superclass -- it is the same chain.
+      def override_binding(symbol_id)
+        return [] unless @hierarchy_index && %i[instance_method singleton_method].include?(symbol_id.kind)
+
+        owner = symbol_id.owner.to_s
+        related = @workspace_index.method_owners(symbol_id.name, kind: symbol_id.kind)
+                                  .reject { |candidate| candidate == owner }
+                                  .find { |candidate| chain_relates?(owner, candidate) }
+        return [] unless related
+
+        [{ reason: "`#{symbol_id.name}` is declared by both `#{owner}` and `#{related}`, which share an " \
+                   "ancestor chain -- renaming one end of an override changes what the other overrides" }]
+      end
+
+      def chain_relates?(owner, other)
+        inherited_owners(owner).include?(other) || inherited_owners(other).include?(owner)
       end
 
       # `[]` without a hierarchy index, which is the owner-only answer

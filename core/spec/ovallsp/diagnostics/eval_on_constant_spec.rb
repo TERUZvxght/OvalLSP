@@ -41,8 +41,15 @@ RSpec.describe "Ovallsp::ParserService and an eval block on a constant" do
   # The control: an eval block on an *expression* is not a constant, and
   # this visitor still cannot say what self is there. It must not invent
   # an owner from the enclosing class.
+  #
+  # **Written in the class body, not inside a `def`.** The fixture was a
+  # method body until 0.4.0, when the macro recorders were gated on
+  # `Cref#self_is_module?` -- so it came back empty because the recorder
+  # never ran, and passed under the mutation it names. It was a real
+  # control when written and had stopped being one; `check_pinned_mutations`
+  # is what noticed.
   it "records nothing for an eval block on an expression" do
-    expect(generated("class Outer\n  def go(other)\n    other.instance_eval { attr_accessor :o_x }\n  end\nend\n"))
+    expect(generated("class Outer\n  registry.fetch(:k).instance_eval { attr_accessor :o_x }\nend\n"))
       .to be_empty
   end
 end

@@ -143,6 +143,8 @@ module Ovallsp
       # Per-uri memory of the last version published, and the mutex that
       # orders every writer against it. See #publish_findings.
       @last_published_version = {}
+      # The disk half's memory (`024.342`); see `#publish_findings`.
+      @last_disk_generation = {}
       @publish_state_mutex = Mutex.new
       # Which uris have changed and not yet been analysed. A set, because
       # ten edits to one file are one thing to analyse -- 037's C9. Its
@@ -657,7 +659,12 @@ module Ovallsp
     #
     # A document with a nil version is a disk read -- the workspace pass
     # -- and may only speak for a uri nobody has open, exactly as before.
-    def publish_findings(uri, findings, document: nil)
+    # `generation:` is the disk half's ordering, and it is a parameter
+    # rather than something read off the findings because **the empty list
+    # is the answer that most needs ordering**: "this file is clean now"
+    # carries no `Finding#generation` to be dated by, and it was the one
+    # thing a stale warning could land on top of (`024.342`).
+    def publish_findings(uri, findings, document: nil, generation: nil)
       @publish_state_mutex.synchronize do
         open_document = @document_store.fetch(uri: uri)
         version = document&.version
@@ -699,6 +706,36 @@ module Ovallsp
           @last_published_version[uri] = [document.buffer_id, version, generation || last_generation]
         elsif open_document
           return false
+        else
+          # **The disk half, which had no ordering at all.** The only
+          # check here was the `elsif` above -- that nobody has the file
+          # open -- so a result computed before a newer one landed after
+          # it, and a result computed before a deletion landed after the
+          # clear that deletion sent. The Problems panel then holds
+          # findings about a file that is gone, and nothing publishes for
+          # that uri again: `WorkspaceDiagnostics#publish_for` returns
+          # early on a path that no longer exists.
+          #
+          # Same rule as the buffer half above, for the same reason:
+          # strictly older is refused, equal is allowed because a later
+          # pass usually knows more. `#clear_findings` writes the
+          # generation it cleared at, so a result from before it loses.
+          # A caller that states no generation is not dated and is never
+          # refused on this ground -- which is what every existing caller
+          # was. Found by the 2026-09-05 critical review, R06.
+          last_disk, cleared = @last_disk_generation[uri]
+          if generation && last_disk
+            return false if generation < last_disk
+            # A clear is the news that whatever was published for this uri
+            # is void. A result carrying the same generation as that
+            # publish was computed before the clear, so it loses -- which
+            # is the *only* place the equal case differs from the buffer
+            # half's, and it differs because a deletion is not "a later
+            # pass knows more".
+            return false if cleared && generation == last_disk
+          end
+
+          @last_disk_generation[uri] = [generation, nil] if generation
         end
 
         write_diagnostics(uri, findings, version)
@@ -712,6 +749,16 @@ module Ovallsp
     def clear_findings(uri)
       @publish_state_mutex.synchronize do
         @last_published_version.delete(uri)
+        # **Marked, not deleted.** A clear is the news that this file's
+        # findings are void; forgetting the uri let a result computed
+        # before the clear land after it and put them back. The mark keeps
+        # the generation that *was* published and records that it has been
+        # cleared, so anything at or below it loses -- and no arithmetic
+        # is done on a clock this method does not own. A genuinely later
+        # pass, the file having been recreated, carries a higher
+        # generation and still wins.
+        last_disk, = @last_disk_generation[uri]
+        @last_disk_generation[uri] = [last_disk, :cleared]
         write_diagnostics(uri, [], nil)
       end
     end
@@ -739,7 +786,14 @@ module Ovallsp
       ensure_gem_index
       with_index_snapshot do
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
-        @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
+        # **The generation travels with the findings, and not inside
+        # them.** An empty result -- "this file is clean now" -- carries
+        # no `Finding#generation` to be dated by, and it is the answer a
+        # stale warning could most easily land on top of. Read from the
+        # context that computed it, inside the same snapshot, so the two
+        # cannot describe different moments (`024.342`).
+        [@diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode),
+         context.generation]
       end
     ensure
       # `analyze` *records* the ancestries it had to defer on; something
@@ -3334,12 +3388,21 @@ module Ovallsp
     # - takes nothing: insert the bare name. `save()` is not how Ruby is
     #   written, and an editor that produces it is worse than one that
     #   inserts plain text.
+    # **What a call looks like, which is not what a declaration looks
+    # like.** Each parameter arrives as `[name, keyword?]`; a keyword one
+    # is written `name: ${n:name}`, because the snippet is text the author
+    # will run and `take(${1:required})` does not bind to
+    # `def take(required:)` (`024.339`).
     def completion_snippet(member)
       parameters = member.parameters
       return "#{member.name}($1)" if parameters == :unknown_arity
       return nil if parameters.nil? || parameters.empty?
 
-      stops = parameters.each_with_index.map { |name, index| "${#{index + 1}:#{name}}" }
+      stops = parameters.each_with_index.map do |parameter, index|
+        name, keyword = parameter
+        stop = "${#{index + 1}:#{name}}"
+        keyword ? "#{name}: #{stop}" : stop
+      end
       "#{member.name}(#{stops.join(', ')})"
     end
 
@@ -3853,7 +3916,25 @@ module Ovallsp
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
           # reindex from disk for files nobody currently has open.
-          reanalyze << uri if reindex_from_disk(uri)
+          #
+          # **And only for files this workspace may index.** `ColdIndexer`
+          # refuses a path that resolves outside the root, and this
+          # entrance did not -- `#reindex_from_disk`'s `File.file?` follows
+          # a link, so a `linked.rb` inside the workspace pointing outside
+          # was refused at startup and read on the next notification. A
+          # watcher notification is not permission for an arbitrary path,
+          # and an untrusted workspace runs this path (`024.336`).
+          #
+          # Anything already indexed under the old resolution goes with
+          # it: this notification *is* the news that it no longer resolves
+          # where it did, and standing behind the old contribution would
+          # be answering from a file this server may not read.
+          if indexable_from_disk?(uri)
+            reanalyze << uri if reindex_from_disk(uri)
+          else
+            @index_mutation_mutex.synchronize { remove_index_contribution(uri) }
+            clear_findings(uri)
+          end
         end
 
         case classify_rails_change(uri)
@@ -3963,6 +4044,14 @@ module Ovallsp
     # the index mutex, which the dispatch thread needs for the *next*
     # file -- measured at 13.5s for a 200-file batch against 1.5s for the
     # indexing alone, with no request served meanwhile.
+    # The automatic-indexing boundary, shared with `ColdIndexer` rather
+    # than restated (`Index::WorkspaceBoundary`). Not applied inside
+    # `#reindex_from_disk` itself: its other caller is a `didClose`, and a
+    # file the user opened is theirs to open wherever it lives.
+    def indexable_from_disk?(uri)
+      Index::WorkspaceBoundary.inside?(root: @workspace_root, path: UriUtil.to_path(uri))
+    end
+
     def reindex_from_disk(uri)
       path = UriUtil.to_path(uri)
       return unless path && File.file?(path)

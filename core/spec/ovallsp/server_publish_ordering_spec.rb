@@ -36,6 +36,18 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
     store.open(uri: "file:///b.rb", text: "y = 2\n", version: 100, language_id: "ruby")
   end
 
+  def published_for(target_uri)
+    output.rewind
+    reader = Ovallsp::IO::FramedReader.new(output)
+    messages = []
+    begin
+      loop { messages << reader.read_message }
+    rescue Ovallsp::IO::FramedReader::EOF
+      nil
+    end
+    messages.select { |m| m[:method] == "textDocument/publishDiagnostics" && m[:params][:uri] == target_uri }
+  end
+
   def published
     output.rewind
     reader = Ovallsp::IO::FramedReader.new(output)
@@ -307,5 +319,62 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
 
     expect(published).to eq([[3, 1], [4, 2]])
   end
-end
 
+  # **The disk half of the funnel had no ordering at all.** A publish with
+  # `version: nil` is a result for a file nobody has open, and the only
+  # thing checked was that nobody has it open -- so a stale answer landed
+  # over a newer one, and a result computed before a deletion landed after
+  # the clear that deletion sent. The Problems panel then holds findings
+  # about a file that is gone, and `WorkspaceDiagnostics#publish_for`
+  # returns early on a missing path, so nothing publishes for that uri
+  # again.
+  #
+  # **The empty list is the same design gap.** `Finding#generation` is
+  # what dates a buffer publish, and an empty result has no findings to
+  # read one from -- which is exactly the "this file is clean now" answer
+  # that most needs to be ordered against a stale warning. So the caller
+  # states the generation rather than the funnel inferring it.
+  #
+  # Found by the 2026-09-05 critical review, R06.
+  describe "a result for a file nobody has open" do
+    let(:disk_uri) { "file:///disk.rb" }
+
+    it "refuses a result older than the one already sent" do
+      server.send(:publish_findings, disk_uri, [], generation: 5)
+      server.send(:publish_findings, disk_uri, [finding], generation: 3)
+
+      expect(published_for(disk_uri).length).to eq(1)
+    end
+
+    it "accepts a result at the same generation, since a later pass may know more" do
+      server.send(:publish_findings, disk_uri, [], generation: 5)
+      server.send(:publish_findings, disk_uri, [finding], generation: 5)
+
+      expect(published_for(disk_uri).length).to eq(2)
+    end
+
+    it "refuses a result computed before the file was cleared" do
+      server.send(:publish_findings, disk_uri, [finding], generation: 5)
+      server.send(:clear_findings, disk_uri)
+      server.send(:publish_findings, disk_uri, [finding], generation: 5)
+
+      expect(published_for(disk_uri).length).to eq(2) # the finding, then the clear
+    end
+
+    # **The controls.** Without them a funnel that refused every disk
+    # publish would pass all three.
+    it "still sends a newer result" do
+      server.send(:publish_findings, disk_uri, [finding], generation: 3)
+      server.send(:publish_findings, disk_uri, [], generation: 5)
+
+      expect(published_for(disk_uri).length).to eq(2)
+    end
+
+    it "still sends a result carrying no generation at all" do
+      server.send(:publish_findings, disk_uri, [finding])
+      server.send(:publish_findings, disk_uri, [])
+
+      expect(published_for(disk_uri).length).to eq(2)
+    end
+  end
+end

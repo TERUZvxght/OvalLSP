@@ -4,7 +4,7 @@
 
 VS CodeとCore Serverは標準LSP 3.17を使用する。
 
-Core ServerとRuntime Agentは、JSON-RPC 2.0互換の**OvalLSP Agent Protocol v1**を使用する。
+Core ServerとRuntime Agentは、JSON-RPC 2.0互換の**OvalLSP Agent Protocol v2**を使用する。
 
 transport:
 
@@ -320,15 +320,30 @@ pluginやRails内部の変化でsnapshot generationが変わったとき。
 
 ## 9. LSP custom methods
 
-VS Code固有UI用にCoreが提供するcustom request:
+VS Code固有UI用にCoreが提供するcustom request。**この一覧は
+`Server#dispatch` と双方向に照合される** —
+`scripts/check_watched_extensions.rb` ではなく
+`scripts/check_protocol_doc.rb` が、旧名の残留と現行名の欠落の両方で
+失敗する:
 
 ```text
 ovallsp/status
-ovallsp/restartRuntimeAgent
-ovallsp/showEvidence
+ovallsp/restartAgent
+ovallsp/showTypeEvidence
 ovallsp/explainType
-ovallsp/runObservation
-ovallsp/clearCaches
+ovallsp/runObservedTests
+ovallsp/clearObservedTypes
+ovallsp/reindexWorkspace
 ```
+
+**3つの旧名が現行仕様として並んでいた。** `ovallsp/restartRuntimeAgent`、
+`ovallsp/showEvidence`、`ovallsp/runObservation`、`ovallsp/clearCaches` は
+Coreのどこにも無く、`ovallsp/clearObservedTypes` と
+`ovallsp/reindexWorkspace` は実装されているのに載っていなかった。最後の
+2つは名前を置き換えれば同じ意味になるものでもない —
+`clearCaches` はキャッシュ全般を、`clearObservedTypes` は観測した型だけを
+指す。この節の検査は Agent の dispatch と第2節の `protocolVersion` しか
+見ておらず、冒頭の版とこの一覧はその保証の外にあった。2026-09-05 の
+批判的レビュー R16。
 
 標準language featureは必ず標準LSP requestで返す。

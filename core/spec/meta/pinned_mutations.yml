@@ -1281,10 +1281,34 @@
   example: "offers no definition fix for a class made by assignment with a parent"
 - why: "A Ruby keyword as a method's new name: without the widened set, `end`/`if`/`class` are accepted and the rewritten receiverless call sites do not parse."
   file: core/lib/ovallsp/rename/planner.rb
-  from: "        !(KEYWORD_WOULD_BREAK.include?(kind) && reserved_word?(name.to_s))\n"
-  to: "        !(kind == :local_variable && reserved_word?(name.to_s))\n"
+  from: "        return true unless KEYWORD_WOULD_BREAK.include?(kind)\n"
+  to: "        return true unless kind == :local_variable\n"
   spec: spec/ovallsp/rename/planner_spec.rb
   example: "refuses it for an instance method"
+- why: "A method's name is its own grammar: asking the local's assignment question of a method refuses `world!` and `world?`, which are ordinary Ruby method names."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        usable_as_a_bare_call?(name.to_s)\n"
+  to: "        !reserved_word?(name.to_s)\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "renames a method to world!"
+- why: "Parsing is not enough: `nil` and `self` parse and are not calls, so a method renamed to either breaks every call site while the file still parses."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        call.is_a?(Prism::CallNode) && call.receiver.nil? && call.name.to_s == name\n"
+  to: "        true\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "still refuses nil, which parses and is not a call"
+- why: "A rest lifts the ceiling and not the floor: returning true on its mere presence matched `(Integer, *String)` against a call with no arguments, which Ruby refuses."
+  file: core/lib/ovallsp/signatures/overload_resolver.rb
+  from: "        return count >= min if overload.rest_positional\n"
+  to: "        return true if overload.rest_positional\n"
+  spec: spec/ovallsp/signatures/overload_resolver_spec.rb
+  example: "does not let a rest positional waive a required one"
+- why: "`**rest` waives the unknown-keyword limit and not the required keywords: returning true on its presence matched `(required: Integer, **String)` against a call with no keywords."
+  file: core/lib/ovallsp/signatures/overload_resolver.rb
+  from: "        return required_present if overload.rest_keyword\n"
+  to: "        return true if overload.rest_keyword\n"
+  spec: spec/ovallsp/signatures/overload_resolver_spec.rb
+  example: "does not let a rest keyword waive a required one"
 - why: "A local renamed onto a name the same file already binds or calls: without the file-wide look, a nested block parameter captures it and a receiverless call becomes a read of the local, both with the file still parsing."
   file: core/lib/ovallsp/rename/planner.rb
   from: "        elsewhere_in_file(symbol_id, new_name)\n"
@@ -1327,18 +1351,72 @@
   to: "        return if RECORDING_CALLS.include?(node.name)\n"
   spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
   example: "opens the surface for an unreadable macro written after a readable one"
-- why: "An `included`/`prepended` hook doing anything this parser cannot model opens the module's instance surface: without it a class whose hook calls `base.include(M)` or `base.class_eval` looks fully enumerated and every method the hook gave it is reported."
+- why: "An `included`/`prepended` hook calling something on the class opens the module's hook surface: without it a class whose hook calls `base.include(M)` or `base.class_eval` looks fully enumerated and every method the hook gave it is reported."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), :instance]\n      end\n\n      def hook_parameter_reads"
-  to: "      end\n\n      def hook_parameter_reads"
+  from: "        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), :included_hook]\n"
+  to: ""
   spec: spec/ovallsp/diagnostics/included_hook_spec.rb
   example: "declines about a class whose hook includes another module"
-- why: "Every read of the hook parameter counts, not only the receiver of a call: `Registry.install(base)` hands the class to code this parser cannot follow, and counting receivers alone calls that hook fully modelled."
+- why: "Only a call *on* the class counts: counting every mention opened 42 of 51 hooks across eleven gems and stopped 55 of 994 types being checked, for hooks that add no member at all."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        reads = hook_parameter_reads(node.body, parameter)\n"
-  to: "        reads = modelled_hook_calls(node.body, parameter)\n"
+  from: "        calls = hook_calls_on_parameter(node.body, parameter)\n"
+  to: "        calls = hook_parameter_mentions(node.body, parameter)\n"
   spec: spec/ovallsp/diagnostics/included_hook_spec.rb
-  example: "declines when the hook passes the class somewhere else"
+  example: "does not open the surface for a hook that only reads the class"
+- why: "An operator is not a method-defining call: without the name shape, `raise ArgumentError unless base <= Hashie::Mash` opens the surface of a hook that adds nothing."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "            candidate.receiver.name == parameter &&\n            DEFINING_CALL_NAME.match?(candidate.name.to_s)\n"
+  to: "            candidate.receiver.name == parameter\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "does not open the surface for a hook that only compares the class"
+- why: "An `included` hook does not run on `extend`: read as an ordinary instance surface, a class that merely extends the module has every class-level call declined about."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "        return true if HOOK_RELATIONS.include?(entry.origin) &&\n                       @workspace_index.open_surface?(entry.name, kind: :included_hook)\n"
+  to: "        return true if @workspace_index.open_surface?(entry.name, kind: :included_hook)\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "does not decline about a class that extends the module"
+- why: "A macro is a class-body call: without the `self_is_module?` gate, `def setup; delegate :size, to: :inner; end` declares a method Ruby never defines and silences the report on `delegate`, which Ruby does raise on an instance."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "          in_class_body = current_owner && @cref.self_is_module?\n"
+  to: "          in_class_body = current_owner\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "declares nothing from a macro written inside a method body"
+- why: "A `respond_to?` guard scopes to the body it is written in: file-wide by name, a guard in one method silences the same name called unguarded in another, which is the forgotten-guard mistake."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        guards.any? { |guard| guard.name == name && line >= guard.first_line && line <= guard.last_line }\n"
+  to: "        guards.any? { |guard| guard.name == name }\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "does not carry the guard into another method"
+- why: "A guard is about `self`, so it exempts only calls on self: by name alone it silenced the same name on another object, about which the guard says nothing."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        return false unless candidate.receiver.nil? || written_self?(candidate)\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "still reports the guarded name on another object"
+- why: "`self.respond_to?` is the same guard: reading only a nil receiver left the explicit spelling, ordinary in application code, reported."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        def about_self?(node) = node.receiver.nil? || node.receiver.is_a?(Prism::SelfNode)\n"
+  to: "        def about_self?(node) = node.receiver.nil?\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "reads an explicit self on the guard"
+- why: "A constant reference is decided by the lookup, not the simple name: answering from the candidate list alone accepted a bare name on an unrelated namespace's constant and reported one an ancestor declares."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        owners.any? { |owner| reach.include?(owner) }\n"
+  to: "        true\n"
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "reports a bare name only another namespace declares"
+- why: "The reach includes each frame's ancestors: without them `Child::LIMIT` is reported although `Parent` declares it, which Ruby resolves."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          entries.each { |entry| reach << Index::SymbolId.qualify_owner(entry.name_or_nil.to_s) }\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "does not report a constant an ancestor declares"
+- why: "An unbuildable chain declines: `no ancestor declares it` answered from a chain with an unidentified link is an assertion made from a question that could not be asked."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          return nil if entries.any? { |entry| !entry.identified? }\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "declines when the ancestry cannot be built"
 - why: "A concern's class methods come from the module its hook actually extends: synthesising `#{module}::ClassMethods` instead is right only when the extended module happens to be spelled that."
   file: core/lib/ovallsp/semantic/hierarchy_index.rb
   from: "        hooked = @concern_markers_by_owner.fetch(target, []).map do |fact|\n          @workspace_index.nested_type_name(fact.target, nesting: fact.nesting) || fact.target\n        end\n"
@@ -1359,7 +1437,7 @@
   example: "records the unresolvable target as one entry with no name and no tail"
 - why: "A call guarded by a receiverless `respond_to?` is one the author has already said may not be there; without the exemption the check reports the idiom written to be safe about exactly what it reports."
   file: core/lib/ovallsp/diagnostics/engine.rb
-  from: "          next if guarded.include?(candidate.name.to_s)\n"
+  from: "          next if guarded_here?(guards, candidate)\n"
   to: "          next if false\n"
   spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
   example: "does not report a call the file guards with respond_to?"

@@ -13,6 +13,19 @@ the disproved approaches are kept below it under **Details**.
 > forty-four are a queue rather than a scope. Rewrite this section as work
 > lands — `bump` refuses until it is what shipped.
 
+- **A stale disk result no longer overwrites a newer one, or a deletion's clear** `024.342`
+- **Turning `ovallsp.enabled` on or off takes effect without a window reload** `024.343`
+- **A rename that would break an override is refused rather than applied** `024.341`
+- **A signature's go-to-definition works under a path containing `#`** `024.340`
+- **A slow first index no longer overwrites newer content read after it** `024.338`
+- **A keyword argument completes as a keyword, not as a positional** `024.339`
+- **Cache pruning no longer deletes through a symlink out of the cache** `024.337`
+- **The watcher applies the same workspace boundary the first index does** `024.336`
+- **A constant your workspace declares is no longer reported unresolved** `024.330`
+- **`respond_to?` reads `self.` too, and no longer exempts another object or another method** `024.335`
+- **A method can be renamed to `world!` or `world?`** `024.334`
+- **A `.rake` file edited outside the editor is noticed** `024.333`
+- **A `*rest` no longer waives a required argument when choosing an overload** `024.332`
 - **A macro this parser reads is no longer reported as a method that does not exist** `024.327`
 - **A call guarded by `respond_to?` is no longer reported** `024.328`
 - **A `self.included` hook that includes, `class_eval`s or extends is read** `024.329`

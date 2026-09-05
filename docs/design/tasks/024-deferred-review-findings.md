@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**327 entries below** <!-- measured: register-entries = 327 -->,
+**340 entries below** <!-- measured: register-entries = 340 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -502,7 +502,20 @@ nobody can search is the recording habit without the benefit.
 | [`024.327`](024-deferred-review-findings-resolved.md#024327-a-generated-method-macro-the-parser-read-is-reported-as-an-unknown-method) | fixed | 0.4.0 | A generated-method macro the parser read is reported as an unknown m… |
 | [`024.328`](024-deferred-review-findings-resolved.md#024328-a-call-guarded-by-respond-to-is-still-reported-as-an-unknown-method) | fixed | 0.4.0 | A call guarded by respond_to? is still reported as an unknown method |
 | [`024.329`](024-deferred-review-findings-resolved.md#024329-a-self-included-hook-doing-anything-but-base-extend-const-is-read-as-nothing) | fixed | 0.4.0 | A self.included hook doing anything but base.extend(Const) is read a… |
-| [`024.330`](#024330-every-reference-to-a-workspace-constant-that-is-not-a-class-or-module-is-reported-unresolved) | open | 0.4.0 | Every reference to a workspace constant that is not a class or modul… |
+| [`024.330`](024-deferred-review-findings-resolved.md#024330-every-reference-to-a-workspace-constant-that-is-not-a-class-or-module-is-reported-unresolved) | fixed | 0.4.0 | Every reference to a workspace constant that is not a class or modul… |
+| [`024.331`](024-deferred-review-findings-resolved.md#024331-2026-09-05-review-r16-the-current-protocol-document-disagrees-with-its-implementation) | fixed | 0.4.0 | 2026-09-05 review R16: The current protocol document disagrees with … |
+| [`024.332`](024-deferred-review-findings-resolved.md#024332-2026-09-05-review-r14-rest-parameters-waive-required-arguments-during-overload-selection) | fixed | 0.4.0 | 2026-09-05 review R14: Rest parameters waive required arguments duri… |
+| [`024.333`](024-deferred-review-findings-resolved.md#024333-2026-09-05-review-r12-the-watcher-glob-omits-rake-files-that-cold-indexing-includes) | fixed | 0.4.0 | 2026-09-05 review R12: The watcher glob omits rake files that cold i… |
+| [`024.334`](024-deferred-review-findings-resolved.md#024334-2026-09-05-review-r08-method-rename-rejects-ordinary-bang-and-predicate-names) | fixed | 0.4.0 | 2026-09-05 review R08: Method rename rejects ordinary bang and predi… |
+| [`024.335`](024-deferred-review-findings-resolved.md#024335-2026-09-05-review-r07-respond-to-exemptions-leak-across-classes-and-miss-explicit-self) | fixed | 0.4.0 | 2026-09-05 review R07: respond_to? exemptions leak across classes an… |
+| [`024.336`](024-deferred-review-findings-resolved.md#024336-2026-09-05-review-r11-watcher-indexing-bypasses-the-cold-index-workspace-boundary) | fixed | 0.4.0 | 2026-09-05 review R11: Watcher indexing bypasses the cold-index work… |
+| [`024.337`](024-deferred-review-findings-resolved.md#024337-2026-09-05-review-r01-cache-generation-pruning-follows-an-intermediate-symlink-outside-its-root) | fixed | 0.4.0 | 2026-09-05 review R01: Cache generation pruning follows an intermedi… |
+| [`024.338`](024-deferred-review-findings-resolved.md#024338-2026-09-05-review-r04-cold-indexing-assigns-read-sequence-after-reading-stale-content) | fixed | 0.4.0 | 2026-09-05 review R04: Cold indexing assigns read_sequence after rea… |
+| [`024.339`](024-deferred-review-findings-resolved.md#024339-2026-09-05-review-r03-keyword-completion-inserts-a-positional-argument) | fixed | 0.4.0 | 2026-09-05 review R03: Keyword completion inserts a positional argum… |
+| [`024.340`](024-deferred-review-findings-resolved.md#024340-2026-09-05-review-r10-signature-locations-bypass-uri-escaping-and-posix-backslashes-are-rewritten) | fixed | 0.4.0 | 2026-09-05 review R10: Signature locations bypass URI escaping and P… |
+| [`024.341`](024-deferred-review-findings-resolved.md#024341-2026-09-05-review-r02-renaming-a-parent-method-breaks-an-overriding-method-that-calls-super) | fixed | 0.4.0 | 2026-09-05 review R02: Renaming a parent method breaks an overriding… |
+| [`024.342`](024-deferred-review-findings-resolved.md#024342-2026-09-05-review-r06-disk-diagnostics-can-overwrite-newer-results-and-a-deletion-clear) | fixed | 0.4.0 | 2026-09-05 review R06: Disk diagnostics can overwrite newer results … |
+| [`024.343`](024-deferred-review-findings-resolved.md#024343-2026-09-05-review-r13-the-enabled-setting-is-read-only-during-activation) | fixed | 0.4.0 | 2026-09-05 review R13: The enabled setting is read only during activ… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | 1.0.0 | Feature parity roadmap, measured against Pylance |
@@ -5372,31 +5385,6 @@ target: 0.4.0
 - Signatures::Environment#load takes bundle_context: for gem RBS directories, and add_gem_signatures returns immediately when it is nil. Both production call sites -- server.rb:1704 and :3853 -- pass only workspace_root:, so no gem RBS is ever loaded; the parameter is exercised by specs alone. Thirty lines above the first of them, the cache fingerprint deliberately includes rbs_collection.lock.yaml with a comment saying the lockfile decides which gem RBS get loaded. One file states that the lockfile matters and then loads nothing it names.
 
 **Direction:** Either pass a bundle_context the server actually builds -- resolving rbs_collection.lock.yaml to its gem signature directories, which add_gem_signatures already knows how to consume -- or remove the parameter and the lockfile from the cache fingerprint, so one file stops saying the lockfile decides something and then ignoring it. Decide which before writing either. The control is the same as the stdlib entry's: gem RBS arriving must not turn a silence into a wrong answer.
-
----
-
-
-## 024.330 Every reference to a workspace constant that is not a class or module is reported unresolved
-
-```yaml
-status: open
-kind: defect
-user-visible: no
-user-visible-note: >-
-  The check is gated at mode >= standard and the extension sends no
-  diagnosticsMode, so it never runs in the shipped product (061). A
-  user meets this only through corpus_diagnostics.rb, which sets the
-  mode deliberately. It becomes user-visible the moment per-check
-  severity makes the check reachable, which is what 0.4.0 is for.
-target: 0.4.0
-```
-
-**Area:** core/lib/ovallsp/diagnostics/engine.rb
-
-- found by: core/lib/ovallsp/diagnostics/engine.rb, core/lib/ovallsp/workspace_index.rb
-- unresolved_constant_findings asks workspace_index.resolve_type_name, whose candidate filter is %i[class module] -- so a plain 'A = [1].freeze' referenced from the same class body, or from a method in it, is reported 'cannot resolve constant A'. Measured on actionpack 8.1.3.1/lib: 1,613 constant references fail type resolution, and a workspace :constant declaration exists by simple name for 427 of them. The check is gated at mode >= standard, which 061 records as unreachable in the shipped product, so nothing ships wrong today -- but per-check severity is what 0.4.0 is for, and this check cannot be offered until it is right.
-
-**Direction:** wrong-report
 
 ---
 

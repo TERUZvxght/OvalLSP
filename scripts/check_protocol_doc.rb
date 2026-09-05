@@ -52,6 +52,20 @@ module ProtocolDoc
   # `agent/model` from matching inside `agent/models`.
   METHOD = %r{agent/[A-Za-z]+(?:/[A-Za-z]+)*}
 
+  # **The other half of the document, which this check did not read.**
+  # Section 9 lists the custom requests the Core answers for the VS Code
+  # UI, and three of the six it listed named nothing in `core/lib` while
+  # two that are dispatched were absent -- `ovallsp/clearObservedTypes`
+  # and `ovallsp/reindexWorkspace`. The old names are not synonyms of the
+  # new ones either: `clearCaches` names caches in general and
+  # `clearObservedTypes` names observed types. Section 1 said "Protocol
+  # v1" in prose while section 2 and the Agent both said 2, for the same
+  # reason -- the version check read only the JSON. 2026-09-05 critical
+  # review, R16.
+  SERVER_PATH = "core/lib/ovallsp/server.rb"
+  CUSTOM_METHOD = %r{ovallsp/[A-Za-z]+}
+  PROSE_VERSION = /Agent Protocol v(\d+)/
+
   # What a section says when it is describing something nobody has built.
   # Both languages, because this document is written in Japanese and the
   # rule it serves is stated in English.
@@ -91,6 +105,18 @@ module ProtocolDoc
     result
   end
 
+  # The `ovallsp/*` requests `Server#dispatch` answers, and the ones
+  # section 9 lists as current. Both read as sets, so a name added on one
+  # side and not the other fails whichever direction it drifted in.
+  def dispatched_custom(server_source)
+    server_source.scan(/^\s*when "(#{CUSTOM_METHOD})"/).flatten.uniq.sort
+  end
+
+  def documented_custom(doc)
+    block = doc[/## 9\. LSP custom methods.*?```text\n(.*?)```/m, 1]
+    block.to_s.scan(CUSTOM_METHOD).uniq.sort
+  end
+
   # Every protocol method named anywhere in the Core's own source. A
   # notification is sent rather than dispatched, so this is the question
   # that covers both directions.
@@ -99,7 +125,7 @@ module ProtocolDoc
   end
 
   # The whole verdict, as data, so the decision is testable without a tree.
-  def problems(agent_source:, doc:, lib_sources:)
+  def problems(agent_source:, doc:, lib_sources:, server_source: nil)
     found = []
 
     code_version = protocol_version(agent_source)
@@ -131,6 +157,38 @@ module ProtocolDoc
                "it is unimplemented -- so it reads as a specification somebody may implement"
     end
 
+    found.concat(custom_method_problems(doc, server_source)) if server_source
+
+    found
+  end
+
+  # Both directions, and the prose version with them. A section that
+  # claims to be the current specification is compared against the set the
+  # Core actually answers; nothing here is about `agent/*`.
+  def custom_method_problems(doc, server_source)
+    found = []
+
+    prose = doc.scan(PROSE_VERSION).flatten.uniq
+    stated = documented_versions(doc)
+    wrong = prose.reject { |v| stated.include?(v) }
+    unless wrong.empty?
+      found << "#{DOC_PATH} calls the protocol v#{wrong.join(', v')} in prose while its own JSON says " \
+               "#{stated.join(', ')}"
+    end
+
+    dispatched = dispatched_custom(server_source)
+    documented = documented_custom(doc)
+    # The census before the verdict (`024.148`): two empty sets agree.
+    return found << "#{DOC_PATH}'s section 9 lists no custom method, so nothing can be compared" if documented.empty?
+    return found << "#{SERVER_PATH} dispatches no custom method, so nothing can be compared" if dispatched.empty?
+
+    (dispatched - documented).each do |method|
+      found << "`#{method}` is dispatched by the Server and section 9 of #{DOC_PATH} does not list it"
+    end
+    (documented - dispatched).each do |method|
+      found << "section 9 of #{DOC_PATH} lists `#{method}` as current and #{SERVER_PATH} does not dispatch it"
+    end
+
     found
   end
 
@@ -141,7 +199,7 @@ module ProtocolDoc
   def run(root = ROOT)
     agent_path = File.join(root, AGENT_PATH)
     doc_path = File.join(root, DOC_PATH)
-    [agent_path, doc_path].each do |p|
+    [agent_path, doc_path, File.join(root, SERVER_PATH)].each do |p|
       unless File.file?(p)
         warn "check-protocol-doc: #{p} is not there, so this check cannot see what it checks"
         return 1
@@ -152,13 +210,15 @@ module ProtocolDoc
     doc = File.read(doc_path, encoding: "UTF-8")
     sources = lib_sources(root)
 
-    found = problems(agent_source: agent_source, doc: doc, lib_sources: sources)
+    server_source = File.read(File.join(root, SERVER_PATH), encoding: "UTF-8")
+    found = problems(agent_source: agent_source, doc: doc, lib_sources: sources, server_source: server_source)
 
     # The census, printed whether or not anything is wrong: a check that
     # reads nothing reports exactly what a passing check reports.
     puts "check-protocol-doc: protocol version #{protocol_version(agent_source)}, " \
          "#{dispatched(agent_source).length} dispatched, #{sections(doc).length} documented, " \
-         "#{sources.length} file(s) read from #{LIB_DIR}."
+         "#{sources.length} file(s) read from #{LIB_DIR}, " \
+         "#{dispatched_custom(server_source).length} custom request(s) dispatched."
 
     if found.empty?
       puts "check-protocol-doc: the document and the Agent agree."

@@ -230,6 +230,23 @@ module Ovallsp
       end
     end
 
+    # **Every owner that declares a method of this name**, of this kind.
+    #
+    # `#method_symbol_ids` answers the other way round -- one owner, all
+    # its methods -- and a rename needs this direction to ask whether the
+    # name it is about to change is one another class on the same chain
+    # also declares. The candidate set is the methods of one name, which
+    # is a handful even in a large workspace, so the caller can afford to
+    # ask the hierarchy about each (`024.341`).
+    def method_owners(name, kind:)
+      needle = name.to_s
+      @mutex.synchronize do
+        ordered_symbol_ids(needle, matching: lambda { |sid|
+          sid.kind == kind && sid.name.to_s == needle
+        }).map { |sid| sid.owner.to_s }.uniq
+      end
+    end
+
     # Every uri declaring the class/module whose *fully-qualified* name is
     # `qualified_name`, regardless of how it was written.
     #
@@ -394,10 +411,15 @@ module Ovallsp
       @mutex.synchronize { @pattern_bound_names[name.to_s].positive? }
     end
 
-    def open_surface?(owner, singleton: false)
+    # `kind:` overrides the boolean, for the one surface that is neither
+    # side: `:included_hook` is what an `included`/`prepended` hook opened,
+    # and it is only true of a class that *includes* the module. Asking
+    # for it through `singleton:` would have made it true for `extend`
+    # too, which is the class of false silence a cold review measured.
+    def open_surface?(owner, singleton: false, kind: nil)
       return false if owner.nil?
 
-      key = [Index::SymbolId.bare_name(owner.to_s), singleton ? :singleton : :instance]
+      key = [Index::SymbolId.bare_name(owner.to_s), kind || (singleton ? :singleton : :instance)]
       @mutex.synchronize { @open_surface_owners[key].positive? }
     end
 
@@ -446,6 +468,38 @@ module Ovallsp
         next true if Index::SymbolId.bare_name(name.to_s).include?("::")
 
         candidates.size > 1
+      end
+    end
+
+    # **The owners that declare a constant of this simple name**, and
+    # nothing more than that. Deliberately not a resolver.
+    #
+    # A class is indexed under its *qualified* name (`::M::Widget`); a
+    # plain assignment is indexed as `kind: :constant` with the owner in
+    # `owner` and the bare name in `name`, because that is what
+    # `#visit_constant_write_node` records -- `nil` for a top-level one.
+    # `#type_candidates_locked` filters to `%i[class module]`, so no plain
+    # constant could ever match it, and `#unresolved_constant_findings`,
+    # which decided by `#resolve_type_name` alone, reported every
+    # reference to one (`024.330`).
+    #
+    # **The first fix answered from this list directly, and that was
+    # wrong in both directions**: a bare `LIMIT` was accepted because some
+    # unrelated `Foreign::LIMIT` existed, and `Child::LIMIT` was reported
+    # although `Parent` declares it. Both are the simple name standing in
+    # for a lookup nobody performed. The lookup needs the lexical nesting
+    # *and* the ancestry, and the ancestry lives in `HierarchyIndex`, one
+    # layer up -- so this hands back the owners and
+    # `Diagnostics::Engine#constant_within_reach?` does the looking.
+    # Found by the 2026-09-05 critical review, R09.
+    def constant_declaration_owners(simple)
+      needle = simple.to_s
+      return [] if needle.empty?
+
+      @mutex.synchronize do
+        ordered_symbol_ids(needle, matching: lambda { |sid|
+          sid.kind == :constant && sid.name.to_s == needle
+        }).map { |sid| sid.owner.nil? ? nil : sid.owner.to_s }.uniq
       end
     end
 

@@ -435,7 +435,13 @@ module Ovallsp
           File.join(workspace_root, "sig", "**", "*.rbi")
         ]
         patterns.flat_map { |pattern| Dir.glob(pattern) }.uniq.sort.each_with_object({}) do |path, methods|
-          uri = "file://#{path}"
+          # `UriUtil.from_path`, not a concatenation: a workspace under a
+          # directory named with a `#` produced a URI whose path stopped
+          # at the `#` -- everything after it read as a fragment, and
+          # `UriUtil.to_path` did not come back to a file that exists. The
+          # converter escapes; two hand-written `"file://\#{path}"` did
+          # not, and this was one of them (`024.340`).
+          uri = UriUtil.from_path(path)
           result = RbiParser.parse(File.read(path, encoding: Encoding::UTF_8), uri: uri)
           diagnostics.concat(result.diagnostics)
           result.signature_methods.each do |signature|
@@ -600,8 +606,11 @@ module Ovallsp
         loc = method.method_types.first&.location
         return nil unless loc&.buffer
 
+        # The other hand-written one (`024.340`). This is a *go to
+        # definition* target, so an unescaped `#` in the path is a
+        # location the editor cannot open.
         {
-          uri: "file://#{loc.buffer.name}",
+          uri: UriUtil.from_path(loc.buffer.name.to_s),
           range: Index::SourceLocation.to_range(loc, loc.buffer.content.lines)
         }
       rescue StandardError

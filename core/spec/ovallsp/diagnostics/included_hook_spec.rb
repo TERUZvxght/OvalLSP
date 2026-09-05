@@ -105,15 +105,80 @@ RSpec.describe "a self.included hook's effect on the including class" do
       expect(unknown_methods("class W4\n  include H4\n  def go = from_ce\nend\n")).to be_empty
     end
 
-    # **Any mention of the parameter, not only a call on it.** Handing the
-    # class to code this parser cannot follow is the same unbounded
-    # answer as calling a method on it, and a rule that read only
-    # receivers would call this hook fully modelled.
-    it "declines when the hook passes the class somewhere else" do
+    # **A call *on* the class, and nothing else.** The first version of
+    # this rule counted every mention of the parameter, and a cold review
+    # measured what that cost: of 51 hooks in eleven installed gems, 42
+    # opened, and 55 of the 994 types in a six-gem corpus lost checking
+    # entirely -- `Rails::Generators::Base`, `ActiveSupport::TestCase`,
+    # `Thor`, every Devise generator. A dozen of those hooks add nothing
+    # at all to the class:
+    #
+    #     raise ArgumentError unless base <= Hashie::Mash   # hashie
+    #     (@re_include_to_bases ||= []) << base             # concurrent
+    #     super(base); base.extend ClassMethods             # thor x3
+    #
+    # Ruby, 3.4.10, agrees that none of those adds a member: for a module
+    # whose hook is only `raise ... unless base <= Object`, or only
+    # `super(base)`, `W.new.respond_to?(:anything)` is `false`.
+    #
+    # So the rule is the effect, not the mention: a call whose *receiver*
+    # is the parameter changes the class, and this parser can read exactly
+    # one such call. Everything else -- a comparison, an interpolation, a
+    # `super`, the class handed to another method -- is left alone. That
+    # gives up `Registry.install(base)`, which really could add members
+    # through code this parser cannot follow; it is the same judgement
+    # made everywhere else here, and the measured alternative was worse.
+    it "does not open the surface for a hook that only reads the class" do
       index("module Registry\n  def self.install(k); end\nend\n", uri: "file:///registry.rb")
       index("module H6\n  def self.included(base) = Registry.install(base)\nend\n", uri: "file:///h6.rb")
 
-      expect(unknown_methods("class W6\n  include H6\n  def go = whatever_it_added\nend\n")).to be_empty
+      expect(unknown_methods("class W6\n  include H6\n  def go = definitely_absent\nend\n"))
+        .to include("definitely_absent")
+    end
+
+    it "does not open the surface for a hook that only compares the class" do
+      index("module H11\n  def self.included(base)\n    raise ArgumentError unless base <= Object\n  end\nend\n",
+            uri: "file:///h11.rb")
+
+      expect(unknown_methods("class W11\n  include H11\n  def go = definitely_absent\nend\n"))
+        .to include("definitely_absent")
+    end
+
+    # `super(base)` and a bare `super` are the same call in Ruby, and the
+    # mention rule told them apart -- it saw a `LocalVariableReadNode` in
+    # one and a `ForwardingSuperNode` in the other. Neither is a call on
+    # the class, so neither opens now.
+    it "treats super(base) and a bare super alike" do
+      index("module H12\n  def self.included(base)\n    super(base)\n  end\nend\n", uri: "file:///h12.rb")
+      index("module H13\n  def self.included(base)\n    super\n  end\nend\n", uri: "file:///h13.rb")
+
+      expect(unknown_methods("class W12\n  include H12\n  def go = definitely_absent\nend\n"))
+        .to include("definitely_absent")
+      expect(unknown_methods("class W13\n  include H13\n  def go = definitely_absent\nend\n"))
+        .to include("definitely_absent")
+    end
+
+    # **An `included` hook does not run on `extend`.** Ruby:
+    # `Z.respond_to?(:from_helpers)` and `Z.new.respond_to?(:from_helpers)`
+    # are both `false` for `class Z; extend H2`, where `H2`'s hook is
+    # `base.include(Helpers)`. Opening the module's surface flatly meant
+    # every class-level call on `Z` was declined about, and the real
+    # instance is `concurrent-ruby/promises.rb:47 extend ReInclude`.
+    #
+    # So the surface is recorded under its own key and consulted only for
+    # the relations whose hook it is.
+    it "does not decline about a class that extends the module" do
+      index("module Helpers\n  def from_helpers; end\nend\n", uri: "file:///helpers2.rb")
+      index("module H2\n  def self.included(base) = base.include(Helpers)\nend\n", uri: "file:///h2.rb")
+
+      expect(unknown_methods("class Z\n  extend H2\n  def self.go = definitely_absent\nend\n"))
+        .to include("definitely_absent")
+    end
+
+    it "declines about a class that prepends it" do
+      index("module H2\n  def self.included(base) = base.include(Helpers)\nend\n", uri: "file:///h2.rb")
+
+      expect(unknown_methods("class P\n  prepend H2\n  def go = from_helpers\nend\n")).to be_empty
     end
 
     # **The control, and the reason the rule is not simply "a module with
@@ -131,12 +196,15 @@ RSpec.describe "a self.included hook's effect on the including class" do
 
     # The surface opens on the *module*, which is where the including
     # class's ancestor chain reaches it -- the class is in another file
-    # this visitor never sees.
-    it "opens the module's own instance surface" do
+    # this visitor never sees. Under its own key, not the instance one:
+    # the two are different claims and only the ordinary one is true of a
+    # class that extends the module.
+    it "opens the module's own hook surface and not its instance surface" do
       index("module H2\n  def self.included(base) = base.include(Helpers)\nend\n", uri: "file:///h2.rb")
 
-      expect(workspace_index.open_surface?("H2")).to be(true)
-      expect(workspace_index.open_surface?("Helpers")).to be(false)
+      expect(workspace_index.open_surface?("H2", kind: :included_hook)).to be(true)
+      expect(workspace_index.open_surface?("H2")).to be(false)
+      expect(workspace_index.open_surface?("Helpers", kind: :included_hook)).to be(false)
     end
   end
 

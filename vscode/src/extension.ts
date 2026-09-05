@@ -12,6 +12,7 @@ import { resolveServerConfig, classifyServerSelection } from './serverConfig';
 import { resolveRuby, RubyResolution } from './rubyResolver';
 import { checkBundledCoreCompatibility, queryRubyConfigPaths, RubyConfigPaths } from './platformCompatibility';
 import { decidePreStart } from './startupGate';
+import { decideEnabledTransition } from './enabledSetting';
 import { WATCHED_FILES_GLOB } from './watchedFiles';
 import {
   CLIENT_PROTOCOL_VERSION,
@@ -760,19 +761,22 @@ function restartClientForFolder(
   });
 }
 
-export function activate(context: vscode.ExtensionContext): OvallspApi {
-  // Module state survives deactivate() inside a live extension host, and
-  // a closed barrier refuses every start. Reopen it before anything can
-  // ask to spawn Core.
-  shutdownBarrier.reset();
-  handshakes.length = 0;
-  const outputChannel = vscode.window.createOutputChannel('OvalLSP');
-  context.subscriptions.push(outputChannel);
+function isEnabled(): boolean {
+  return vscode.workspace.getConfiguration('ovallsp').get<boolean>('enabled') !== false;
+}
 
-  const config = vscode.workspace.getConfiguration('ovallsp');
-  if (config.get<boolean>('enabled') === false) {
-    return { handshakes };
+/**
+ * The commands, the status bar and its poller. Idempotent, because
+ * re-enabling the setting in a running window reaches it a second time and
+ * registering a command twice throws.
+ */
+let featuresRegistered = false;
+
+function activateFeatures(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel): void {
+  if (featuresRegistered) {
+    return;
   }
+  featuresRegistered = true;
 
   registerObservationCommands(context, outputChannel);
   registerEnvironmentCommands(context, outputChannel);
@@ -780,13 +784,67 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
   const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   context.subscriptions.push(statusBarItem);
   context.subscriptions.push(startStatusPolling(statusBarItem));
+}
 
+function startClientsForOpenFolders(
+  context: vscode.ExtensionContext,
+  outputChannel: vscode.OutputChannel
+): void {
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const key = folder.uri.toString();
-    if (!clients.has(key)) {
+    if (shouldStartAddedFolder(shutdownBarrier.permitsStart(), clients.has(key))) {
       clients.set(key, startClientForFolder(folder, outputChannel, context));
     }
   }
+}
+
+export function activate(context: vscode.ExtensionContext): OvallspApi {
+  // Module state survives deactivate() inside a live extension host, and
+  // a closed barrier refuses every start. Reopen it before anything can
+  // ask to spawn Core.
+  shutdownBarrier.reset();
+  handshakes.length = 0;
+  // Module state survives `deactivate()` in a live host, and the commands
+  // this flag guards are pushed to a *new* context's subscriptions.
+  featuresRegistered = false;
+  const outputChannel = vscode.window.createOutputChannel('OvalLSP');
+  context.subscriptions.push(outputChannel);
+
+  // **Registered before the gate, and unconditionally.** `enabled` was
+  // read once here and a `false` returned before this subscription
+  // existed, so neither direction of a live change reached anything:
+  // turning it on needed a window reload, and turning it off left Core --
+  // and on a trusted Rails workspace the Runtime Agent -- running against
+  // code the user had just asked it to leave alone (`024.342`).
+  //
+  // Through `queueClientTransition`, like every other start and stop, so
+  // a fast toggle cannot race a start still in flight.
+  let enabled = isEnabled();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (!event.affectsConfiguration('ovallsp.enabled')) {
+        return;
+      }
+      const next = isEnabled();
+      const transition = decideEnabledTransition(enabled, next);
+      enabled = next;
+      if (transition === 'start') {
+        activateFeatures(context, outputChannel);
+        startClientsForOpenFolders(context, outputChannel);
+      } else if (transition === 'stop') {
+        for (const key of Array.from(clients.keys())) {
+          void queueClientTransition(key, () => Promise.resolve(stopClient(key)));
+        }
+      }
+    })
+  );
+
+  if (!enabled) {
+    return { handshakes };
+  }
+
+  activateFeatures(context, outputChannel);
+  startClientsForOpenFolders(context, outputChannel);
 
   // Workspace Trust can only go from untrusted to trusted while a window
   // stays open (never the reverse), and Server decided whether to start

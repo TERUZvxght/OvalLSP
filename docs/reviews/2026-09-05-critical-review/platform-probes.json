@@ -1,0 +1,49 @@
+{
+  "watcher": {
+    "pattern": "**/{*.rb,*.rbs,*.rbi,*.erb,Gemfile.lock,db/structure.sql}",
+    "matches": {
+      "lib/task.rake": false,
+      "lib/a.rb": true,
+      "sig/a.rbs": true,
+      "sig/a.rbi": true,
+      "rbs_collection.lock.yaml": false,
+      "Gemfile.lock": true
+    },
+    "note": "glob-library probe; not a VS Code host run"
+  },
+  "ruby_resolution": {
+    "executable": "/opt/homebrew/opt/ruby/bin/ruby",
+    "steps": [
+      {
+        "strategy": "mise",
+        "candidate": "/review/user-root/.local/share/mise/shims/ruby",
+        "matched": false,
+        "reason": "mise shim at /review/user-root/.local/share/mise/shims/ruby"
+      },
+      {
+        "strategy": "asdf",
+        "candidate": "/review/user-root/.asdf/shims/ruby",
+        "matched": false,
+        "reason": "asdf shim at /review/user-root/.asdf/shims/ruby"
+      },
+      {
+        "strategy": "rbenv",
+        "candidate": "/review/user-root/.rbenv/shims/ruby",
+        "matched": false,
+        "reason": "rbenv shim at /review/user-root/.rbenv/shims/ruby"
+      },
+      {
+        "strategy": "chruby",
+        "candidate": null,
+        "matched": false,
+        "reason": "no /review/user-root/.ruby-version"
+      },
+      {
+        "strategy": "Homebrew",
+        "candidate": "/opt/homebrew/opt/ruby/bin/ruby",
+        "matched": true,
+        "reason": "Homebrew (Apple Silicon prefix) Ruby at /opt/homebrew/opt/ruby/bin/ruby"
+      }
+    ]
+  }
+}

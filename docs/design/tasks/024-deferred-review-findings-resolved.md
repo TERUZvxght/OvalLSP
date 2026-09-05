@@ -17301,6 +17301,309 @@ target: 0.4.0
 ---
 
 
+## 024.330 Every reference to a workspace constant that is not a class or module is reported unresolved
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: no
+user-visible-note: >-
+  The check is gated at mode >= standard and the extension sends no
+  diagnosticsMode, so it never runs in the shipped product (061). A
+  user meets this only through corpus_diagnostics.rb, which sets the
+  mode deliberately. It becomes user-visible the moment per-check
+  severity makes the check reachable, which is what 0.4.0 is for.
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/diagnostics/engine.rb
+
+- found by: core/lib/ovallsp/diagnostics/engine.rb, core/lib/ovallsp/workspace_index.rb
+- unresolved_constant_findings asks workspace_index.resolve_type_name, whose candidate filter is %i[class module] -- so a plain 'A = [1].freeze' referenced from the same class body, or from a method in it, is reported 'cannot resolve constant A'. Measured on actionpack 8.1.3.1/lib: 1,613 constant references fail type resolution, and a workspace :constant declaration exists by simple name for 427 of them. The check is gated at mode >= standard, which 061 records as unreachable in the shipped product, so nothing ships wrong today -- but per-check severity is what 0.4.0 is for, and this check cannot be offered until it is right.
+
+**Direction:** wrong-report
+
+---
+
+
+## 024.331 2026-09-05 review R16: The current protocol document disagrees with its implementation
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: no
+user-visible-note: >-
+  An internal design document. A user meets it only through a
+  contributor reading it, and the two names it got wrong name no
+  shipped behaviour.
+target: 0.4.0
+```
+
+**Area:** docs/design/docs/05-protocol.md
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R16)
+- Static comparison found Agent v1 in section 1 versus v2 in section 2 and implementation, plus obsolete Core custom request names in section 9; the existing checker does not cover those parts.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-record
+
+---
+
+
+## 024.332 2026-09-05 review R14: Rest parameters waive required arguments during overload selection
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/signatures/overload_resolver.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R14)
+- Direct OverloadResolver calls accepted zero arguments for a required positional plus rest and for a required keyword plus keyword rest, contaminating the selected return union.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-report
+
+---
+
+
+## 024.333 2026-09-05 review R12: The watcher glob omits rake files that cold indexing includes
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** vscode/src/watchedFiles.ts
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R12)
+- The exported glob matched a Ruby control and did not match a rake file. This is a source/glob comparison, not a VS Code host run.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-answer
+
+---
+
+
+## 024.334 2026-09-05 review R08: Method rename rejects ordinary bang and predicate names
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/rename/planner.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R08)
+- Server rename accepted world and rejected world! and world? because the reserved-word check parses local-variable assignment syntax; end remained refused as a control.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** refusal
+
+---
+
+
+## 024.335 2026-09-05 review R07: respond_to? exemptions leak across classes and miss explicit self
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/diagnostics/engine.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R07)
+- After the 024.328 repair, a guard in another class suppressed an unconditional missing call, while self.respond_to? still produced a false warning. Both have controls.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-report
+
+---
+
+
+## 024.336 2026-09-05 review R11: Watcher indexing bypasses the cold-index workspace boundary
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R11)
+- A linked Ruby file pointing outside the workspace was rejected by ColdIndexer but indexed through a watched-file notification. No external code was executed.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** boundary
+
+---
+
+
+## 024.337 2026-09-05 review R01: Cache generation pruning follows an intermediate symlink outside its root
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/cache/store.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R01)
+- Default-retention prune_generations removed an outside victim directory; current generation and unrelated file survived. All files were synthetic and contained in one temporary directory.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** data-loss
+
+---
+
+
+## 024.338 2026-09-05 review R04: Cold indexing assigns read_sequence after reading stale content
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/cold_indexer.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R04)
+- A controlled read interleaving left OldVersion indexed after a watcher-equivalent read had registered NewVersion; the disk still held NewVersion.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-edit
+
+---
+
+
+## 024.339 2026-09-05 review R03: Keyword completion inserts a positional argument
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/semantic/query_service.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R03)
+- The Server completion for take(required:) inserts take(${1:required}), losing the keyword colon.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-edit
+
+---
+
+
+## 024.340 2026-09-05 review R10: Signature locations bypass URI escaping and POSIX backslashes are rewritten
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/signatures/environment.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R10)
+- RBS and RBI paths containing # failed the URI round trip. Separately, a literal POSIX backslash was changed to a directory separator. Actual editor navigation was not exercised.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-location
+
+---
+
+
+## 024.341 2026-09-05 review R02: Renaming a parent method breaks an overriding method that calls super
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/rename/planner.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R02)
+- Applying the Server rename changed a synthetic Ruby result from 2 to NoMethodError while the edited source still parsed.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-edit
+
+---
+
+
+## 024.342 2026-09-05 review R06: Disk diagnostics can overwrite newer results and a deletion clear
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R06)
+- Ordered publish calls accepted stale disk findings after fresh empty findings and after clear_findings; disk publication lacks a read identity or sequence guard.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-state
+
+---
+
+
+## 024.343 2026-09-05 review R13: The enabled setting is read only during activation
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** vscode/src/extension.ts
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R13)
+- Static control-flow inspection found no configuration-change subscription to start or stop clients after ovallsp.enabled changes. UI behavior was not measured.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-state
+
+---
+
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

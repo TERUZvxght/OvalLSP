@@ -115,10 +115,12 @@ module Ovallsp
       real_path_stays_inside_root?(safe_realpath(path))
     end
 
+    # Delegated rather than kept here: `Server`'s watcher path asks the
+    # same question, and asking it twice is how the two came to disagree
+    # (`024.336`). `@root_real` is already resolved, and the shared rule
+    # resolves whatever it is given, so handing it either is correct.
     def real_path_stays_inside_root?(real_path)
-      return false if real_path.nil?
-
-      real_path == @root_real || real_path.start_with?("#{@root_real}/")
+      Index::WorkspaceBoundary.inside?(root: @root_real, path: real_path)
     end
 
     def excluded_dir?(parent_dir, entry)
@@ -154,11 +156,22 @@ module Ovallsp
       # (docs/design/tasks/008.6-agent-and-index-hardening.md).
       return if @document_store.fetch(uri: uri)
 
+      # **Before the read, not after it**, which is what
+      # `Server#reindex_from_disk` already does and what `#stale?` assumes:
+      # the number has to mean "when this read started", or two reads of
+      # one file settle in the wrong order. Taken afterwards, a slow first
+      # index that began before a change and finished after the watcher
+      # had indexed the new content took the *higher* number and
+      # overwrote it -- so the index answered from content that was not on
+      # disk, until something else touched that file. A controlled
+      # interleaving rather than a measured frequency; what it shows is
+      # that a legal ordering breaks the invariant (`024.338`).
+      read_sequence = @workspace_index.next_read_sequence
+
       raw_source = source_for(path)
       parsed = cached_or_parsed_summary(uri, path, raw_source)
       document = TextDocument.new(uri: uri, text: raw_source, version: nil, language_id: "ruby")
 
-      read_sequence = @workspace_index.next_read_sequence
       summary = parsed.with(source: :disk, read_sequence: read_sequence)
       if @on_summary
         @on_summary.call(uri, document, summary)

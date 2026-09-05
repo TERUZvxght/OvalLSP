@@ -117,13 +117,13 @@ module Ovallsp
         # name rather than by position: a file defensive about a name is
         # defensive about it, and the typo this check exists for appears
         # in no `respond_to?`.
-        guarded = names_guarded_by_respond_to(document)
-        return [] if guarded.nil?
+        guards = names_guarded_by_respond_to(document)
+        return [] if guards.nil?
 
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call
           next if resolved_locations[candidate.location]
-          next if guarded.include?(candidate.name.to_s)
+          next if guarded_here?(guards, candidate)
           # The call this parser read as a macro, at the range it was
           # written. A recognised `delegate`/`scope`/`enum` leaves the
           # class's surface closed -- correctly, the parser read it -- and
@@ -324,31 +324,73 @@ module Ovallsp
       def names_guarded_by_respond_to(document)
         collector = RespondToGuardCollector.new
         Prism.parse(document.text).value.accept(collector)
-        collector.names
+        collector.guards
       rescue StandardError
         nil
       end
 
+      # **A guard says something about `self`, in the body it is written
+      # in.** The first version of this collected bare names and the check
+      # read them file-wide, which said two things it had no grounds for:
+      # that a guard in one method covers an unguarded call to the same
+      # name in another, and that a guard on `self` covers
+      # `Other.new.maybe_there`. Both were measured on real shapes by two
+      # independent cold reviews and by the 2026-09-05 critical review
+      # (R07) -- and the first is the *forgotten guard*, which is the
+      # mistake a reader would most want reported.
+      #
+      # So a guard carries the line range of the innermost body enclosing
+      # it: its `def`, or failing that its `class`/`module`, or failing
+      # that the file. That is where `self` means what the guard tested.
+      #
+      # **What this still does not model is the branch.** A guard in the
+      # *false* arm exempts the true arm as well, because the scope is the
+      # body rather than the condition's consequent. Narrower than the
+      # file by the two shapes above; wider than Ruby by that one. Stated
+      # rather than left to be discovered.
       class RespondToGuardCollector < Prism::Visitor
-        attr_reader :names
+        Guard = Struct.new(:name, :first_line, :last_line)
+
+        attr_reader :guards
 
         def initialize
-          @names = []
+          @guards = []
+          @bodies = []
           super
         end
 
+        def visit_def_node(node) = within(node) { super }
+        def visit_class_node(node) = within(node) { super }
+        def visit_module_node(node) = within(node) { super }
+        def visit_singleton_class_node(node) = within(node) { super }
+
         def visit_call_node(node)
-          collect(node) if node.name == :respond_to? && node.receiver.nil?
+          collect(node) if node.name == :respond_to? && about_self?(node)
           super
         end
 
         private
 
+        # `nil` and `self` alike, which is what the parser's own
+        # `#open_surface_kind` already does. Reading only `nil` left the
+        # explicit spelling -- ordinary in application code -- reported.
+        def about_self?(node) = node.receiver.nil? || node.receiver.is_a?(Prism::SelfNode)
+
+        def within(node)
+          @bodies.push(node)
+          yield
+        ensure
+          @bodies.pop
+        end
+
         def collect(node)
+          body = @bodies.last
+          first = body ? body.location.start_line : 0
+          last = body ? body.location.end_line : Float::INFINITY
+
           Array(node.arguments&.arguments).each do |argument|
             case argument
-            when Prism::SymbolNode then @names << argument.unescaped.to_s
-            when Prism::StringNode then @names << argument.unescaped.to_s
+            when Prism::SymbolNode, Prism::StringNode then @guards << Guard.new(argument.unescaped.to_s, first, last)
             end
           end
         end
@@ -819,6 +861,13 @@ module Ovallsp
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :constant
           next if context.workspace_index.resolve_type_name(candidate.name)
+          # A class or module is what `#resolve_type_name` answers about;
+          # a plain `A = [1].freeze` is indexed as a `:constant` and could
+          # never match it, so every reference to one was reported
+          # (`024.330`). Asked beside that route rather than folded into
+          # it: every other caller of `#resolve_type_name` wants a *type*,
+          # and a constant is not one.
+          next if constant_within_reach?(candidate, context)
           next if context.signatures && rbs_known_constant?(candidate.name, context.signatures)
 
           Finding.new(
@@ -827,6 +876,89 @@ module Ovallsp
             evidence: { name: candidate.name }, generation: context.generation
           )
         end
+      end
+
+      # Whether a `respond_to?` guard covers *this* call: the same name,
+      # a call on `self` (written or implicit -- a call with any other
+      # receiver is about a different object), and inside the body the
+      # guard was written in.
+      def guarded_here?(guards, candidate)
+        return false unless candidate.receiver.nil? || written_self?(candidate)
+
+        name = candidate.name.to_s
+        line = candidate.location[:start][:line] + 1
+        guards.any? { |guard| guard.name == name && line >= guard.first_line && line <= guard.last_line }
+      end
+
+      # **Ruby's constant lookup, to the depth this index can follow it.**
+      #
+      # `WorkspaceIndex#constant_declaration_owners` answers which owners
+      # declare a constant of this simple name; deciding from that list
+      # alone is what the first version of `024.330` did, and it was wrong
+      # in both directions -- a bare `LIMIT` accepted because an unrelated
+      # `Foreign::LIMIT` existed, and `Child::LIMIT` reported although
+      # `Parent` declares it. Ruby, 3.4.10:
+      #
+      #     $ ruby -e '
+      #     class Parent; LIMIT = 3; end
+      #     class Child < Parent; def go = LIMIT; end
+      #     class Consumer; def go = LIMIT; end
+      #     p [Child.new.go, Child::LIMIT]
+      #     begin; Consumer.new.go; rescue NameError => e; puts e.message; end
+      #     '
+      #     # => [3, 3]
+      #     #    uninitialized constant Consumer::LIMIT
+      #
+      # So the *reach* is computed: for a bare name, every lexical nesting
+      # frame and its ancestors, plus the top level; for a qualified one,
+      # the written namespace and its ancestors. A name outside that reach
+      # is reported, which is the whole point of the check.
+      #
+      # **An unbuildable chain declines**, the way `#ancestor_names` does:
+      # "no ancestor declares it" answered from a chain with an
+      # unidentified link is an assertion made from a question that could
+      # not be asked (`024.224`'s shape).
+      def constant_within_reach?(candidate, context)
+        written = candidate.name.to_s
+        simple = written.split("::").last.to_s
+        owners = context.workspace_index.constant_declaration_owners(simple)
+        return false if owners.empty?
+
+        reach = constant_reach(written, candidate, context)
+        return true if reach.nil? # the chain could not be built: decline
+
+        owners.any? { |owner| reach.include?(owner) }
+      end
+
+      # The owners a name written here can reach, or `nil` where that
+      # cannot be determined. `nil` inside the set is the top level, which
+      # is how `#visit_constant_write_node` records a constant written
+      # outside any class or module body.
+      def constant_reach(written, candidate, context)
+        namespace = written.sub(/::[^:]*\z/, "")
+        return owners_reachable_from([namespace], context) if namespace != written
+
+        frames = Array(candidate.lexical_nesting)
+        reach = owners_reachable_from(frames, context)
+        reach&.<<(nil)
+        reach
+      end
+
+      # Each frame, plus everything on its instance chain. `nil` from any
+      # one chain propagates: a single unidentified ancestor makes the
+      # whole answer "cannot tell" rather than a shorter list, because a
+      # shorter list is indistinguishable from a complete one downstream.
+      def owners_reachable_from(names, context)
+        reach = Set.new
+        names.each do |name|
+          canonical = context.workspace_index.resolve_type_name(name) || Index::SymbolId.qualify_owner(name)
+          reach << canonical
+          entries = context.hierarchy_index.ancestors(canonical, singleton: false)
+          return nil if entries.any? { |entry| !entry.identified? }
+
+          entries.each { |entry| reach << Index::SymbolId.qualify_owner(entry.name_or_nil.to_s) }
+        end
+        reach
       end
 
       # **`true` on failure, not `false`** (`024.122`). This decides

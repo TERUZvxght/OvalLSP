@@ -1,0 +1,6 @@
+{
+  "outside_victim_before": true,
+  "outside_victim_after": false,
+  "retained_generation_exists": true,
+  "unrelated_control_exists": true
+}

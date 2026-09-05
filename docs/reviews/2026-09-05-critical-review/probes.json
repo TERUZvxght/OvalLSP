@@ -1,0 +1,243 @@
+{
+  "runtime": {
+    "ruby": "3.4.10",
+    "ovallsp": "0.3.3"
+  },
+  "explicit_guard": {
+    "source": "class Guarded\n def go\n  optional if self.respond_to?(:optional)\n end\nend\n",
+    "findings": [
+      {
+        "code": "unknown-method",
+        "message": "Guarded has no method named `optional`",
+        "line": 3
+      }
+    ],
+    "ruby_result": null
+  },
+  "bare_guard": {
+    "source": "class Guarded\n def go\n  optional if respond_to?(:optional)\n end\nend\n",
+    "findings": [],
+    "ruby_result": null
+  },
+  "guard_control": {
+    "source": "class Unrelated\n def go = absent\nend\n",
+    "findings": [
+      {
+        "code": "unknown-method",
+        "message": "Unrelated has no method named `absent`",
+        "line": 2
+      }
+    ]
+  },
+  "guard_leaks": {
+    "source": "class Guarded\n def go\n  absent if respond_to?(:absent)\n end\nend\nclass Unrelated\n def go = absent\nend\n",
+    "findings": [],
+    "ruby_error": "NameError"
+  },
+  "missing_keyword": {
+    "source": "class Keyword\n def take(required:); end\n def go = take\nend\n",
+    "findings": [],
+    "ruby_error": "ArgumentError"
+  },
+  "extra_keyword": {
+    "source": "class Keyword\n def take(required:); end\n def go = take(required: 1, extra: 2)\nend\n",
+    "findings": [],
+    "ruby_error": "ArgumentError"
+  },
+  "positional_control": {
+    "source": "class Keyword\n def take(value); end\n def go = take\nend\n",
+    "findings": [
+      {
+        "code": "argument-count",
+        "message": "`take` takes 1 argument, but 0 given",
+        "line": 3
+      }
+    ],
+    "ruby_error": "ArgumentError"
+  },
+  "primitive_typo": {
+    "source": "class Primitive\n def go = 'hello'.uppcase\nend\n",
+    "findings": [],
+    "ruby_error": "NoMethodError"
+  },
+  "custom_typo": {
+    "source": "class Custom\n def go = uppcase\nend\n",
+    "findings": [
+      {
+        "code": "unknown-method",
+        "message": "Custom has no method named `uppcase`",
+        "line": 2
+      }
+    ],
+    "ruby_error": "NameError"
+  },
+  "inherited_constant": {
+    "source": "class Parent\n LIMIT = 3\nend\nclass Child < Parent; end\nChild::LIMIT\n",
+    "findings": [
+      {
+        "code": "unresolved-constant",
+        "message": "cannot resolve constant `Child::LIMIT`",
+        "line": 5
+      }
+    ],
+    "ruby_result": 3
+  },
+  "constant_control": {
+    "source": "class Parent\n LIMIT = 3\nend\nParent::LIMIT\n",
+    "findings": []
+  },
+  "unrelated_constant": {
+    "source": "module Foreign\n LIMIT = 3\nend\nclass Consumer\n def go = LIMIT\nend\n",
+    "findings": [],
+    "ruby_error": "NameError"
+  },
+  "missing_constant": {
+    "source": "class Consumer\n def go = LIMIT\nend\n",
+    "findings": [
+      {
+        "code": "unresolved-constant",
+        "message": "cannot resolve constant `LIMIT`",
+        "line": 2
+      }
+    ],
+    "ruby_error": "NameError"
+  },
+  "module_typo": {
+    "source": "module Helper\n def self.go = typo\nend\n",
+    "findings": [],
+    "ruby_error": "NameError"
+  },
+  "rename_world": {
+    "accepted": true,
+    "source": "class Renamed\n def world; 1; end\n def go = world\nend\n",
+    "parses": true
+  },
+  "rename_world!": {
+    "accepted": false
+  },
+  "rename_world?": {
+    "accepted": false
+  },
+  "rename_world=": {
+    "accepted": false
+  },
+  "rename_end": {
+    "accepted": false
+  },
+  "override_rename": {
+    "accepted": true,
+    "source": "class Parent\n def world = 1\nend\nclass Child < Parent\n def hello = super + 1\nend\nclass Consumer\n def go = Child.new.hello\nend\n",
+    "parses": true,
+    "before": 2,
+    "after": "NoMethodError"
+  },
+  "cold_race": {
+    "disk": "class NewVersion; end",
+    "indexed": [
+      "::OldVersion"
+    ]
+  },
+  "dependent_refresh": {
+    "published_before": 1,
+    "published_after": 1,
+    "forced_diagnostics": [
+      {
+        "range": {
+          "start": {
+            "line": 1,
+            "character": 21
+          },
+          "end": {
+            "line": 1,
+            "character": 25
+          }
+        },
+        "severity": 2,
+        "code": "argument-count",
+        "source": "ovallsp",
+        "message": "`take` takes 2 arguments, but 1 given",
+        "relatedInformation": []
+      }
+    ]
+  },
+  "signature_refresh": {
+    "published_before": 1,
+    "published_after": 1,
+    "forced_diagnostics": [
+      {
+        "range": {
+          "start": {
+            "line": 2,
+            "character": 15
+          },
+          "end": {
+            "line": 2,
+            "character": 16
+          }
+        },
+        "severity": 2,
+        "code": "argument-type",
+        "source": "ovallsp",
+        "message": "`take` expects String here, but Integer is given",
+        "relatedInformation": []
+      }
+    ]
+  },
+  "disk_stale_publish": {
+    "old_accepted": true,
+    "final": [
+      {
+        "range": {
+          "start": {
+            "line": 0,
+            "character": 0
+          },
+          "end": {
+            "line": 0,
+            "character": 1
+          }
+        },
+        "severity": 2,
+        "code": "unknown-method",
+        "source": "ovallsp",
+        "message": "old answer",
+        "relatedInformation": []
+      }
+    ]
+  },
+  "disk_after_clear": {
+    "old_accepted": true
+  },
+  "watcher_escape": {
+    "cold_names": [],
+    "watcher_names": [
+      "::OutsideSentinel",
+      "secret"
+    ]
+  },
+  "posix_uri": {
+    "filename": "one\\two.rb",
+    "roundtrip_filename": "two.rb",
+    "roundtrips": false
+  },
+  "keyword_completion": {
+    "label": "take",
+    "kind": 2,
+    "detail": null,
+    "sortText": "0-take",
+    "data": {
+      "receiver": "Completion",
+      "name": "take"
+    },
+    "insertText": "take(${1:required})",
+    "insertTextFormat": 2
+  },
+  "LocationRbs": {
+    "uri_suffix": "project#one/sig/location.rbs",
+    "decoded_exists": false
+  },
+  "LocationRbi": {
+    "uri_suffix": "project#one/sig/location.rbi",
+    "decoded_exists": false
+  }
+}
