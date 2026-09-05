@@ -842,9 +842,15 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
   // **Registered before the gate too.** These were below it, so a window
   // activated with `enabled: false` and switched on live got clients and
   // no trust handling and no folder handling -- two of the conditions the
-  // review names. They act on `clients`, which is empty while disabled,
-  // so registering them unconditionally costs nothing. Found by cold
-  // review.
+  // review names. Found by cold review.
+  //
+  // **Both read `enabled`.** The first version of this said they "act on
+  // `clients`, which is empty while disabled", and that is wrong of the
+  // trust handler: `restartClientForFolder` stops (a no-op) and then
+  // *starts*, reading neither. Granting trust in a window where the
+  // extension is switched off started a Core -- a regression against
+  // registering it below the gate, on the exact setting the fix is about.
+  // Found by the next cold review, one commit later.
   //
   // Workspace Trust can only go from untrusted to trusted while a window
   // stays open (never the reverse), and Server decided whether to start
@@ -854,6 +860,9 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
   // this rare, one-time event.
   context.subscriptions.push(
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      if (!enabled) {
+        return;
+      }
       for (const folder of vscode.workspace.workspaceFolders ?? []) {
         void restartClientForFolder(folder, outputChannel, context);
       }

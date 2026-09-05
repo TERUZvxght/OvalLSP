@@ -1522,26 +1522,44 @@ module Ovallsp
       end)
     end
 
+    # **The first index does not queue dependents** (`024.344`). A file it
+    # has not seen has no previous declarations, so every cold summary
+    # with a `def` in it read as a declaration change and queued every
+    # open document -- and `#run` drains whenever the input is quiet, so
+    # during a cold index of a large repository every client message cost
+    # a full re-analysis of everything open. A regression the commit that
+    # added the queueing introduced, found by cold review.
+    #
+    # The pass has its own ending: `on_complete` marks the reference index
+    # dirty and requests the workspace diagnostics, which is the one place
+    # "the first index changed what is known" belongs.
     def apply_cold_summary(_uri, _document, summary)
-      apply_file_summary(summary)
+      apply_file_summary(summary, queue_dependents: false)
     end
 
-    def apply_file_summary(summary)
+    def apply_file_summary(summary, queue_dependents: true)
       declarations_changed = false
       applied = @index_mutation_mutex.synchronize do
         previous_declarations = @workspace_index.declarations_for_uri(summary.uri)
+        # **Read before the store overwrites it.** The first version asked
+        # `@file_summaries[summary.uri]` *after* assigning, so both sides
+        # of the comparison were the new summary and no ancestor or alias
+        # change could ever differ -- the three examples it was added for
+        # all failed.
+        previous_summary = @file_summaries[summary.uri]
         next false unless @workspace_index.replace_file(summary)
 
         @hierarchy_index.replace_file(summary)
         @file_summaries[summary.uri] = summary
         invalidate_method_summaries(previous_declarations)
-        declarations_changed = declaration_set(previous_declarations) != declaration_set(summary.declarations)
+        declarations_changed = dependable_shape(previous_declarations, previous_summary) !=
+                               dependable_shape(summary.declarations, summary)
         @generated_method_index.replace_file(uri: summary.uri, facts: summary.generated_method_facts)
         mark_reference_index_dirty
         true
       end
 
-      note_dependents_need_analysis(summary.uri) if applied && declarations_changed
+      note_dependents_need_analysis(summary.uri) if applied && declarations_changed && queue_dependents
       applied
     end
 
@@ -1590,6 +1608,30 @@ module Ovallsp
          declaration.visibility,
          Array(declaration.parameters).map { |parameter| [parameter.name, parameter.kind] }]
       end.to_set
+    end
+
+    # **The declarations are not the whole of what another file depends
+    # on.** A superclass changed, an `include` removed or an
+    # `alias_method` deleted alters what a caller may call while every
+    # declaration in the file stays identical -- and a cold review
+    # measured all three leaving the caller stale. They are cheap to
+    # compare and they change rarely, which is the opposite of a body.
+    #
+    # **A body is deliberately left out.** A `def make = Helper.new`
+    # becoming `Other.new` changes the caller's inferred receiver type and
+    # is not caught here; including body text would queue every open file
+    # on every keystroke inside any method, which is the cost `024.344`'s
+    # own regression was about. Recorded in intake rather than traded for
+    # that.
+    # A `nil` summary is a file this Server has not held one for, and its
+    # ancestor and alias sets are *empty*, not unknown -- read as `nil`
+    # they differed from every real summary's empty set, so the first
+    # index of any file (a watched `.txt` included) read as a change and
+    # queued every open document. R2's own shape, one layer down.
+    def dependable_shape(declarations, summary)
+      [declaration_set(declarations),
+       (summary&.ancestor_facts || []).map { |fact| [fact.owner, fact.relation, fact.target] }.to_set,
+       (summary&.alias_facts || []).map { |fact| [fact.owner, fact.new_name, fact.old_name, fact.singleton] }.to_set]
     end
 
     # "ColdIndexer did not visit it" is not the same fact as "it was
@@ -4018,6 +4060,10 @@ module Ovallsp
         @index_mutation_mutex.synchronize do
           @signatures.load(workspace_root: @workspace_root)
           @method_summary_store.clear
+          # The signature environment is the third input to an ancestor
+          # chain, through `#canonical_name`'s `declares?` -- and the only
+          # one that changes without either index being written to.
+          @hierarchy_index.signatures_reloaded
         end
         # **And then ask for the answers to be said again** (`024.344`).
         # The environment and the summary cache were both updated and

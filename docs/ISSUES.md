@@ -120,8 +120,12 @@ because a number is a claim that the thing exists.
   - found by: core/lib/ovallsp/parser_service.rb
   - rack/builder.rb:5 writes Rack::BUILDER_TOPLEVEL_BINDING at the top level and reads it at :106; the index records the declaration with a nil owner and the name as written, so the read is reported unresolved on both bb1c450 and its parent. One of 428 remaining corpus reports; found by cold review while sampling them.
   - unverified: not yet driven against the tree
+- **A body change that alters an inferred return type does not refresh the caller**
+  - found by: core/lib/ovallsp/server.rb
+  - 024.344 compares declarations, ancestor facts and alias facts. A body edit -- def make = Helper.new becoming Other.new -- changes the caller's inferred receiver type while all three stay identical, so the caller keeps its old diagnostics until its own next edit. Demonstrated by cold review of 46c0cd6 with a forced re-analysis showing the report the whole time. Including body text in the comparison would queue every open file on every keystroke inside any method, which is the cost the same review measured as a regression; a body-level dependency needs the reference index rather than a summary comparison.
+  - unverified: not yet driven against the tree
 
-**Seven items above; the rest was emptied deliberately.** The twenty-one items that had
+**Eight items above; the rest was emptied deliberately.** The twenty-one items that had
 accumulated by 0.3.1 were driven and dispositioned in one pass:
 fourteen became `024.306` through `024.319`, and seven left without a
 number. The seven, and why:

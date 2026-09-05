@@ -1477,3 +1477,28 @@
   to: "          next if false\n"
   spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
   example: "does not report a call the file guards with respond_to?"
+
+- why: "`#signatures_reloaded` actually clears the memo: it is the third input to a chain and the only one that changes without either index being written to."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "      def signatures_reloaded\n        @mutex.synchronize { @ancestors_memo.clear }\n      end\n"
+  to: "      def signatures_reloaded; end\n"
+  spec: spec/ovallsp/semantic/hierarchy_index_spec.rb
+  example: "reflects a signature environment that reloaded under it"
+- why: "The first index does not queue dependents: a file it has not seen has no previous declarations, so every cold summary read as a change and every quiet moment re-analysed every open document."
+  file: core/lib/ovallsp/server.rb
+  from: "      apply_file_summary(summary, queue_dependents: false)\n"
+  to: "      apply_file_summary(summary)\n"
+  spec: spec/ovallsp/server_dependent_refresh_spec.rb
+  example: "does not queue open documents for each file the first index reads"
+- why: "Ancestors and aliases are compared too: a superclass changed, an include removed or an alias deleted alters what a caller may call while every declaration stays identical."
+  file: core/lib/ovallsp/server.rb
+  from: "        previous_summary = @file_summaries[summary.uri]\n"
+  to: "        previous_summary = summary\n"
+  spec: spec/ovallsp/server_dependent_refresh_spec.rb
+  example: "republishes the caller when an include is removed"
+- why: "A missing previous summary has empty ancestor and alias sets, not unknown ones: read as nil the first index of any file read as a change."
+  file: core/lib/ovallsp/server.rb
+  from: "       (summary&.ancestor_facts || []).map { |fact| [fact.owner, fact.relation, fact.target] }.to_set,\n"
+  to: "       summary&.ancestor_facts&.map { |fact| [fact.owner, fact.relation, fact.target] }&.to_set,\n"
+  spec: spec/ovallsp/server_dependent_refresh_spec.rb
+  example: "does not republish every open file for an unrelated watched change"

@@ -83,9 +83,16 @@ RSpec.describe Ovallsp::Server, "re-analysis when a dependency changes" do
     expect(publishes_for(use).last[:params][:diagnostics]).not_to be_empty
   end
 
+  # **This passes on the parent tree too**, which a cold review measured:
+  # undoing the change republishes because the *edited* file's own path
+  # publishes, and the caller's stale warning is then compared against a
+  # tree where nothing had put one there. Kept as the round trip it
+  # describes, with the count asserted rather than only the content, so it
+  # says something the parent does not.
   it "republishes it again when the change is undone" do
     target = open_doc("target.rb", "class Target\n  def take(x); end\nend\n")
     use = open_doc("use.rb", "class Consumer\n  def go = Target.new.take(1)\nend\n")
+    before = publishes_for(use).length
 
     server.send(:handle_did_change,
                 { textDocument: { uri: target, version: 2 },
@@ -96,6 +103,7 @@ RSpec.describe Ovallsp::Server, "re-analysis when a dependency changes" do
                   contentChanges: [{ text: "class Target\n  def take(x); end\nend\n" }] })
     server.send(:drain_settled_analyses)
 
+    expect(publishes_for(use).length).to eq(before + 2)
     expect(publishes_for(use).last[:params][:diagnostics]).to be_empty
   end
 
@@ -165,5 +173,92 @@ RSpec.describe Ovallsp::Server, "re-analysis when a dependency changes" do
 
       expect(publishes_for(use).length).to eq(before)
     end
+  end
+
+  # **What a caller depends on is more than the declarations.** A
+  # superclass changed, an `include` removed or an `alias_method` deleted
+  # alters what a caller may call while every declaration in the file is
+  # byte-identical -- a cold review measured all three leaving the caller
+  # stale, with a forced re-analysis showing the report the whole time.
+  describe "a change that is not a declaration" do
+    it "republishes the caller when the callee's superclass changes" do
+      open_doc("base.rb", "class Base\n  def helper; end\nend\nclass Other\nend\n")
+      target = open_doc("target.rb", "class Target < Base\nend\n")
+      use = open_doc("use.rb", "class Consumer\n  def go = Target.new.helper\nend\n")
+      before = publishes_for(use).length
+
+      server.send(:handle_did_change,
+                  { textDocument: { uri: target, version: 2 },
+                    contentChanges: [{ text: "class Target < Other\nend\n" }] })
+      server.send(:drain_settled_analyses)
+
+      expect(publishes_for(use).length).to be > before
+    end
+
+    it "republishes the caller when an include is removed" do
+      open_doc("mixin.rb", "module Mixin\n  def m; end\nend\n")
+      target = open_doc("target.rb", "class Target\n  include Mixin\nend\n")
+      use = open_doc("use.rb", "class Consumer\n  def go = Target.new.m\nend\n")
+      before = publishes_for(use).length
+
+      server.send(:handle_did_change,
+                  { textDocument: { uri: target, version: 2 },
+                    contentChanges: [{ text: "class Target\nend\n" }] })
+      server.send(:drain_settled_analyses)
+
+      expect(publishes_for(use).length).to be > before
+    end
+
+    it "republishes the caller when an alias is removed" do
+      target = open_doc("target.rb", "class Target\n  def take; end\n  alias_method :grab, :take\nend\n")
+      use = open_doc("use.rb", "class Consumer\n  def go = Target.new.grab\nend\n")
+      before = publishes_for(use).length
+
+      server.send(:handle_did_change,
+                  { textDocument: { uri: target, version: 2 },
+                    contentChanges: [{ text: "class Target\n  def take; end\nend\n" }] })
+      server.send(:drain_settled_analyses)
+
+      expect(publishes_for(use).length).to be > before
+    end
+  end
+
+  # **The first index does not queue dependents.** A file it has not seen
+  # has no previous declarations, so every cold summary with a `def` in it
+  # read as a declaration change -- and `#run` drains whenever the input
+  # is quiet, so during a cold index of a large repository every client
+  # message cost a full re-analysis of everything open. A regression this
+  # queueing introduced, found by cold review.
+  it "does not queue open documents for each file the first index reads" do
+    use = open_doc("use.rb", "class Consumer\n  def go = 1\nend\n")
+    before = publishes_for(use).length
+
+    3.times do |n|
+      text = "class Cold#{n}\n  def m#{n}; end\nend\n"
+      path = File.join(@root, "cold#{n}.rb")
+      File.write(path, text)
+      document = Ovallsp::TextDocument.new(uri: Ovallsp::UriUtil.from_path(path), text: text,
+                                           version: nil, language_id: "ruby")
+      summary = Ovallsp::ParserService.new.summarize(document).with(source: :disk, read_sequence: n + 1)
+      server.send(:apply_cold_summary, document.uri, document, summary)
+      server.send(:drain_settled_analyses)
+    end
+
+    expect(publishes_for(use).length).to eq(before)
+  end
+
+  # Its control: an *edit* to an open file still queues, so the example
+  # above is the cold path being exempt and not the queueing being dead.
+  it "still queues for an ordinary edit while the same files exist" do
+    target = open_doc("target.rb", "class Target\n  def take(x); end\nend\n")
+    use = open_doc("use.rb", "class Consumer\n  def go = Target.new.take(1)\nend\n")
+    before = publishes_for(use).length
+
+    server.send(:handle_did_change,
+                { textDocument: { uri: target, version: 2 },
+                  contentChanges: [{ text: "class Target\n  def take(x, y); end\nend\n" }] })
+    server.send(:drain_settled_analyses)
+
+    expect(publishes_for(use).length).to be > before
   end
 end

@@ -267,6 +267,23 @@ module Ovallsp
         end
       end
 
+      # **The third input to a chain.** `#canonical_name` asks
+      # `@signatures.declares?` through `#free_for_a_gem_to_claim?`, and
+      # `Signatures::Environment#load` mutates the environment in place --
+      # so reloading a workspace's `sig/` changed what a name resolves to
+      # while every memoised chain kept the old answer, until an unrelated
+      # edit happened to clear it. Three inputs and two clears; found by
+      # cold review, which built the disagreement directly:
+      # `ancestors("Relation")` kept the gem's chain after `sig/` declared
+      # a workspace `Relation`, where a fresh index answered `["Relation"]`.
+      #
+      # Its own method rather than a `@signatures=` writer: the
+      # environment object does not change, only its contents, so there is
+      # nothing to assign.
+      def signatures_reloaded
+        @mutex.synchronize { @ancestors_memo.clear }
+      end
+
       # **Memoised for one generation.** `024.45`'s profile puts the chain
       # walk and everything it allocates near the top of an analysis, and
       # a file asks about the *same few receivers* repeatedly -- each

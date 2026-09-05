@@ -204,6 +204,40 @@ RSpec.describe Ovallsp::Semantic::HierarchyIndex do
       expect(index.ancestors("Widget").map(&:name_or_nil)).not_to include("::Mixin")
     end
 
+    # **The third input, and the one that changes without either index
+    # being written to.** `#canonical_name` asks `@signatures.declares?`
+    # through `#free_for_a_gem_to_claim?`, and
+    # `Signatures::Environment#load` mutates the environment in place --
+    # so reloading a workspace's `sig/` changed what a name resolves to
+    # while every memoised chain kept the old answer. Found by cold
+    # review, which built the disagreement between a memoised index and a
+    # fresh one given the same three inputs.
+    it "reflects a signature environment that reloaded under it" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      signatures = instance_double(Ovallsp::Signatures::Environment)
+      allow(signatures).to receive(:declares?).and_return(false)
+      gems = Ovallsp::Semantic::GemIndex.from_agent(
+        { gems: { "ar-1.0.0": { classes: [
+          { name: "ActiveRecord::Relation",
+            ancestors: %w[ActiveRecord::Relation Object Kernel BasicObject],
+            instanceMethods: %w[to_a], singletonMethods: [], definesMethodMissing: false }
+        ] } } }
+      )
+      index = described_class.new(workspace_index: workspace, gem_index: gems, signatures: signatures)
+      summary = summarize("class Widget < Relation\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      before = index.ancestors("Widget").map(&:name_or_nil)
+      expect(before).to include("ActiveRecord::Relation")
+
+      # `sig/` now declares a `Relation` of the workspace's own, so the
+      # gem may no longer claim the bare name.
+      allow(signatures).to receive(:declares?).and_return(true)
+      index.signatures_reloaded
+
+      expect(index.ancestors("Widget").map(&:name_or_nil)).not_to include("ActiveRecord::Relation")
+    end
+
     it "reflects the file being removed entirely" do
       workspace = Ovallsp::WorkspaceIndex.new
       index = described_class.new(workspace_index: workspace)
