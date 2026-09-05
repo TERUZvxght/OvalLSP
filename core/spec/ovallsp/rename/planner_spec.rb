@@ -221,6 +221,38 @@ RSpec.describe Ovallsp::Rename::Planner do
     # rename that refuses too readily is its own defect, and `024.28` is
     # already a live complaint about one refusal. Each of these is a
     # rename a user legitimately wants.
+    # **The measurement that sent the first attempt back.** The refusal
+    # was written file-wide, on the reasoning that a scope id carries no
+    # nesting so the file is the only computable unit. Driven over 120
+    # activesupport files, renaming each `def`'s first local onto a local
+    # a *different* `def` binds -- which Ruby accepts every time -- it
+    # refused **32 of 32**. Rename refuses mutely, so that is the feature
+    # silently doing nothing.
+    #
+    # The enclosing `def`'s own range is computable from what the index
+    # already holds, and it is the unit that matters: a binding outside
+    # it cannot capture anything inside it. Re-driven after the change,
+    # over pairs in genuinely different `def`s: **19 of 20 applied**, and
+    # the one refusal is a true one -- `name_error.rb`'s `missing_name`
+    # calls `name` receiverlessly, so a local named `name` really would
+    # shadow it.
+    it "still renames a local onto a name only a different method binds" do
+      target = local_target("class W\n  def one\n    total = 0\n    total\n  end\n\n  def two\n    other = 1\n    other\n  end\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "other", generation: 1)
+
+      expect(plan.refused?).to be(false)
+      expect(plan.confirmed_edits).not_to be_empty
+    end
+
+    it "still renames a local onto a method called with arguments, which Ruby never captures" do
+      target = local_target("class W\n  def helper(n); n; end\n  def go\n    total = 0\n    total + helper(1)\n  end\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "helper", generation: 1)
+
+      expect(plan.refused?).to be(false)
+    end
+
     it "still renames a local to a name nothing else uses" do
       target = local_target("def go\n  total = 0\n  [1].each { |x| total += x }\n  total\nend\n", "total")
 

@@ -420,8 +420,8 @@ module Ovallsp
       #   # => 0
       #   # ruby 3.4.10
       #
-      # A receiverless call to a method of the same name is the same
-      # shape from the other side -- the call becomes a read of the local:
+      # A receiverless call with no arguments is the same shape from the
+      # other side -- the call becomes a read of the local:
       #
       #   $ ruby -e 'class W; def helper; 99; end; def go; total=0; total+helper; end; end; p W.new.go'
       #   # => 99
@@ -431,13 +431,15 @@ module Ovallsp
       #   # => 0
       #   # ruby 3.4.10
       #
-      # **Scoped to the file, and deliberately not narrower.** Whether one
-      # scope encloses another is not answerable from a scope id -- they
-      # are counted per file and carry no nesting -- so the choice is the
-      # file or the frame, and the frame is what let all of this through.
-      # The cost is refusing a rename onto a name used in an unrelated
-      # method of the same file, which is a name the reader of that file
-      # is using for something else anyway.
+      # **The enclosing `def`, not the file.** Written file-wide first, on
+      # the reasoning that a scope id carries no nesting so the file is
+      # the only computable unit. Measured over 120 activesupport files,
+      # renaming each `def`'s first local onto a local a *different* `def`
+      # binds -- which Ruby accepts every time -- it refused **32 of 32**.
+      # Rename refuses mutely, so that was the feature silently doing
+      # nothing. A `def`'s declaration spans its whole body, which the
+      # index already records, and a binding outside it cannot capture
+      # anything inside it.
       def elsewhere_in_file(symbol_id, new_name)
         # `SymbolId#initialize` qualifies every owner, so the recorded
         # value is `::<uri>\0<owner>#<scope>` and the leading `::` comes
@@ -445,25 +447,77 @@ module Ovallsp
         uri = symbol_id.owner.to_s.delete_prefix("::").split("\u0000", 2).first
         return [] if uri.to_s.empty?
 
-        occupied = @reference_index.references_in(uri, minimum_confidence: :high).any? do |reference|
-          binds_or_calls?(reference, new_name)
+        summary = @workspace_index.summary_for_uri(uri)
+        range = enclosing_body(summary, symbol_id)
+        return [] unless range
+
+        occupied = summary.reference_candidates.any? do |candidate|
+          within?(range, candidate.location) && binds_or_shadows?(candidate, new_name)
         end
         return [] unless occupied
 
-        [{ reason: "`#{new_name}` already means something in this file -- renaming onto it would change what the code does" }]
+        [{ reason: "`#{new_name}` already means something in this method -- renaming onto it would change what the code does" }]
       end
 
-      # A binding written elsewhere, or a method the file calls without a
-      # receiver. Both are names a local of that name would shadow.
-      def binds_or_calls?(reference, new_name)
-        symbol_id = reference.symbol_id
-        return false unless symbol_id
+      # The `def` whose body contains the target's own occurrences. `nil`
+      # when the target is not inside one -- a top-level local, or a file
+      # whose summary has gone -- and `nil` declines rather than guessing
+      # at a range.
+      def enclosing_body(summary, symbol_id)
+        return nil unless summary
 
-        case symbol_id.kind
-        when :local_variable then reference.write && symbol_id.name.to_s == new_name
-        when :instance_method, :singleton_method then symbol_id.name.to_s == new_name
+        occurrences = @reference_index.references(symbol_id, minimum_confidence: :high).map(&:location)
+        return nil if occurrences.empty?
+
+        summary.declarations
+               .select { |declaration| %i[instance_method singleton_method].include?(declaration.symbol_id.kind) }
+               .find { |declaration| occurrences.all? { |at| within?(declaration.location, at) } }
+               &.location
+      end
+
+      def within?(range, at)
+        return false unless range && at
+
+        start_at = range[:start]
+        end_at = range[:end]
+        line = at[:start][:line]
+        return false if line < start_at[:line] || line > end_at[:line]
+        return false if line == start_at[:line] && at[:start][:character] < start_at[:character]
+        return false if line == end_at[:line] && at[:start][:character] > end_at[:character]
+
+        true
+      end
+
+      # A binding written in this body, or a call written with **no
+      # receiver and no arguments** -- the only call shape a local of the
+      # same name shadows. `helper(1)` stays a call however the local is
+      # named, so refusing it would be the rule reaching past what it is
+      # for.
+      #
+      # Read from the parser's candidates rather than the resolved
+      # references, because "written without a receiver" is a fact about
+      # the source and the resolved form has lost it: a receiverless call
+      # still carries the inferred `self` type in `receiver_type`, so
+      # asking that question there answered `false` for every call.
+      def binds_or_shadows?(candidate, new_name)
+        return false unless candidate.name.to_s == new_name
+
+        case candidate.kind
+        when :local_variable then !candidate.write.nil? && candidate.write
+        when :method_call then candidate.receiver.nil? && no_arguments?(candidate)
         else false
         end
+      end
+
+      def no_arguments?(candidate)
+        arguments = candidate.arguments
+        return true unless arguments
+
+        # `keywords`, `splat` and `block` are booleans here, not lists --
+        # taken from the parser's own shape rather than assumed:
+        # `{positional: 0, positional_locations: [], splat: false,
+        # keywords: false, block: false}`.
+        arguments[:positional].to_i.zero? && !arguments[:keywords] && !arguments[:splat] && !arguments[:block]
       end
 
       def constant_conflicts(symbol_id, new_name)
