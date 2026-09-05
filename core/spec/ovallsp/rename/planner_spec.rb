@@ -712,6 +712,34 @@ RSpec.describe Ovallsp::Rename::Planner do
       expect(plan.confirmed_edits).not_to be_empty
     end
 
+    # **A workspace `class Object` is the other end too.** `#method_owners`
+    # answers with stored owners, which are qualified (`::Object`), and
+    # `HierarchyIndex#ancestors` names its entries bare -- so the one case
+    # `#inherited_owners`'s comment says the root classes are *kept* in
+    # the chain for was the one it could never match. Ruby:
+    #
+    #   $ ruby -e '
+    #   class Object; def blank? = :object_blank; end
+    #   class A8; def blank? = :a8_blank; end
+    #   p A8.new.blank?
+    #   class A9; def renamed = :a9; end
+    #   p A9.new.blank?
+    #   '
+    #   # => :a8_blank
+    #   #    :object_blank
+    #   # ruby 3.4.10
+    #
+    # Renaming `A8#blank?` makes every `A8` call reach `Object`'s instead
+    # of raising. Found by cold review.
+    it "refuses when the other end is a workspace Object" do
+      index_source("class Object\n  def blank? = 1\nend\nclass A8\n  def blank? = 2\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::A8", name: "blank?"),
+                          new_name: "empty_ish", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
     # Two unrelated classes may share a method name without either
     # overriding the other, and renaming one of them is ordinary.
     it "still renames a name an unrelated class also declares" do

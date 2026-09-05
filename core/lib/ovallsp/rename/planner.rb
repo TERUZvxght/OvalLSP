@@ -657,8 +657,21 @@ module Ovallsp
                    "ancestor chain -- renaming one end of an override changes what the other overrides" }]
       end
 
+      # **Both sides qualified.** `WorkspaceIndex#method_owners` answers
+      # with stored owners, which are qualified (`::Object`), and
+      # `HierarchyIndex#ancestors` names its entries bare (`Object`) --
+      # so a workspace `class Object; def blank?` was never seen as the
+      # other end of an override, which is exactly the case this file's
+      # own comment says `Object`/`Kernel`/`BasicObject` are left in the
+      # chain for. Found by cold review.
       def chain_relates?(owner, other)
-        inherited_owners(owner).include?(other) || inherited_owners(other).include?(owner)
+        wanted = Index::SymbolId.qualify_owner(other)
+        mine = Index::SymbolId.qualify_owner(owner)
+        qualified_owners(owner).include?(wanted) || qualified_owners(other).include?(mine)
+      end
+
+      def qualified_owners(owner)
+        inherited_owners(owner).map { |name| Index::SymbolId.qualify_owner(name) }
       end
 
       # `[]` without a hierarchy index, which is the owner-only answer

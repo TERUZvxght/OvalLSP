@@ -936,7 +936,15 @@ module Ovallsp
       # outside any class or module body.
       def constant_reach(written, candidate, context)
         namespace = written.sub(/::[^:]*\z/, "")
-        return owners_reachable_from([namespace], context) if namespace != written
+        # **The namespace is resolved with the nesting too.** `Utils::X`
+        # written inside `module Rack` means `Rack::Utils`, and resolving
+        # `Utils` workspace-wide picks whichever of hashie's, i18n's and
+        # rack's the index happens to rank first -- then `X` is outside
+        # that one's reach and is reported. Measured on rack 3.2.7:
+        # `Utils::STATUS_WITH_NO_ENTITY_BODY`, `Utils::URI_PARSER` and
+        # `Parser::TEMPFILE_FACTORY` were all reported. Found by cold
+        # review; `024.15`'s ambiguity, in a new reader.
+        return owners_reachable_from([namespace], context, nesting: candidate.lexical_nesting) if namespace != written
 
         frames = Array(candidate.lexical_nesting)
         reach = owners_reachable_from(frames, context)
@@ -948,17 +956,44 @@ module Ovallsp
       # one chain propagates: a single unidentified ancestor makes the
       # whole answer "cannot tell" rather than a shorter list, because a
       # shorter list is indistinguishable from a complete one downstream.
-      def owners_reachable_from(names, context)
+      def owners_reachable_from(names, context, nesting: [])
         reach = Set.new
         names.each do |name|
-          canonical = context.workspace_index.resolve_type_name(name) || Index::SymbolId.qualify_owner(name)
+          canonical = context.workspace_index.resolve_type_symbol(name, nesting: Array(nesting))&.name ||
+                      Index::SymbolId.qualify_owner(name)
           reach << canonical
           entries = context.hierarchy_index.ancestors(canonical, singleton: false)
-          return nil if entries.any? { |entry| !entry.identified? }
+          return nil unless entries.all? { |entry| chain_link_understood?(entry, context) }
 
           entries.each { |entry| reach << Index::SymbolId.qualify_owner(entry.name_or_nil.to_s) }
         end
         reach
+      end
+
+      # **Identified is not the same as understood.** `class Pool < Impl`
+      # where `Impl = case ... end` gives an entry *named* `Impl` with
+      # nothing behind it -- the chain stops there, and reading it as
+      # complete reported `RubyImpl`'s constants as unresolved. Measured
+      # on concurrent-ruby, whose `ThreadPoolExecutorImplementation` is
+      # exactly this: `Concurrent::CachedThreadPool::DEFAULT_THREAD_IDLETIMEOUT`
+      # is `60` in ruby 3.4.10 and was reported. Found by cold review.
+      #
+      # A name is understood when something can say what is behind it:
+      # the workspace declares it as a type, or the signature environment
+      # declares it -- which is how `Object`, `Kernel` and `BasicObject`
+      # stay understood without the workspace owning them.
+      def chain_link_understood?(entry, context)
+        return false unless entry.identified?
+        return true if context.workspace_index.type_kind(entry.name_or_nil)
+
+        signatures = context.signatures
+        return false unless signatures
+
+        signatures.declares?(Index::SymbolId.qualify_owner(entry.name_or_nil)) != false
+      rescue StandardError
+        # A question that could not be asked is not an answer of "no": the
+        # same direction `#rbs_known_constant?` takes beside this.
+        true
       end
 
       # **`true` on failure, not `false`** (`024.122`). This decides

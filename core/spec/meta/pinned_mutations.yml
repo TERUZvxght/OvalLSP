@@ -1413,10 +1413,46 @@
   example: "does not report a constant an ancestor declares"
 - why: "An unbuildable chain declines: `no ancestor declares it` answered from a chain with an unidentified link is an assertion made from a question that could not be asked."
   file: core/lib/ovallsp/diagnostics/engine.rb
-  from: "          return nil if entries.any? { |entry| !entry.identified? }\n"
+  from: "          return nil unless entries.all? { |entry| chain_link_understood?(entry, context) }\n"
   to: ""
   spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
   example: "declines when the ancestry cannot be built"
+- why: "Identified is not understood: a link naming something nothing can see behind -- `class Pool < Impl` where `Impl = RubyImpl` -- stops the chain, and reading it as complete reports the real ancestor's constants."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        return false unless entry.identified?\n        return true if context.workspace_index.type_kind(entry.name_or_nil)\n"
+  to: "        return entry.identified?\n"
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "declines when a link in the chain names something it cannot see behind"
+- why: "A written namespace is resolved with the nesting it was written in: a workspace-wide pick among three gems' `Utils` put the constant outside the reach of whichever ranked first."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        return owners_reachable_from([namespace], context, nesting: candidate.lexical_nesting) if namespace != written\n"
+  to: "        return owners_reachable_from([namespace], context) if namespace != written\n"
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "resolves a written namespace with the nesting it was written in"
+- why: "A clear is floored by the index generation: keeping only the last published generation recorded nothing for a clear with no prior publish, and let a result one generation above the last publish land after it."
+  file: core/lib/ovallsp/server.rb
+  from: "        @last_disk_generation[uri] = [[last_disk, @workspace_index.generation].compact.max, :cleared]\n"
+  to: "        @last_disk_generation[uri] = [last_disk, :cleared]\n"
+  spec: spec/ovallsp/server_publish_ordering_spec.rb
+  example: "refuses a result after a clear that had nothing before it"
+- why: "Both sides of an override check are qualified: `#method_owners` answers `::Object` and `#ancestors` answers `Object`, so a workspace `class Object` was never seen as the other end."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        qualified_owners(owner).include?(wanted) || qualified_owners(other).include?(mine)\n"
+  to: "        inherited_owners(owner).include?(other) || inherited_owners(other).include?(owner)\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses when the other end is a workspace Object"
+- why: "The ancestor chain is memoised for one generation and cleared by every mutation: without the clear a caller reads a chain from a shape that has changed."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "          @generation += 1\n          @ancestors_memo.clear\n        end\n      end\n\n      def remove_file(uri)"
+  to: "          @generation += 1\n        end\n      end\n\n      def remove_file(uri)"
+  spec: spec/ovallsp/semantic/hierarchy_index_spec.rb
+  example: "reflects a file's ancestors being replaced"
+- why: "The type resolution is memoised for one generation and cleared by every mutation: without the clear a name keeps whatever it resolved to before the file that declares it was indexed."
+  file: core/lib/ovallsp/workspace_index.rb
+  from: "        @generation += 1\n        @type_resolution_memo.clear\n"
+  to: "        @generation += 1\n"
+  spec: spec/ovallsp/workspace_index_spec.rb
+  example: "resolves a class declared after the first question was asked"
 - why: "A concern's class methods come from the module its hook actually extends: synthesising `#{module}::ClassMethods` instead is right only when the extended module happens to be spelled that."
   file: core/lib/ovallsp/semantic/hierarchy_index.rb
   from: "        hooked = @concern_markers_by_owner.fetch(target, []).map do |fact|\n          @workspace_index.nested_type_name(fact.target, nesting: fact.nesting) || fact.target\n        end\n"

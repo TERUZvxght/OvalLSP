@@ -54,9 +54,10 @@ module ProtocolDoc
 
   # **The other half of the document, which this check did not read.**
   # Section 9 lists the custom requests the Core answers for the VS Code
-  # UI, and three of the six it listed named nothing in `core/lib` while
-  # two that are dispatched were absent -- `ovallsp/clearObservedTypes`
-  # and `ovallsp/reindexWorkspace`. The old names are not synonyms of the
+  # UI, and **four** of the six it listed named nothing in `core/lib`
+  # while **five** that are dispatched were absent. The first count of
+  # this said three and two, from reading rather than grepping, and a
+  # cold review derived the real ones. The old names are not synonyms of the
   # new ones either: `clearCaches` names caches in general and
   # `clearObservedTypes` names observed types. Section 1 said "Protocol
   # v1" in prose while section 2 and the Agent both said 2, for the same

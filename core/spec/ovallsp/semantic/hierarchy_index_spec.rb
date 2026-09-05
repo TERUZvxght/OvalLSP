@@ -172,4 +172,50 @@ RSpec.describe Ovallsp::Semantic::HierarchyIndex do
       expect(elapsed).to be < 1.0
     end
   end
+
+  # **A memo that survives a mutation is a wrong answer, not a fast one.**
+  # `#ancestors` is memoised for one generation, because `024.45`'s
+  # profile puts the chain walk and everything it allocates near the top
+  # of an analysis and a file asks about the same few receivers
+  # repeatedly. The whole of its correctness is that every mutation --
+  # and a gem-index swap, which changes chains without bumping the
+  # generation -- clears it.
+  describe "the ancestor memo" do
+    def summarize(text, uri)
+      Ovallsp::ParserService.new.summarize(
+        Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+      )
+    end
+
+    it "reflects a file's ancestors being replaced" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      index = described_class.new(workspace_index: workspace)
+      %w[a.rb].each do |_|
+        summary = summarize("module Mixin\nend\nclass Widget\n  include Mixin\nend\n", "file:///a.rb")
+        workspace.replace_file(summary)
+        index.replace_file(summary)
+      end
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to include("::Mixin")
+
+      summary = summarize("module Mixin\nend\nclass Widget\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+
+      expect(index.ancestors("Widget").map(&:name_or_nil)).not_to include("::Mixin")
+    end
+
+    it "reflects the file being removed entirely" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      index = described_class.new(workspace_index: workspace)
+      summary = summarize("class Base\nend\nclass Widget < Base\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to include("::Base")
+
+      workspace.remove_file("file:///a.rb")
+      index.remove_file("file:///a.rb")
+
+      expect(index.ancestors("Widget").map(&:name_or_nil)).not_to include("::Base")
+    end
+  end
 end

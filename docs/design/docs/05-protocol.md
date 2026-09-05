@@ -336,10 +336,12 @@ ovallsp/clearObservedTypes
 ovallsp/reindexWorkspace
 ```
 
-**3つの旧名が現行仕様として並んでいた。** `ovallsp/restartRuntimeAgent`、
+**4つの旧名が現行仕様として並んでいた。** `ovallsp/restartRuntimeAgent`、
 `ovallsp/showEvidence`、`ovallsp/runObservation`、`ovallsp/clearCaches` は
-Coreのどこにも無く、`ovallsp/clearObservedTypes` と
-`ovallsp/reindexWorkspace` は実装されているのに載っていなかった。最後の
+Coreのどこにも無く、実装されているのに載っていなかったものが5つ
+(`ovallsp/restartAgent`、`ovallsp/showTypeEvidence`、
+`ovallsp/runObservedTests`、`ovallsp/clearObservedTypes`、
+`ovallsp/reindexWorkspace`)あった。最後の
 2つは名前を置き換えれば同じ意味になるものでもない —
 `clearCaches` はキャッシュ全般を、`clearObservedTypes` は観測した型だけを
 指す。この節の検査は Agent の dispatch と第2節の `protocolVersion` しか

@@ -243,10 +243,25 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     expect(unknown_methods(source)).to include("delegate")
   end
 
+  # **The block has to be one that does not open the surface**, or the
+  # example cannot fail. The first version used `included do ... end`,
+  # which is itself an unreadable class-body call: `size` was silent
+  # whether or not the block's `delegate` was read, and the example passed
+  # on the parent commit too. Found by cold review -- an assertion that
+  # cannot fail, arriving through the fixture.
+  #
+  # `%i[...].each { }` has a receiver, so it opens nothing, and `self` in
+  # the block is still the class -- which is the claim being made.
   it "still reads a macro written inside a class-context block" do
-    source = "class Q\n  def inner; []; end\n  included do\n    delegate :size, to: :inner\n  end\n  def go = size\nend\n"
+    source = "class Q\n  def inner; []; end\n  %i[a].each do |_|\n    delegate :size, to: :inner\n  end\n  def go = size\nend\n"
 
     expect(unknown_methods(source)).to be_empty
+  end
+
+  # Its control: the same class without the block reports `size`, so the
+  # example above is the macro being read and not the class being silent.
+  it "reports the same call when no macro declared it" do
+    expect(unknown_methods("class Q\n  def inner; []; end\n  def go = size\nend\n")).to include("size")
   end
 
   # **The candidate survives; only the report stops.** The first fix

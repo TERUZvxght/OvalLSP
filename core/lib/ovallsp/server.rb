@@ -732,7 +732,7 @@ module Ovallsp
             # is the *only* place the equal case differs from the buffer
             # half's, and it differs because a deletion is not "a later
             # pass knows more".
-            return false if cleared && generation == last_disk
+            return false if cleared && generation <= last_disk
           end
 
           @last_disk_generation[uri] = [generation, nil] if generation
@@ -757,8 +757,17 @@ module Ovallsp
         # is done on a clock this method does not own. A genuinely later
         # pass, the file having been recreated, carries a higher
         # generation and still wins.
+        # **Dated by the index, floored by what was published.** Keeping
+        # only the last published generation was not enough: a clear with
+        # nothing published before it recorded `nil` and refused nothing,
+        # and a result one generation *above* the last publish still
+        # landed. The index generation is the clock these generations come
+        # from -- `WorkspaceIndex#remove_file` bumps it, and this method's
+        # caller on the deletion path runs `remove_index_contribution`
+        # first -- so any result computed before the removal carries a
+        # generation strictly below it. Found by cold review.
         last_disk, = @last_disk_generation[uri]
-        @last_disk_generation[uri] = [last_disk, :cleared]
+        @last_disk_generation[uri] = [[last_disk, @workspace_index.generation].compact.max, :cleared]
         write_diagnostics(uri, [], nil)
       end
     end
@@ -1518,17 +1527,69 @@ module Ovallsp
     end
 
     def apply_file_summary(summary)
-      @index_mutation_mutex.synchronize do
+      declarations_changed = false
+      applied = @index_mutation_mutex.synchronize do
         previous_declarations = @workspace_index.declarations_for_uri(summary.uri)
-        return false unless @workspace_index.replace_file(summary)
+        next false unless @workspace_index.replace_file(summary)
 
         @hierarchy_index.replace_file(summary)
         @file_summaries[summary.uri] = summary
         invalidate_method_summaries(previous_declarations)
+        declarations_changed = declaration_set(previous_declarations) != declaration_set(summary.declarations)
         @generated_method_index.replace_file(uri: summary.uri, facts: summary.generated_method_facts)
         mark_reference_index_dirty
         true
       end
+
+      note_dependents_need_analysis(summary.uri) if applied && declarations_changed
+      applied
+    end
+
+    # **The index knew, and nothing asked it to say so** (`024.344`).
+    # Changing a method's arity in one open file left the caller in
+    # another open file showing its old diagnostics: this method's
+    # invalidation is real -- a forced re-analysis produces
+    # `takes 2 arguments, but 1 given` immediately -- and nothing was
+    # asking for one, so the warning waited for the caller's own next
+    # edit, and a warning that had gone away waited the same way.
+    #
+    # **Through the settled queue, not straight to `#publish_diagnostics`.**
+    # That queue exists because analysis is expensive and drains when the
+    # input is quiet, so a burst of keystrokes costs one pass rather than
+    # one per stroke. Every open document, because what changed here may
+    # be reached from any of them; a *precise* dependency set is worth
+    # having and is not what this is -- `docs/reviews/2026-09-05-critical-review.md`
+    # (R05) says to start with the open documents and add precision from
+    # measurement, and that is what this is.
+    #
+    # **Only when the declarations changed.** Re-indexing a file whose
+    # method set came out the same says nothing about anyone else, and
+    # queueing on every re-index would put every open file through the
+    # engine on every settle.
+    def note_dependents_need_analysis(changed_uri)
+      @document_store.open_documents.each do |document|
+        next if document.uri == changed_uri
+
+        note_analysis_needed(document.uri)
+      end
+    end
+
+    # **What another file can depend on**, which is more than the name.
+    # The first version of this compared names and kinds, and the arity
+    # change the review reproduces -- `def take(x)` to `def take(x, y)` --
+    # leaves both identical, so the caller was still not refreshed. The
+    # parameter list and the visibility are the rest of what a call site
+    # is judged against.
+    #
+    # A *moved* method is the same declaration to a caller, and a body
+    # edit changes nothing here, which is what keeps a keystroke from
+    # queueing every open file.
+    def declaration_set(declarations)
+      declarations.map do |declaration|
+        [declaration.symbol_id.kind, declaration.symbol_id.owner, declaration.symbol_id.name,
+         declaration.visibility,
+         Array(declaration.parameters).map { |parameter| [parameter.name, parameter.kind] }]
+      end.to_set
     end
 
     # "ColdIndexer did not visit it" is not the same fact as "it was
@@ -3958,6 +4019,15 @@ module Ovallsp
           @signatures.load(workspace_root: @workspace_root)
           @method_summary_store.clear
         end
+        # **And then ask for the answers to be said again** (`024.344`).
+        # The environment and the summary cache were both updated and
+        # nothing published: editing `sig/typed.rbs` from `(Integer)` to
+        # `(String)` left the open `take(1)` showing no argument-type
+        # report until the file was touched. A signature change has no
+        # bounded dependency set -- any open file may name the type -- so
+        # every open document is queued, and the settled queue is what
+        # keeps that from costing a pass per keystroke.
+        @document_store.open_documents.each { |document| note_analysis_needed(document.uri) }
       end
 
       # Deduplicated across the whole batch — a git checkout or branch

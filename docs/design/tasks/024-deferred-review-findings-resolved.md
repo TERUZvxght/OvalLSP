@@ -17604,6 +17604,27 @@ target: 0.4.0
 ---
 
 
+## 024.344 2026-09-05 review R05: Dependency and RBS changes do not republish caller diagnostics
+
+```yaml
+status: fixed
+released-in: 0.4.0
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R05)
+- Changing a source method arity or an RBS argument type left an open caller unchanged until forced analysis produced the expected diagnostic.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-answer
+
+---
+
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

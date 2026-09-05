@@ -189,6 +189,7 @@
 "core/lib/ovallsp/signatures/type_converter.rb#convert": "contained: same"
 "core/lib/ovallsp/cache/store.rb#self.inside?": "contained: false refuses the removal, which is the safe direction for a guard whose whole job is refusing -- a root or a parent that cannot be resolved is one nothing can be removed from anyway, and the ordinary member of that family is a path another sweep already took"
 "core/lib/ovallsp/index/workspace_boundary.rb#inside?": "contained: false refuses to index the path, which is the safe direction -- a path that cannot be resolved (gone, a broken link, a loop) is not one to read, and ColdIndexer#safe_realpath named the same three errnos before this rule was shared"
+"core/lib/ovallsp/diagnostics/engine.rb#chain_link_understood?": "contained: true reads as 'something can say what is behind this link', which keeps the reach as wide as it was and can only leave a constant unreported -- the same direction #rbs_known_constant? takes two methods below, and for the same reason"
 "core/lib/ovallsp/uri_util.rb#to_path": "contained: nil means a uri this engine cannot turn into a path, and every caller skips it"
 "core/lib/ovallsp/vendor_compatibility.rb#check": "surfaces: returns a Result carrying `compatible?: false` and a reason the extension shows"
 "core/lib/ovallsp/workspace_diagnostics.rb#publish_for": surfaces

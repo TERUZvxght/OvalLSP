@@ -353,6 +353,27 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
       expect(published_for(disk_uri).length).to eq(2)
     end
 
+    # **A clear with nothing published before it still voids what came
+    # after.** Keeping only the last published generation recorded `nil`
+    # here and refused nothing -- the first workspace pass over a file
+    # deleted during it. The index generation is the floor: a deletion
+    # bumps it before the clear is sent, so anything computed before the
+    # removal is strictly below it. Found by cold review.
+    it "refuses a result after a clear that had nothing before it" do
+      server.send(:clear_findings, disk_uri)
+      server.send(:publish_findings, disk_uri, [finding], generation: 0)
+
+      expect(published_for(disk_uri).length).to eq(1) # the clear alone
+    end
+
+    it "refuses a result one generation above the last publish, after a clear" do
+      server.send(:publish_findings, disk_uri, [finding], generation: 3)
+      server.send(:clear_findings, disk_uri)
+      server.send(:publish_findings, disk_uri, [finding], generation: 3)
+
+      expect(published_for(disk_uri).length).to eq(2)
+    end
+
     it "refuses a result computed before the file was cleared" do
       server.send(:publish_findings, disk_uri, [finding], generation: 5)
       server.send(:clear_findings, disk_uri)

@@ -13,6 +13,7 @@ the disproved approaches are kept below it under **Details**.
 > forty-four are a queue rather than a scope. Rewrite this section as work
 > lands — `bump` refuses until it is what shipped.
 
+- **A caller is re-checked when its callee's signature or your RBS changes** `024.344`
 - **A stale disk result no longer overwrites a newer one, or a deletion's clear** `024.342`
 - **Turning `ovallsp.enabled` on or off takes effect without a window reload** `024.343`
 - **A rename that would break an override is refused rather than applied** `024.341`

@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { decideEnabledTransition } from '../../enabledSetting';
 
-// `024.342`. `ovallsp.enabled` was read once, in `activate`, and a `false`
+// `024.343`. `ovallsp.enabled` was read once, in `activate`, and a `false`
 // returned before `onDidChangeConfiguration` was ever registered -- so
 // neither direction of a live change reached anything. Off-to-on needed a
 // window reload; on-to-off left Core, and on a trusted Rails workspace the

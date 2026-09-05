@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**340 entries below** <!-- measured: register-entries = 340 -->,
+**341 entries below** <!-- measured: register-entries = 341 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -516,6 +516,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.341`](024-deferred-review-findings-resolved.md#024341-2026-09-05-review-r02-renaming-a-parent-method-breaks-an-overriding-method-that-calls-super) | fixed | 0.4.0 | 2026-09-05 review R02: Renaming a parent method breaks an overriding… |
 | [`024.342`](024-deferred-review-findings-resolved.md#024342-2026-09-05-review-r06-disk-diagnostics-can-overwrite-newer-results-and-a-deletion-clear) | fixed | 0.4.0 | 2026-09-05 review R06: Disk diagnostics can overwrite newer results … |
 | [`024.343`](024-deferred-review-findings-resolved.md#024343-2026-09-05-review-r13-the-enabled-setting-is-read-only-during-activation) | fixed | 0.4.0 | 2026-09-05 review R13: The enabled setting is read only during activ… |
+| [`024.344`](024-deferred-review-findings-resolved.md#024344-2026-09-05-review-r05-dependency-and-rbs-changes-do-not-republish-caller-diagnostics) | fixed | 0.4.0 | 2026-09-05 review R05: Dependency and RBS changes do not republish c… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | 1.0.0 | Feature parity roadmap, measured against Pylance |
@@ -2182,6 +2183,44 @@ is what the profile predicted and less than the count suggested. RBS's
 own `DefinitionBuilder` was absorbing most of those 76,365 calls; what
 they cost was the call, not the build. Recorded because the inference
 "76,365 calls must be the cost" was wrong and the profile was right.
+
+### Re-measured in 0.4.0, and two memos took half of it
+
+**The numbers had got worse, not better.** One `analyze`, warm stack,
+three repeats, median, `mode: :safe` -- the same shape as 0.2.18's
+measurement above:
+
+| file | lines | 0.2.18 | 0.4.0 before | 0.4.0 after |
+|---|---|---|---|---|
+| `net/http.rb` | 2,608 | 3.53 s | 8.51 s | 3.96 s |
+| `uri/generic.rb` | 1,592 | 4.96 s | 26.61 s | 10.87 s |
+| `rubygems/specification.rb` | 2,594 | 5.41 s | 24.14 s | 12.02 s |
+
+The middle column is this tree at `bb1c450`, so the releases between
+0.2.18 and here made it two to five times slower and nothing was
+measuring it. That is its own finding and is the reason this section
+exists rather than a note in a commit message.
+
+**Two memos, each keyed to a generation and cleared by every mutation.**
+Sampled first rather than guessed at -- the profile below still held, and
+`workspace_index.rb`'s `to_s`/`each`/`split`/`lambda` were the top four:
+
+- `WorkspaceIndex#resolve_type_symbol_locked`, keyed by the written name.
+  `#ordered_symbol_ids` does a `select` and a `sort_by` whose key calls
+  `#to_s` three times per candidate, and one file resolves the same
+  handful of names over and over. 8.51 -> 5.20, 26.61 -> 14.99,
+  24.14 -> 15.96.
+- `HierarchyIndex#ancestors`, keyed by `[name, singleton]`. Each question
+  rebuilt the whole chain, its `AncestorEntry`s and the `dedupe_named`
+  pass over them. 5.20 -> 3.96, 14.99 -> 10.87, 15.96 -> 12.02. Its
+  `gem_index=` clears too: swapping the gem index changes chains without
+  bumping the generation.
+
+**Still 13-36x the stated 300 ms**, so this entry stays open. What the
+measurement establishes is that the cost is in *repeating* work rather
+than in any one answer, which is the direction the next attempt should
+take -- and that a profile, not a count, is what found it, for the third
+time in this entry.
 
 ### Where the time actually is, for whoever takes this
 

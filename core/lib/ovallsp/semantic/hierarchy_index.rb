@@ -203,6 +203,8 @@ module Ovallsp
         # it is neither: the module does not extend anything.
         @concern_markers_by_owner = Hash.new { |h, k| h[k] = [] }
         @aliases_by_owner = Hash.new { |h, k| h[k] = [] }
+        # Chains that are only true of one generation; see `#ancestors`.
+        @ancestors_memo = {}
         @generation = 0
       end
 
@@ -226,13 +228,17 @@ module Ovallsp
           summary.ancestor_facts.each { |fact| add_fact_locked(fact) }
           summary.alias_facts.each { |fact| @aliases_by_owner[fact.owner] << fact }
           @generation += 1
+          @ancestors_memo.clear
         end
       end
 
       def remove_file(uri)
         @mutex.synchronize do
           removed = remove_file_locked(uri)
-          @generation += 1 if removed
+          if removed
+            @generation += 1
+            @ancestors_memo.clear
+          end
           removed
         end
       end
@@ -251,14 +257,35 @@ module Ovallsp
       # on another thread must see one index or the other, never half.
       def gem_index = @mutex.synchronize { @gem_index }
 
+      # The gem index contributes ancestors, so swapping it invalidates
+      # every memoised chain -- it does not bump `@generation`, which is
+      # about the *facts* this index holds, so the clear is explicit.
       def gem_index=(index)
-        @mutex.synchronize { @gem_index = index }
+        @mutex.synchronize do
+          @gem_index = index
+          @ancestors_memo.clear
+        end
       end
 
+      # **Memoised for one generation.** `024.45`'s profile puts the chain
+      # walk and everything it allocates near the top of an analysis, and
+      # a file asks about the *same few receivers* repeatedly -- each
+      # question rebuilding the whole chain, its `AncestorEntry`s, and the
+      # `dedupe_named` pass over them. Measured on `uri/generic.rb` before
+      # this was written.
+      #
+      # Cleared by every mutation, under the same mutex as the compute, so
+      # no reader can be handed a chain from a shape that has changed. The
+      # returned array is frozen: it is one object handed to every caller
+      # now, and `#aliases` beside it already `dup`s for the same reason.
       def ancestors(type_name, singleton: false)
+        key = [type_name.to_s, singleton]
         @mutex.synchronize do
-          entries = compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new)
-          dedupe_named(singleton ? entries + singleton_tail_for(type_name, entries) : entries, singleton)
+          @ancestors_memo.fetch(key) do
+            entries = compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new)
+            deduped = dedupe_named(singleton ? entries + singleton_tail_for(type_name, entries) : entries, singleton)
+            @ancestors_memo[key] = deduped.freeze
+          end
         end
       end
 

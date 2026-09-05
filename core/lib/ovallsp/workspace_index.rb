@@ -54,6 +54,9 @@ module Ovallsp
       # once Cold Index has populated thousands of them.
       @by_simple_name = Hash.new { |h, k| h[k] = Set.new }
       @generation = 0
+      # Answers that are only true of one generation; see
+      # `#resolve_type_symbol_locked`.
+      @type_resolution_memo = {}
       @next_read_sequence = 0
     end
 
@@ -145,6 +148,7 @@ module Ovallsp
         summary.module_function_names.each { |key| @module_function_names[key] += 1 }
         touched.uniq.each { |symbol_id| @by_symbol[symbol_id].sort_by!(&method(:entry_order)) }
         @generation += 1
+        @type_resolution_memo.clear
         true
       end
     end
@@ -152,7 +156,10 @@ module Ovallsp
     def remove_file(uri)
       @mutex.synchronize do
         removed = remove_file_locked(uri)
-        @generation += 1 if removed
+        if removed
+          @generation += 1
+          @type_resolution_memo.clear
+        end
         removed
       end
     end
@@ -668,6 +675,7 @@ module Ovallsp
     def promote_source_locked(summary)
       @summaries[summary.uri] = summary
       @generation += 1
+      @type_resolution_memo.clear
       true
     end
 
@@ -821,7 +829,25 @@ module Ovallsp
       nesting_match(candidates, raw, nesting)
     end
 
+    # **Memoised for one generation.** `024.45`'s profile attributes the
+    # largest share of an analysis to this method's own path --
+    # `#ordered_symbol_ids`'s `select` and `sort_by`, and the three
+    # `#to_s` calls the sort key makes per candidate -- and the reason is
+    # that one file resolves the *same handful of names* over and over.
+    # Measured on `net/http.rb` before writing this.
+    #
+    # Keyed by the written name, cleared by every mutation that bumps
+    # `@generation`, and read only under `@mutex` like everything else
+    # here, so a reader cannot see an answer from a shape that has since
+    # changed.
     def resolve_type_symbol_locked(name)
+      key = name.to_s
+      return @type_resolution_memo[key] if @type_resolution_memo.key?(key)
+
+      @type_resolution_memo[key] = resolve_type_symbol_uncached(key)
+    end
+
+    def resolve_type_symbol_uncached(name)
       candidates, qualified = type_candidates_locked(name)
       return nil if candidates.empty?
 

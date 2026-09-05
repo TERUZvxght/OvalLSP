@@ -1184,5 +1184,46 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(index.resolve_type_name("Stat")).to eq("::Stat")
     end
   end
-end
 
+  # **A memo that survives a mutation is a wrong answer, not a fast one.**
+  # `024.45`'s profile put `#resolve_type_symbol_locked`'s own path at the
+  # top of an analysis because one file resolves the same handful of names
+  # over and over, so it is memoised for one generation -- and the whole
+  # of its correctness is that every mutation clears it.
+  describe "the type-resolution memo" do
+    def summarize(text, uri)
+      Ovallsp::ParserService.new.summarize(
+        Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+      )
+    end
+
+    it "stops resolving a class whose only declaration was removed" do
+      index = described_class.new
+      index.replace_file(summarize("class Gone\nend\n", "file:///gone.rb"))
+      expect(index.resolve_type_name("Gone")).to eq("::Gone")
+
+      index.remove_file("file:///gone.rb")
+
+      expect(index.resolve_type_name("Gone")).to be_nil
+    end
+
+    it "resolves a class declared after the first question was asked" do
+      index = described_class.new
+      expect(index.resolve_type_name("Later")).to be_nil
+
+      index.replace_file(summarize("class Later\nend\n", "file:///later.rb"))
+
+      expect(index.resolve_type_name("Later")).to eq("::Later")
+    end
+
+    it "follows a class that moved namespace in the same file" do
+      index = described_class.new
+      index.replace_file(summarize("class Moved\nend\n", "file:///m.rb"))
+      expect(index.resolve_type_name("Moved")).to eq("::Moved")
+
+      index.replace_file(summarize("module Outer\n  class Moved\n  end\nend\n", "file:///m.rb"))
+
+      expect(index.resolve_type_name("Moved")).to eq("::Outer::Moved")
+    end
+  end
+end

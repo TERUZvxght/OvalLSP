@@ -815,7 +815,7 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
   // existed, so neither direction of a live change reached anything:
   // turning it on needed a window reload, and turning it off left Core --
   // and on a trusted Rails workspace the Runtime Agent -- running against
-  // code the user had just asked it to leave alone (`024.342`).
+  // code the user had just asked it to leave alone (`024.343`).
   //
   // Through `queueClientTransition`, like every other start and stop, so
   // a fast toggle cannot race a start still in flight.
@@ -839,13 +839,13 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
     })
   );
 
-  if (!enabled) {
-    return { handshakes };
-  }
-
-  activateFeatures(context, outputChannel);
-  startClientsForOpenFolders(context, outputChannel);
-
+  // **Registered before the gate too.** These were below it, so a window
+  // activated with `enabled: false` and switched on live got clients and
+  // no trust handling and no folder handling -- two of the conditions the
+  // review names. They act on `clients`, which is empty while disabled,
+  // so registering them unconditionally costs nothing. Found by cold
+  // review.
+  //
   // Workspace Trust can only go from untrusted to trusted while a window
   // stays open (never the reverse), and Server decided whether to start
   // the Runtime Agent once, at its own `initialize` time. Restarting each
@@ -864,7 +864,9 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
     vscode.workspace.onDidChangeWorkspaceFolders((event) => {
       for (const folder of event.added) {
         const key = folder.uri.toString();
-        if (shouldStartAddedFolder(shutdownBarrier.permitsStart(), clients.has(key))) {
+        // `enabled` is read here rather than captured: a folder added
+        // while the extension is switched off must not start a Core.
+        if (enabled && shouldStartAddedFolder(shutdownBarrier.permitsStart(), clients.has(key))) {
           clients.set(key, startClientForFolder(folder, outputChannel, context));
         }
       }
@@ -882,6 +884,13 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
       }
     })
   );
+
+  if (!enabled) {
+    return { handshakes };
+  }
+
+  activateFeatures(context, outputChannel);
+  startClientsForOpenFolders(context, outputChannel);
 
   return { handshakes };
 }

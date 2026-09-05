@@ -181,6 +181,53 @@ RSpec.describe "a constant the workspace declares (024.330)" do
       expect(unresolved("class Odd < Struct.new(:a)\n  def go = LIMIT\nend\n")).to be_empty
     end
 
+    # **The namespace is resolved with the nesting too.** `Parent::LIMIT`
+    # written inside `module NS` means `NS::Parent`, and resolving
+    # `Parent` workspace-wide picked whichever the index ranked first --
+    # then `LIMIT` was outside its reach. Ruby, 3.4.10:
+    #
+    #   $ ruby -e '
+    #   class Parent; OTHER = 1; end
+    #   module NS
+    #     class Parent; LIMIT = 3; end
+    #     class Child < Parent; def go = Parent::LIMIT; end
+    #   end
+    #   p NS::Child.new.go
+    #   '
+    #   # => 3
+    #
+    # Measured on rack 3.2.7, where `Utils` is declared by three installed
+    # gems: `Utils::STATUS_WITH_NO_ENTITY_BODY`, `Utils::URI_PARSER` and
+    # `Parser::TEMPFILE_FACTORY` were all reported. Found by cold review.
+    it "resolves a written namespace with the nesting it was written in" do
+      index("class Parent\n  OTHER = 1\nend\n", uri: "file:///top.rb")
+      source = "module NS\n  class Parent\n    LIMIT = 3\n  end\n" \
+               "  class Child < Parent\n    def go = Parent::LIMIT\n  end\nend\n"
+
+      expect(unresolved(source)).to be_empty
+    end
+
+    # **Identified is not understood.** `class Pool < Impl` where
+    # `Impl = RubyImpl` gives an entry named `Impl` with nothing behind
+    # it: the chain stops, and reading it as complete reported
+    # `RubyImpl`'s constants. Ruby says `Pool.new.go` is `1`. Measured on
+    # concurrent-ruby, whose `ThreadPoolExecutorImplementation = case ...`
+    # is this shape -- eight of the corpus's remaining reports.
+    it "declines when a link in the chain names something it cannot see behind" do
+      index("class RubyImpl\n  LIMIT = 1\nend\nImpl = RubyImpl\n", uri: "file:///impl.rb")
+
+      expect(unresolved("class Pool < Impl\n  def go = LIMIT\nend\n")).to be_empty
+    end
+
+    # Its control: `Object`, `Kernel` and `BasicObject` are understood
+    # through the signature environment rather than the workspace, so an
+    # ordinary class does not decline on its own tail.
+    it "still reports a bare name in a class with an ordinary chain" do
+      index("module Foreign\n  LIMIT = 9\nend\nclass Base\nend\n", uri: "file:///base.rb")
+
+      expect(unresolved("class Sub < Base\n  def go = LIMIT\nend\n")).to include("LIMIT")
+    end
+
     # Its control: with the ancestry buildable, the same bare name *is*
     # reported. Without this, a fix that declined on every receiver would
     # pass the example above.
