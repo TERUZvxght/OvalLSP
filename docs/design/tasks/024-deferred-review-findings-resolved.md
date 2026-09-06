@@ -17165,7 +17165,7 @@ for closing the rest.
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17185,7 +17185,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17205,7 +17205,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17225,7 +17225,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17245,7 +17245,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17265,7 +17265,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17285,7 +17285,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17305,7 +17305,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: no
 user-visible-note: >-
@@ -17331,7 +17331,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: no
 user-visible-note: >-
@@ -17356,7 +17356,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17377,7 +17377,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17398,7 +17398,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17419,7 +17419,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17440,7 +17440,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17461,7 +17461,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17482,7 +17482,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17503,7 +17503,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17524,7 +17524,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17545,7 +17545,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17566,7 +17566,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17587,7 +17587,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17608,7 +17608,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0
@@ -17629,7 +17629,7 @@ target: 0.4.0
 
 ```yaml
 status: fixed
-released-in: 0.4.0
+released-in: 0.3.4
 kind: defect
 user-visible: yes
 target: 0.4.0

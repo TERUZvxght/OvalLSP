@@ -6,12 +6,19 @@ OvalLSP VS Code拡張機能の注目すべき変更をすべて記録してい�
 はまず「何が変わったか」を示し、その理由・実測値・棄却した方針は下の
 **詳細**にまとめてあります。
 
-## 0.4.0 — このリリースの目的
+## 0.3.4 — 23件の欠陥修正。その大半は利用ではなくレビューが見つけたもの
 
-> **雛形です。** `release.rb open` が `target: 0.4.0` の未処理をすべて並べたもので、
-> 取りこぼしを防ぐための一覧です。約束ではありません — 44件がスコープではなく待ち行列で
-> あることは `061` に記録しています。作業が入るたびに書き換えてください。`bump` は
-> 実際に出荷した内容になるまで拒否します。
+能力の追加はありません。そしてその事実がこのリリースの番号を決めました:
+このブランチは `0.4.0` として開かれましたが、積み上がった中身がすべて修正で
+あると確定した時点で、内容にふさわしいパッチへ改名しました —
+`docs/PUBLISHING.md` の規則「何も新しく告知しない」がパッチだからです。
+`0.4.0` の約束は、実際にそれを追加するリリースのために残ります。
+
+23件中16件は、再現スクリプトごと
+`docs/reviews/2026-09-05-critical-review.md` に収めた外部の批判的レビューへの
+応答で、各指摘がどうなったかの対応表も同じ文書にあります。3件はこの
+ブランチ自身の修正が入れた回帰で、さらに2本の独立したレビューが
+捕まえました。4件はブランチを開いた際の点検で出たものです。
 
 - **古いディスク結果が、読んだファイルより新しい世代を持てなくなりました** `024.345`
 - **`respond_to?` ガードが、ボディ全体ではなく真になった枝だけを免除するようになりました** `024.335`
@@ -32,54 +39,32 @@ OvalLSP VS Code拡張機能の注目すべき変更をすべて記録してい�
 - **このパーサが読めたマクロを、存在しないメソッドとして報告しなくなりました** `024.327`
 - **`respond_to?` で守られた呼び出しを報告しなくなりました** `024.328`
 - **`self.included` フックの `include`/`class_eval`/`extend` を読むようになりました** `024.329`
-- **A reopened core class looks closed, in both directions** `024.13`
-- **The unassigned-`@ivar` check cannot enumerate what it needs to** `024.18`
-- **The argument-type check judges against a class the receiver is not** `024.19`
-- **`contains?` treats an exclusive end offset as inclusive** `024.20`
-- **The unassigned-`@ivar` check is silent in an application `rails new` produces** `024.22`
-- **Rename refuses on a macro-declared method rather than editing it** `024.28`
-- **The argument-type check reports nothing on measured real Ruby** `024.37`
-- **`scope_at` copies the whole environment once per descent step** `024.38`
-- **`LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread** `024.39`
-- **A signature label leaks the method's own type variable** `024.42`
-- **A partial's local is not resolved, and C11's stated basis names it** `024.44`
-- **Re-analysis after a keystroke is seconds on a large file, against a stated 300 ms** `024.45`
-- **A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal** `024.47`
-- **Two per-file stores are separated by nothing but their payload** `024.62`
-- **One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised** `024.71`
-- **Fifty-four `unknown-method` reports over real gem source, and all of them false** `024.76`
-- **The undefined-method check is loudest exactly where no Runtime Agent can answer** `024.83`
-- **Completion unions a union's members; the diagnostic intersects them** `024.88`
-- **The four features answer from different code paths and disagree at one position** `024.100`
-- **A module's singleton calls go unchecked — `module_function` and `extend self` producing nothing is withdrawn** `024.106`
-- **Nothing measures how much of this tree no test would notice changing** `024.121`
-- **No undefined-method report on a core-library receiver** `024.129`
-- **A scope defined in a concern's `included do` has no type** `024.132`
-- **`WorkspaceIndex#search` holds the index lock for the whole walk** `024.137`
-- **A check can be disabled, and no check notices — closed on one instalment in 0.3.2, reopened** `024.151`
-- **A block whose receiver cannot be vouched for contains a `private` that Ruby would let through** `024.221`
-- **A type declared only in `sig/` is reported incompatible with itself — the half 0.3.2 did not fix** `024.224`
-- **Four shapes stopped reporting by declining on the body, not by reading it** `024.237`
-- **Signature help says nothing for a receiverless call inside a module body** `024.243`
-- **A class that includes an unread module is not checked at class level, so a typo there is silent** `024.289`
-- **Nothing is reported about a call whose receiver is `Object`** `024.290`
-- **A template's `@ivar` receiver is not checked, and its type is one action's** `024.294`
-- **The gem index is fetched on every boot and persisted nowhere** `024.295`
-- **Call hierarchy lists no callee reached through `send`, `super` or a macro** `024.297`
-- **An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initialize`'s** `024.298`
-- **Completion on a relation offers none of the model's own scopes or class methods** `024.299`
-- **`@ivar` completion offers nothing from a superclass or an included concern** `024.300`
-- **The route-helper quick fix ignores the `_path`/`_url` split and the helper's arity** `024.301`
-- **The `def` quick fix is offered for one receiver shape of three** `024.302`
-- **A multiple assignment's targets get no inlay hint** `024.303`
-- **The gem-backed check is silenced by any class-body call the parser cannot read** `024.304`
-- **A workspace directory shaped like a gem path would be attributed to a gem** `024.318`
-- **A bare name no signature declares is still read as the one gem class sharing its last segment** `024.319`
-- **No check knows which lock guards what** `024.320`
+- **代入で作られたクラスに対する Define クイックフィックスが、パースできないファイルを書かなくなりました** `024.323`
+- **メソッドの新しい名前として Ruby の予約語を、呼び出し側が壊れる前に拒否するようになりました** `024.324`
+- **観測実行時の引数を Runtime Agent が転送することを PRIVACY に開示しました** `024.325`
+- **リネームが「新しい名前がその場所で既に何を意味するか」を、していなかった4箇所で問うようになりました** `024.326`
 
 ### 詳細
 
-TODO
+16件の指摘と各処理は `docs/reviews/2026-09-05-critical-review.md` に、
+根拠と実測は各レジスタエントリ(`ruby scripts/issues.rb show 024.N`)に
+あります。ここでは数字を3つだけ:
+
+- 実 gem でのコーパス A/B は、このブランチが走らせた全比較で**誤検出の
+  増加 0 件**。減った側は毎回 Ruby の実挙動で真偽を確認しています。
+- 大きいファイルの解析は 8.5〜26.6 秒 → 4.2〜12.3 秒(`024.45`)。
+  それでも目標 300ms の 14〜37 倍で、これは「測った」のであって
+  「直した」のではありません。保存→publish と解析中の hover 待ちの
+  数値もエントリに追記済みです。
+- override 保護で増えたリネーム拒否は実 gem で数えました: thor で
+  57 件、activesupport core_ext で 67 件、**Ruby が受け入れるリネームの
+  誤拒否はゼロ**。
+
+記録に残すべき経緯を1つ: 追跡レビュー
+(`docs/reviews/2026-09-06-astra-followup.md`)は 16 件中 15 件を
+「Partly met」と判定しています。理由は一貫して「修正は自分のテストを
+通るが、条件はより広い対照を要求していた」であり、かつ追跡自体も途中
+停止しているため、判定には「確認しきれていない」も混ざります。
 
 ## 0.3.3 — 記録と製品が食い違っていました
 

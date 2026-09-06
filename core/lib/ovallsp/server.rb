@@ -724,8 +724,12 @@ module Ovallsp
           # pass usually knows more. `#clear_findings` writes the
           # generation it cleared at, so a result from before it loses.
           # A caller that states no generation is not dated and is never
-          # refused on this ground -- which is what every existing caller
-          # was. Found by the 2026-09-05 critical review, R06.
+          # refused on this ground. When this was written that described
+          # every caller; since `024.344` and `024.345` **every production
+          # caller dates its result**, and the undated branch is reachable
+          # only from a spec or a direct call -- a cold review probed it
+          # that way and briefly read the old behaviour as unfixed. Found
+          # by the 2026-09-05 critical review, R06.
           last_disk, cleared = @last_disk_generation[uri]
           if generation && last_disk
             return false if generation < last_disk
