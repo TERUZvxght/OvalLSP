@@ -203,6 +203,8 @@ module Ovallsp
         # it is neither: the module does not extend anything.
         @concern_markers_by_owner = Hash.new { |h, k| h[k] = [] }
         @aliases_by_owner = Hash.new { |h, k| h[k] = [] }
+        # Chains that are only true of one generation; see `#ancestors`.
+        @ancestors_memo = {}
         @generation = 0
       end
 
@@ -226,13 +228,17 @@ module Ovallsp
           summary.ancestor_facts.each { |fact| add_fact_locked(fact) }
           summary.alias_facts.each { |fact| @aliases_by_owner[fact.owner] << fact }
           @generation += 1
+          @ancestors_memo.clear
         end
       end
 
       def remove_file(uri)
         @mutex.synchronize do
           removed = remove_file_locked(uri)
-          @generation += 1 if removed
+          if removed
+            @generation += 1
+            @ancestors_memo.clear
+          end
           removed
         end
       end
@@ -251,14 +257,52 @@ module Ovallsp
       # on another thread must see one index or the other, never half.
       def gem_index = @mutex.synchronize { @gem_index }
 
+      # The gem index contributes ancestors, so swapping it invalidates
+      # every memoised chain -- it does not bump `@generation`, which is
+      # about the *facts* this index holds, so the clear is explicit.
       def gem_index=(index)
-        @mutex.synchronize { @gem_index = index }
+        @mutex.synchronize do
+          @gem_index = index
+          @ancestors_memo.clear
+        end
       end
 
+      # **The third input to a chain.** `#canonical_name` asks
+      # `@signatures.declares?` through `#free_for_a_gem_to_claim?`, and
+      # `Signatures::Environment#load` mutates the environment in place --
+      # so reloading a workspace's `sig/` changed what a name resolves to
+      # while every memoised chain kept the old answer, until an unrelated
+      # edit happened to clear it. Three inputs and two clears; found by
+      # cold review, which built the disagreement directly:
+      # `ancestors("Relation")` kept the gem's chain after `sig/` declared
+      # a workspace `Relation`, where a fresh index answered `["Relation"]`.
+      #
+      # Its own method rather than a `@signatures=` writer: the
+      # environment object does not change, only its contents, so there is
+      # nothing to assign.
+      def signatures_reloaded
+        @mutex.synchronize { @ancestors_memo.clear }
+      end
+
+      # **Memoised for one generation.** `024.45`'s profile puts the chain
+      # walk and everything it allocates near the top of an analysis, and
+      # a file asks about the *same few receivers* repeatedly -- each
+      # question rebuilding the whole chain, its `AncestorEntry`s, and the
+      # `dedupe_named` pass over them. Measured on `uri/generic.rb` before
+      # this was written.
+      #
+      # Cleared by every mutation, under the same mutex as the compute, so
+      # no reader can be handed a chain from a shape that has changed. The
+      # returned array is frozen: it is one object handed to every caller
+      # now, and `#aliases` beside it already `dup`s for the same reason.
       def ancestors(type_name, singleton: false)
+        key = [type_name.to_s, singleton]
         @mutex.synchronize do
-          entries = compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new)
-          dedupe_named(singleton ? entries + singleton_tail_for(type_name, entries) : entries, singleton)
+          @ancestors_memo.fetch(key) do
+            entries = compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new)
+            deduped = dedupe_named(singleton ? entries + singleton_tail_for(type_name, entries) : entries, singleton)
+            @ancestors_memo[key] = deduped.freeze
+          end
         end
       end
 
@@ -599,11 +643,57 @@ module Ovallsp
       # concern's class methods are on the class the same way.
       def concern_class_method_entries(canonical, visited)
         concern_targets(canonical, Set.new).flat_map do |target|
-          class_methods = "#{target}::ClassMethods"
-          next [] unless kind_of(class_methods)
+          concern_class_method_sources(target).flat_map do |name|
+            # An `extend` the hook *names* and this workspace cannot
+            # resolve is not "no class methods" -- the module is a gem's,
+            # and whatever it declares is on the class. Unidentified, so
+            # `#reason_to_decline` declines about the receiver rather than
+            # asserting a method set built without it.
+            #
+            # **The difference does not show through diagnostics**: read
+            # as identified, the name is one no signature set declares, so
+            # `#reason_to_decline` reaches `:ancestor_not_declared_anywhere`
+            # and declines by the other route. What it does show is the
+            # chain, which is where it is pinned -- an identified entry
+            # carrying the whole `Object, Kernel, BasicObject` tail claims
+            # a chain that was never built, and every later reader of
+            # `#ancestors` acts on that claim.
+            next [AncestorEntry.unidentified(origin: :extend, location: nil)] if name && !kind_of(name)
 
-          compute_ancestors_locked(class_methods, singleton: false, visited: visited, origin_for_self: :extend)
+            compute_ancestors_locked(name, singleton: false, visited: visited, origin_for_self: :extend)
+          end
         end
+      end
+
+      # **Where a concern's class methods actually come from.** Two
+      # spellings, and until now only one of them was read:
+      #
+      # - `extend ActiveSupport::Concern` names no module, and Concern's
+      #   own rule is the nested `ClassMethods`. That is the fallback, and
+      #   it is a guess about a name rather than a fact, so a missing
+      #   `ClassMethods` means "no class methods" and not "cannot tell".
+      # - `def self.included(base) = base.extend(X)` names `X`. The parser
+      #   has recorded that name since 0.2.11 and **nothing read it**:
+      #   `#{target}::ClassMethods` was synthesised instead, which is
+      #   right only when `X` happens to be spelled `ClassMethods`. A hook
+      #   extending anything else -- `base.extend(Helpers)` -- put no
+      #   class methods on the class at all, and every one of them was
+      #   reported missing (ruby 3.4.10 says `W3.respond_to?(:from_helpers)`
+      #   is `true`).
+      #
+      # Both, unioned, because a module may carry both markers and the
+      # union is the safe direction. `#nested_type_name` with the fact's
+      # own nesting, as `#ancestor_entries_for` does: `ClassMethods`
+      # written inside `module H1` means `H1::ClassMethods`, and a
+      # workspace-wide pick among every module that nests one is exactly
+      # the ambiguity `024.15` records.
+      def concern_class_method_sources(target)
+        hooked = @concern_markers_by_owner.fetch(target, []).map do |fact|
+          @workspace_index.nested_type_name(fact.target, nesting: fact.nesting) || fact.target
+        end
+
+        nested = "#{target}::ClassMethods"
+        hooked + (kind_of(nested) ? [nested] : [])
       end
 
       # Every concern this owner picks up, **transitively**. A concern

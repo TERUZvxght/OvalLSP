@@ -28,6 +28,56 @@ RSpec.describe Ovallsp::Signatures::OverloadResolver do
       expect(result).to eq(Ovallsp::Types.normalize_union([integer_type, string_type]))
     end
 
+    # **A rest parameter lifts the ceiling, not the floor.** Both matchers
+    # returned `true` on the mere presence of a rest, so `(Integer,
+    # *String)` matched a call with no arguments at all and `(required:
+    # Integer, **String)` matched one with no keywords -- each then joined
+    # the union, and a call whose type was `Integer` was answered
+    # `Integer | String`. Ruby refuses both calls:
+    #
+    #   $ ruby -e '
+    #   def a(x, *rest); end
+    #   def b(required:, **rest); end
+    #   begin; a(); rescue ArgumentError => e; puts e.message; end
+    #   begin; b(); rescue ArgumentError => e; puts e.message; end
+    #   '
+    #   # => wrong number of arguments (given 0, expected 1+)
+    #   #    missing keyword: :required
+    #   # ruby 3.4.10
+    #
+    # Found by the 2026-09-05 critical review, R14.
+    it "does not let a rest positional waive a required one" do
+      with_rest = Ovallsp::Signatures::Overload.new(
+        required_positionals: [integer_type], rest_positional: string_type, return_type: string_type
+      )
+
+      expect(described_class.resolve([zero_arg, with_rest], positional_count: 0)).to eq(integer_type)
+      expect(described_class.resolve([zero_arg, with_rest], positional_count: 1)).to eq(string_type)
+      expect(described_class.resolve([zero_arg, with_rest], positional_count: 9)).to eq(string_type)
+    end
+
+    it "does not let a rest keyword waive a required one" do
+      with_rest = Ovallsp::Signatures::Overload.new(
+        required_keywords: { name: integer_type }, rest_keyword: string_type, return_type: string_type
+      )
+
+      expect(described_class.resolve([zero_arg, with_rest], positional_count: 0, keyword_names: [])).to eq(integer_type)
+      expect(described_class.resolve([zero_arg, with_rest], positional_count: 0, keyword_names: [:name]))
+        .to eq(string_type)
+      expect(described_class.resolve([zero_arg, with_rest], positional_count: 0, keyword_names: %i[name extra]))
+        .to eq(string_type)
+    end
+
+    # The control for both: a rest with *no* required alongside it still
+    # matches everything, which is what a rest is for. Without this, a fix
+    # that dropped the rest handling would pass the two above.
+    it "still matches any count against a rest with no required parameter" do
+      rest_only = Ovallsp::Signatures::Overload.new(rest_positional: string_type, return_type: string_type)
+
+      expect(described_class.resolve([rest_only], positional_count: 0)).to eq(string_type)
+      expect(described_class.resolve([rest_only], positional_count: 4)).to eq(string_type)
+    end
+
     it "matches an optional-positional overload across its whole min..max range" do
       overload = Ovallsp::Signatures::Overload.new(
         required_positionals: [string_type], optional_positionals: [integer_type], return_type: string_type

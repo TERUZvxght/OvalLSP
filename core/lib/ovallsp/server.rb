@@ -117,6 +117,9 @@ module Ovallsp
       @workspace_diagnostics = WorkspaceDiagnostics.new(
         analyze: method(:workspace_findings_for),
         publish: method(:publish_findings),
+        # Read before each file is opened, so a result is dated by what
+        # was known when its content was read (`024.345`).
+        generation: -> { @workspace_index.generation },
         open_in_buffer: ->(uri) { !@document_store.fetch(uri: uri).nil? },
         logger: @logger
       )
@@ -135,13 +138,16 @@ module Ovallsp
       )
       @diagnostics_engine = Diagnostics::Engine.new
       @diagnostics_mode = :safe
-      @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index)
+      @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index,
+                                            hierarchy_index: @hierarchy_index)
       @observation_runner = Observation::Runner.new(logger: @logger)
       @observation_test_command = nil
       @cold_indexing = false
       # Per-uri memory of the last version published, and the mutex that
       # orders every writer against it. See #publish_findings.
       @last_published_version = {}
+      # The disk half's memory (`024.342`); see `#publish_findings`.
+      @last_disk_generation = {}
       @publish_state_mutex = Mutex.new
       # Which uris have changed and not yet been analysed. A set, because
       # ten edits to one file are one thing to analyse -- 037's C9. Its
@@ -329,7 +335,7 @@ module Ovallsp
       # which collaborator was asked. The reload path below already
       # calls `#load` on the environment in place for exactly this
       # reason; this is the same call at the other site.
-      load_signatures_into(@signatures)
+      reload_signatures
     end
 
     def client_workspace_root(params)
@@ -656,7 +662,12 @@ module Ovallsp
     #
     # A document with a nil version is a disk read -- the workspace pass
     # -- and may only speak for a uri nobody has open, exactly as before.
-    def publish_findings(uri, findings, document: nil)
+    # `generation:` is the disk half's ordering, and it is a parameter
+    # rather than something read off the findings because **the empty list
+    # is the answer that most needs ordering**: "this file is clean now"
+    # carries no `Finding#generation` to be dated by, and it was the one
+    # thing a stale warning could land on top of (`024.342`).
+    def publish_findings(uri, findings, document: nil, generation: nil)
       @publish_state_mutex.synchronize do
         open_document = @document_store.fetch(uri: uri)
         version = document&.version
@@ -698,6 +709,40 @@ module Ovallsp
           @last_published_version[uri] = [document.buffer_id, version, generation || last_generation]
         elsif open_document
           return false
+        else
+          # **The disk half, which had no ordering at all.** The only
+          # check here was the `elsif` above -- that nobody has the file
+          # open -- so a result computed before a newer one landed after
+          # it, and a result computed before a deletion landed after the
+          # clear that deletion sent. The Problems panel then holds
+          # findings about a file that is gone, and nothing publishes for
+          # that uri again: `WorkspaceDiagnostics#publish_for` returns
+          # early on a path that no longer exists.
+          #
+          # Same rule as the buffer half above, for the same reason:
+          # strictly older is refused, equal is allowed because a later
+          # pass usually knows more. `#clear_findings` writes the
+          # generation it cleared at, so a result from before it loses.
+          # A caller that states no generation is not dated and is never
+          # refused on this ground. When this was written that described
+          # every caller; since `024.344` and `024.345` **every production
+          # caller dates its result**, and the undated branch is reachable
+          # only from a spec or a direct call -- a cold review probed it
+          # that way and briefly read the old behaviour as unfixed. Found
+          # by the 2026-09-05 critical review, R06.
+          last_disk, cleared = @last_disk_generation[uri]
+          if generation && last_disk
+            return false if generation < last_disk
+            # A clear is the news that whatever was published for this uri
+            # is void. A result carrying the same generation as that
+            # publish was computed before the clear, so it loses -- which
+            # is the *only* place the equal case differs from the buffer
+            # half's, and it differs because a deletion is not "a later
+            # pass knows more".
+            return false if cleared && generation <= last_disk
+          end
+
+          @last_disk_generation[uri] = [generation, nil] if generation
         end
 
         write_diagnostics(uri, findings, version)
@@ -711,6 +756,25 @@ module Ovallsp
     def clear_findings(uri)
       @publish_state_mutex.synchronize do
         @last_published_version.delete(uri)
+        # **Marked, not deleted.** A clear is the news that this file's
+        # findings are void; forgetting the uri let a result computed
+        # before the clear land after it and put them back. The mark keeps
+        # the generation that *was* published and records that it has been
+        # cleared, so anything at or below it loses -- and no arithmetic
+        # is done on a clock this method does not own. A genuinely later
+        # pass, the file having been recreated, carries a higher
+        # generation and still wins.
+        # **Dated by the index, floored by what was published.** Keeping
+        # only the last published generation was not enough: a clear with
+        # nothing published before it recorded `nil` and refused nothing,
+        # and a result one generation *above* the last publish still
+        # landed. The index generation is the clock these generations come
+        # from -- `WorkspaceIndex#remove_file` bumps it, and this method's
+        # caller on the deletion path runs `remove_index_contribution`
+        # first -- so any result computed before the removal carries a
+        # generation strictly below it. Found by cold review.
+        last_disk, = @last_disk_generation[uri]
+        @last_disk_generation[uri] = [[last_disk, @workspace_index.generation].compact.max, :cleared]
         write_diagnostics(uri, [], nil)
       end
     end
@@ -738,7 +802,14 @@ module Ovallsp
       ensure_gem_index
       with_index_snapshot do
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
-        @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
+        # **The generation travels with the findings, and not inside
+        # them.** An empty result -- "this file is clean now" -- carries
+        # no `Finding#generation` to be dated by, and it is the answer a
+        # stale warning could most easily land on top of. Read from the
+        # context that computed it, inside the same snapshot, so the two
+        # cannot describe different moments (`024.342`).
+        [@diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode),
+         context.generation]
       end
     ensure
       # `analyze` *records* the ancestries it had to defer on; something
@@ -1458,22 +1529,116 @@ module Ovallsp
       end)
     end
 
+    # **The first index does not queue dependents** (`024.344`). A file it
+    # has not seen has no previous declarations, so every cold summary
+    # with a `def` in it read as a declaration change and queued every
+    # open document -- and `#run` drains whenever the input is quiet, so
+    # during a cold index of a large repository every client message cost
+    # a full re-analysis of everything open. A regression the commit that
+    # added the queueing introduced, found by cold review.
+    #
+    # The pass has its own ending: `on_complete` marks the reference index
+    # dirty and requests the workspace diagnostics, which is the one place
+    # "the first index changed what is known" belongs.
     def apply_cold_summary(_uri, _document, summary)
-      apply_file_summary(summary)
+      apply_file_summary(summary, queue_dependents: false)
     end
 
-    def apply_file_summary(summary)
-      @index_mutation_mutex.synchronize do
+    def apply_file_summary(summary, queue_dependents: true)
+      declarations_changed = false
+      applied = @index_mutation_mutex.synchronize do
         previous_declarations = @workspace_index.declarations_for_uri(summary.uri)
-        return false unless @workspace_index.replace_file(summary)
+        # **Read before the store overwrites it.** The first version asked
+        # `@file_summaries[summary.uri]` *after* assigning, so both sides
+        # of the comparison were the new summary and no ancestor or alias
+        # change could ever differ -- the three examples it was added for
+        # all failed.
+        previous_summary = @file_summaries[summary.uri]
+        next false unless @workspace_index.replace_file(summary)
 
         @hierarchy_index.replace_file(summary)
         @file_summaries[summary.uri] = summary
         invalidate_method_summaries(previous_declarations)
+        declarations_changed = dependable_shape(previous_declarations, previous_summary) !=
+                               dependable_shape(summary.declarations, summary)
         @generated_method_index.replace_file(uri: summary.uri, facts: summary.generated_method_facts)
         mark_reference_index_dirty
         true
       end
+
+      note_dependents_need_analysis(summary.uri) if applied && declarations_changed && queue_dependents
+      applied
+    end
+
+    # **The index knew, and nothing asked it to say so** (`024.344`).
+    # Changing a method's arity in one open file left the caller in
+    # another open file showing its old diagnostics: this method's
+    # invalidation is real -- a forced re-analysis produces
+    # `takes 2 arguments, but 1 given` immediately -- and nothing was
+    # asking for one, so the warning waited for the caller's own next
+    # edit, and a warning that had gone away waited the same way.
+    #
+    # **Through the settled queue, not straight to `#publish_diagnostics`.**
+    # That queue exists because analysis is expensive and drains when the
+    # input is quiet, so a burst of keystrokes costs one pass rather than
+    # one per stroke. Every open document, because what changed here may
+    # be reached from any of them; a *precise* dependency set is worth
+    # having and is not what this is -- `docs/reviews/2026-09-05-critical-review.md`
+    # (R05) says to start with the open documents and add precision from
+    # measurement, and that is what this is.
+    #
+    # **Only when the declarations changed.** Re-indexing a file whose
+    # method set came out the same says nothing about anyone else, and
+    # queueing on every re-index would put every open file through the
+    # engine on every settle.
+    def note_dependents_need_analysis(changed_uri)
+      @document_store.open_documents.each do |document|
+        next if document.uri == changed_uri
+
+        note_analysis_needed(document.uri)
+      end
+    end
+
+    # **What another file can depend on**, which is more than the name.
+    # The first version of this compared names and kinds, and the arity
+    # change the review reproduces -- `def take(x)` to `def take(x, y)` --
+    # leaves both identical, so the caller was still not refreshed. The
+    # parameter list and the visibility are the rest of what a call site
+    # is judged against.
+    #
+    # A *moved* method is the same declaration to a caller, and a body
+    # edit changes nothing here, which is what keeps a keystroke from
+    # queueing every open file.
+    def declaration_set(declarations)
+      declarations.map do |declaration|
+        [declaration.symbol_id.kind, declaration.symbol_id.owner, declaration.symbol_id.name,
+         declaration.visibility,
+         Array(declaration.parameters).map { |parameter| [parameter.name, parameter.kind] }]
+      end.to_set
+    end
+
+    # **The declarations are not the whole of what another file depends
+    # on.** A superclass changed, an `include` removed or an
+    # `alias_method` deleted alters what a caller may call while every
+    # declaration in the file stays identical -- and a cold review
+    # measured all three leaving the caller stale. They are cheap to
+    # compare and they change rarely, which is the opposite of a body.
+    #
+    # **A body is deliberately left out.** A `def make = Helper.new`
+    # becoming `Other.new` changes the caller's inferred receiver type and
+    # is not caught here; including body text would queue every open file
+    # on every keystroke inside any method, which is the cost `024.344`'s
+    # own regression was about. Recorded in intake rather than traded for
+    # that.
+    # A `nil` summary is a file this Server has not held one for, and its
+    # ancestor and alias sets are *empty*, not unknown -- read as `nil`
+    # they differed from every real summary's empty set, so the first
+    # index of any file (a watched `.txt` included) read as a change and
+    # queued every open document. R2's own shape, one layer down.
+    def dependable_shape(declarations, summary)
+      [declaration_set(declarations),
+       (summary&.ancestor_facts || []).map { |fact| [fact.owner, fact.relation, fact.target] }.to_set,
+       (summary&.alias_facts || []).map { |fact| [fact.owner, fact.new_name, fact.old_name, fact.singleton] }.to_set]
     end
 
     # "ColdIndexer did not visit it" is not the same fact as "it was
@@ -1706,6 +1871,37 @@ module Ovallsp
     rescue StandardError => e
       @logger.error("failed to load RBS signatures: #{e.class}: #{e.message}")
       env
+    end
+
+    # **Reloading the environment and invalidating what read it are one
+    # act, and they were written twice.** `Environment#load` mutates in
+    # place, so nothing is assigned and neither index notices; the
+    # watched-files path knew that and cleared both the method summaries
+    # and the ancestor memo, and `#adopt_client_workspace_root` -- the
+    # other in-place reload -- cleared neither. That is `024.173`'s shape:
+    # one reader taught, its sibling not, and it is how the ancestor memo
+    # came to survive a signature reload in the first place.
+    #
+    # Through a conforming client the adoption site could not produce a
+    # wrong answer -- at `initialize` the memo and the gem index are both
+    # empty, and `gem_index=` clears when the Agent's index arrives -- so
+    # this is a census gap closed rather than a defect measured. Found by
+    # cold review. The caller holds `@index_mutation_mutex` where it has
+    # one; the adoption runs before any other thread exists.
+    #
+    # **No mutation names the adoption site, and that is the point.** No
+    # example can fail on it, because no answer it could spoil exists yet
+    # at that moment -- so a pin there would be a claim this method cannot
+    # make. What is pinned is `#signatures_reloaded` itself, through the
+    # watched-files reload, which reaches it by this same method. The
+    # value here is that there is one of these rather than two.
+    def reload_signatures
+      load_signatures_into(@signatures)
+      @method_summary_store.clear
+      # The signature environment is the third input to an ancestor
+      # chain, through `#canonical_name`'s `declares?` -- and the only
+      # one that changes without either index being written to.
+      @hierarchy_index.signatures_reloaded
     end
 
     # Starts the Runtime Agent on a background thread — never the request
@@ -2745,6 +2941,17 @@ module Ovallsp
       # layout; it is the same match the Runtime Agent uses to attribute
       # a module to a gem.
       return [] if INSTALLED_GEM_PATH.match?(target[:uri].to_s)
+      # **And not into a class that has no `end`.** `#insertion_for` aims
+      # at `range.end.character - 3`, which is where a one-line class
+      # keeps its `end`. `Widget = Class.new(Base)` ends in `se)`, so the
+      # `def` went inside the superclass expression and the file stopped
+      # parsing -- in the *declaring* file, which need not be the one the
+      # diagnostic was reported on. `024.82` is why this is indexed as a
+      # class at all, so the diagnostic is right and only the fix was
+      # wrong. A keyword class's location starts at `class`, strictly
+      # before its name; an assignment's starts at the name itself, which
+      # is the whole difference and is measured across four shapes.
+      return [] if declared_by_assignment?(target)
 
       [{ title: "Define `#{candidate.name}` in #{Index::SymbolId.bare_name(owner)}",
          kind: "quickfix", diagnostics: [diagnostic],
@@ -2765,6 +2972,18 @@ module Ovallsp
     #
     # The `end` is the one landmark this has without the class's body,
     # which `WorkspaceIndex#class_declarations` does not carry.
+    # A declaration whose location begins at its own name was written as
+    # an assignment (`Widget = Class.new(Base)`, `Point = Struct.new(:x)`)
+    # and has no `end` for `#insertion_for` to aim at. Declining is what
+    # `024.302` settled for the same shape: offering nothing is correct
+    # where the edit would be wrong.
+    def declared_by_assignment?(target)
+      name_range = target[:name_range]
+      return false unless name_range
+
+      target[:range][:start] == name_range[:start]
+    end
+
     def insertion_for(target, candidate)
       range = target[:range]
       # The parameters the call actually passes. Without them, applying
@@ -3310,12 +3529,21 @@ module Ovallsp
     # - takes nothing: insert the bare name. `save()` is not how Ruby is
     #   written, and an editor that produces it is worse than one that
     #   inserts plain text.
+    # **What a call looks like, which is not what a declaration looks
+    # like.** Each parameter arrives as `[name, keyword?]`; a keyword one
+    # is written `name: ${n:name}`, because the snippet is text the author
+    # will run and `take(${1:required})` does not bind to
+    # `def take(required:)` (`024.339`).
     def completion_snippet(member)
       parameters = member.parameters
       return "#{member.name}($1)" if parameters == :unknown_arity
       return nil if parameters.nil? || parameters.empty?
 
-      stops = parameters.each_with_index.map { |name, index| "${#{index + 1}:#{name}}" }
+      stops = parameters.each_with_index.map do |parameter, index|
+        name, keyword = parameter
+        stop = "${#{index + 1}:#{name}}"
+        keyword ? "#{name}: #{stop}" : stop
+      end
       "#{member.name}(#{stops.join(', ')})"
     end
 
@@ -3829,7 +4057,25 @@ module Ovallsp
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
           # reindex from disk for files nobody currently has open.
-          reanalyze << uri if reindex_from_disk(uri)
+          #
+          # **And only for files this workspace may index.** `ColdIndexer`
+          # refuses a path that resolves outside the root, and this
+          # entrance did not -- `#reindex_from_disk`'s `File.file?` follows
+          # a link, so a `linked.rb` inside the workspace pointing outside
+          # was refused at startup and read on the next notification. A
+          # watcher notification is not permission for an arbitrary path,
+          # and an untrusted workspace runs this path (`024.336`).
+          #
+          # Anything already indexed under the old resolution goes with
+          # it: this notification *is* the news that it no longer resolves
+          # where it did, and standing behind the old contribution would
+          # be answering from a file this server may not read.
+          if indexable_from_disk?(uri)
+            reanalyze << uri if reindex_from_disk(uri)
+          else
+            @index_mutation_mutex.synchronize { remove_index_contribution(uri) }
+            clear_findings(uri)
+          end
         end
 
         case classify_rails_change(uri)
@@ -3849,10 +4095,16 @@ module Ovallsp
       # from the pre-reload environment and store it *after* the clear,
       # leaving a stale entry that nothing else invalidates.
       if needs_signature_reload
-        @index_mutation_mutex.synchronize do
-          @signatures.load(workspace_root: @workspace_root)
-          @method_summary_store.clear
-        end
+        @index_mutation_mutex.synchronize { reload_signatures }
+        # **And then ask for the answers to be said again** (`024.344`).
+        # The environment and the summary cache were both updated and
+        # nothing published: editing `sig/typed.rbs` from `(Integer)` to
+        # `(String)` left the open `take(1)` showing no argument-type
+        # report until the file was touched. A signature change has no
+        # bounded dependency set -- any open file may name the type -- so
+        # every open document is queued, and the settled queue is what
+        # keeps that from costing a pass per keystroke.
+        @document_store.open_documents.each { |document| note_analysis_needed(document.uri) }
       end
 
       # Deduplicated across the whole batch — a git checkout or branch
@@ -3939,6 +4191,14 @@ module Ovallsp
     # the index mutex, which the dispatch thread needs for the *next*
     # file -- measured at 13.5s for a 200-file batch against 1.5s for the
     # indexing alone, with no request served meanwhile.
+    # The automatic-indexing boundary, shared with `ColdIndexer` rather
+    # than restated (`Index::WorkspaceBoundary`). Not applied inside
+    # `#reindex_from_disk` itself: its other caller is a `didClose`, and a
+    # file the user opened is theirs to open wherever it lives.
+    def indexable_from_disk?(uri)
+      Index::WorkspaceBoundary.inside?(root: @workspace_root, path: UriUtil.to_path(uri))
+    end
+
     def reindex_from_disk(uri)
       path = UriUtil.to_path(uri)
       return unless path && File.file?(path)

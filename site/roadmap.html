@@ -202,6 +202,40 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v034">
+          <div class="tl-version">
+            <span class="v">0.3.4</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>Twenty-three fixes, most found by review rather than by use</h3>
+          <ul class="feature-list">
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>An outside critical review ran against the engine</strong> and sixteen of its findings are fixed &mdash; the review, its reproduction scripts and what happened to each finding are committed in the repository.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>Wrong reports stop:</strong> a call your file guards with <code>respond_to?</code>, a <code>self.included</code> hook's mixin, a macro the parser itself read, and a constant your workspace declares are no longer reported.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>Edits get safer:</strong> a rename that would break an override is refused, <code>world!</code> and <code>world?</code> are accepted as method names, and a keyword argument completes as a keyword.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>Stale answers stop overwriting fresh ones</strong> &mdash; in the first index, in the diagnostics a background pass publishes, and when your RBS or a callee changes under an open file.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>No capability is added.</strong> This branch was opened as 0.4.0 and renamed when its whole content turned out to be fixes; the 0.4.0 promises below are unchanged.</span>
+                    </li>
+          </ul>
+          <p class="text-mute">
+            The full account is in the
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.md">changelog</a>
+          </p>
+        </article>
+
         <article class="tl-item" id="v033">
           <div class="tl-version">
             <span class="v">0.3.3</span>

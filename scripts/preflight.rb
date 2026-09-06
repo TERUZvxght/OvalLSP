@@ -132,6 +132,15 @@ CHECKS = [
     why: "the marker that would flag it lives in the body, so it leaves with the body",
     dir: ROOT, command: %w[ruby scripts/check_bodyless_headings.rb]
   ),
+  # `.rake` was in `ColdIndexer`'s indexed set and not in the extension's
+  # watcher glob for three releases, so an unopened `.rake` file froze at
+  # whatever the first index read. The two lists are one contract in two
+  # languages and nothing knew that.
+  Check.new(
+    name: "the indexed and watched file kinds agree",
+    why: "a kind the first index reads and the watcher misses freezes at startup",
+    dir: ROOT, command: %w[ruby scripts/check_watched_extensions.rb]
+  ),
   # 024.R9 split the register by state, and that split is only true while
   # resolving an entry moves it. The move is a script rather than a hand
   # edit -- this file's own class of accident, `024.225` -- and this is

@@ -76,4 +76,42 @@ RSpec.describe Ovallsp::UriUtil do
       expect(described_class.to_path("file://%")).to be_nil
     end
   end
+
+  # **A backslash is a filename character on POSIX and a separator on
+  # Windows, and `#from_path` treated every one as a separator.** So
+  # `/tmp/one\\two.rb` -- a legal, if unusual, POSIX filename -- produced
+  # a URI naming `/tmp/one/two.rb`, a different file, and the round trip
+  # did not come back. Found by the 2026-09-05 critical review, R10.
+  #
+  # The normalisation is kept for the paths it is *for*: a drive letter or
+  # a UNC prefix is what says a backslash is a separator, and neither can
+  # appear in a POSIX path that means something else.
+  describe "a backslash in a POSIX filename" do
+    it "round-trips a path whose name contains one" do
+      path = "/tmp/one\\two.rb"
+
+      expect(described_class.to_path(described_class.from_path(path))).to eq(path)
+    end
+
+    it "still normalises a Windows drive path written with backslashes" do
+      expect(described_class.from_path("C:\\work\\a.rb")).to eq("file:///C:/work/a.rb")
+    end
+
+    it "still normalises a UNC path written with backslashes" do
+      expect(described_class.from_path("\\\\server\\share\\a.rb")).to eq("file://server/share/a.rb")
+    end
+  end
+
+  # **A `#` in a path is a URI fragment**, so a workspace under a
+  # directory named with one produced a URI whose path stopped at the
+  # `#`. `#from_path` escapes; the signature loaders concatenated
+  # `"file://#{path}"` by hand and did not.
+  describe "characters that need escaping" do
+    { "a hash" => "/tmp/proj#1/a.rb", "a space" => "/tmp/my proj/a.rb",
+      "a percent" => "/tmp/100%/a.rb", "a question mark" => "/tmp/what?/a.rb" }.each do |what, path|
+      it "round-trips #{what}" do
+        expect(described_class.to_path(described_class.from_path(path))).to eq(path)
+      end
+    end
+  end
 end

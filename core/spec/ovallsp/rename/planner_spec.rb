@@ -16,7 +16,10 @@ RSpec.describe Ovallsp::Rename::Planner do
     )
   end
 
-  subject(:planner) { described_class.new(workspace_index: workspace_index, reference_index: reference_index) }
+  subject(:planner) do
+    described_class.new(workspace_index: workspace_index, reference_index: reference_index,
+                        hierarchy_index: hierarchy_index)
+  end
 
   def index_source(text, uri: "file:///a.rb")
     document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
@@ -64,6 +67,281 @@ RSpec.describe Ovallsp::Rename::Planner do
 
       expect(plan.confirmed_edits).to eq([])
       expect(plan.refused?).to be(true)
+    end
+  end
+
+  # **A Ruby keyword was accepted as a method's new name**, because
+  # `#valid_identifier?` applied `reserved_word?` only when the kind was
+  # `:local_variable`. The method patterns match every keyword, so
+  # `end`, `if`, `class` and `def` all passed.
+  #
+  # Where it breaks is the call site, not the definition. Taken from the
+  # interpreter rather than reasoned about:
+  #
+  #   $ ruby -e 'begin; eval(%q{class Z; def end; 1; end; def go; self.end; end; end}); puts "legal"; rescue SyntaxError; puts "SyntaxError"; end'
+  #   # => legal
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'begin; eval(%q{class Z; def if; 1; end; def go; if; end; end}); puts "legal"; rescue SyntaxError; puts "SyntaxError"; end'
+  #   # => SyntaxError
+  #   # ruby 3.4.10
+  #
+  # So `def end` is legal Ruby and a *receiverless* call to it is not --
+  # which is the shape a rename produces, since it rewrites the
+  # definition and every reference including the bare ones.
+  #
+  # Constants are already safe and not by accident: their pattern
+  # requires a leading capital, and every Ruby keyword is lower case.
+  describe "a Ruby keyword as the new name" do
+    it "refuses it for an instance method" do
+      index_source("class Widget\n  def value\n    1\n  end\n\n  def go\n    value\n  end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "value"),
+                          new_name: "if", generation: 1)
+
+      expect(plan.refused?).to be(true)
+      expect(plan.confirmed_edits).to eq([])
+    end
+
+    it "refuses it for a singleton method" do
+      index_source("class Widget\n  def self.value\n    1\n  end\nend\n")
+
+      plan = planner.plan(sym(kind: :singleton_method, owner: "::Widget", name: "value"),
+                          new_name: "end", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    # **The controls.** Without them, a planner that refused every method
+    # rename would pass both examples above.
+    it "still renames a method to an ordinary name" do
+      index_source("class Widget\n  def value\n    1\n  end\n\n  def go\n    value\n  end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "value"),
+                          new_name: "amount", generation: 1)
+
+      expect(plan.refused?).to be(false)
+      expect(plan.confirmed_edits).not_to be_empty
+    end
+
+    # A name that merely *contains* a keyword is ordinary, and refusing it
+    # would be the rule reaching too far.
+    it "still renames a method to a name a keyword is a prefix of" do
+      index_source("class Widget\n  def value\n    1\n  end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "value"),
+                          new_name: "ending", generation: 1)
+
+      expect(plan.refused?).to be(false)
+    end
+
+    # **`world!` and `world?` are ordinary method names and were refused.**
+    # The keyword test was `Prism.parse("#{name} = nil")` for methods as
+    # well as locals, and neither is a legal assignment target -- so the
+    # commonest naming convention in Ruby was rejected as though it were
+    # `end`. A local variable and a method are different grammars, and the
+    # question a method's rename actually asks is whether the *bare call*
+    # a rename writes is legal:
+    #
+    #   $ ruby -rprism -e '
+    #   %w[world world! world? nil self if end].each do |n|
+    #     r = Prism.parse(n)
+    #     node = r.success? ? r.value.statements&.body&.first : nil
+    #     puts format("%-7s parse=%-5s node=%s", n, r.success?,
+    #                 node ? node.class.name.split("::").last : "-")
+    #   end
+    #   '
+    #   # => world   parse=true  node=CallNode
+    #   #    world!  parse=true  node=CallNode
+    #   #    world?  parse=true  node=CallNode
+    #   #    nil     parse=true  node=NilNode
+    #   #    self    parse=true  node=SelfNode
+    #   #    if      parse=false node=-
+    #   #    end     parse=false node=-
+    #   # ruby 3.4.10, prism 1.9.0
+    #
+    # Parsing alone is not the test: `nil` and `self` parse and are not
+    # calls, so a method renamed to either would break every call site.
+    # The node has to *be* a receiverless call of that name. Found by the
+    # 2026-09-05 critical review, R08.
+    %w[world! world?].each do |name|
+      it "renames a method to #{name}" do
+        index_source("class Widget\n  def value\n    1\n  end\n\n  def go\n    value\n  end\nend\n")
+
+        plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "value"),
+                            new_name: name, generation: 1)
+
+        expect(plan.refused?).to be(false)
+        expect(plan.confirmed_edits).not_to be_empty
+      end
+    end
+
+    %w[nil self true __FILE__].each do |name|
+      it "still refuses #{name}, which parses and is not a call" do
+        index_source("class Widget\n  def value\n    1\n  end\nend\n")
+
+        plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "value"),
+                            new_name: name, generation: 1)
+
+        expect(plan.refused?).to be(true)
+      end
+    end
+
+    # A local is still asked the assignment question, which is its own
+    # grammar: `world!` is not a legal local name.
+    it "still refuses a bang name for a local variable" do
+      source = "def go\n  count = 1\n  count\nend\n"
+      index_source(source)
+      document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+      summary = Ovallsp::ParserService.new.summarize(document)
+      candidate = summary.reference_candidates.find { |c| c.kind == :local_variable }
+      resolved = reference_resolver.resolve(document, [candidate], uri: "file:///a.rb", generation: 1).first
+
+      expect(planner.plan(resolved.symbol_id, new_name: "world!", generation: 1).refused?).to be(true)
+    end
+  end
+
+  # **Four ways a rename changed what the program answers**, none of
+  # which breaks its syntax, so no parse check sees them. Each pair below
+  # is what Ruby prints before and after the rename this planner offered:
+  #
+  #   $ ruby -e 'def go; total=0; [1,2].each { |x| total += x }; total; end; p go'
+  #   # => 3
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'def go; x=0; [1,2].each { |x| x += x }; x; end; p go'
+  #   # => 0
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class W; def helper; 99; end; def go; total=0; total+helper; end; end; p W.new.go'
+  #   # => 99
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class W; def helper; 99; end; def go; helper=0; helper+helper; end; end; p W.new.go'
+  #   # => 0
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class B; def shared; "base"; end; end; class C < B; def own; "own"; end; end; p [C.new.shared, C.new.own]'
+  #   # => ["base", "own"]
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class B; def shared; "base"; end; end; class C < B; def shared; "own"; end; end; p C.new.shared'
+  #   # => "own"
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class W; def go; @a=1; @b=2; @a+@b; end; end; p W.new.go'
+  #   # => 3
+  #   # ruby 3.4.10
+  #
+  #   $ ruby -e 'class W; def go; @b=1; @b=2; @b+@b; end; end; p W.new.go'
+  #   # => 4
+  #   # ruby 3.4.10
+  #
+  # The shape they share is that the conflict check asks what the new
+  # name means in *one* place -- the target's own scope frame, or the
+  # method's own owner -- and the name can already mean something in a
+  # neighbouring one.
+  describe "a new name that already means something" do
+    def local_target(source, name)
+      document = index_source(source)
+      summary = Ovallsp::ParserService.new.summarize(document)
+      candidate = summary.reference_candidates.find { |c| c.name.to_s == name }
+      reference_resolver.resolve(document, [candidate], uri: "file:///a.rb", generation: 1).first.symbol_id
+    end
+
+    it "refuses a local renamed onto a name a nested block binds" do
+      target = local_target("def go\n  total = 0\n  [1].each { |x| total += x }\n  total\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "x", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    it "refuses a local renamed onto a method called receiverlessly in the same scope" do
+      target = local_target("class W\n  def helper; 1; end\n  def go\n    total = 0\n    total + helper\n  end\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "helper", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    it "refuses a method renamed onto a name its superclass declares" do
+      index_source("class Base\n  def shared; 1; end\nend\nclass Child < Base\n  def own; 2; end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Child", name: "own"),
+                          new_name: "shared", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    it "refuses an ivar renamed onto one already in use" do
+      target = local_target("class W\n  def go\n    @a = 1\n    @b = 2\n    @a + @b\n  end\nend\n", "@a")
+
+      plan = planner.plan(target, new_name: "@b", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    # **The controls**, and they carry the whole risk of this change:
+    # rename that refuses too readily is its own defect, and `024.28` is
+    # already a live complaint about one refusal. Each of these is a
+    # rename a user legitimately wants.
+    # **The measurement that sent the first attempt back.** The refusal
+    # was written file-wide, on the reasoning that a scope id carries no
+    # nesting so the file is the only computable unit. Driven over 120
+    # activesupport files, renaming each `def`'s first local onto a local
+    # a *different* `def` binds -- which Ruby accepts every time -- it
+    # refused **32 of 32**. Rename refuses mutely, so that is the feature
+    # silently doing nothing.
+    #
+    # The enclosing `def`'s own range is computable from what the index
+    # already holds, and it is the unit that matters: a binding outside
+    # it cannot capture anything inside it. Re-driven after the change,
+    # over pairs in genuinely different `def`s: **19 of 20 applied**, and
+    # the one refusal is a true one -- `name_error.rb`'s `missing_name`
+    # calls `name` receiverlessly, so a local named `name` really would
+    # shadow it.
+    it "still renames a local onto a name only a different method binds" do
+      target = local_target("class W\n  def one\n    total = 0\n    total\n  end\n\n  def two\n    other = 1\n    other\n  end\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "other", generation: 1)
+
+      expect(plan.refused?).to be(false)
+      expect(plan.confirmed_edits).not_to be_empty
+    end
+
+    it "still renames a local onto a method called with arguments, which Ruby never captures" do
+      target = local_target("class W\n  def helper(n); n; end\n  def go\n    total = 0\n    total + helper(1)\n  end\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "helper", generation: 1)
+
+      expect(plan.refused?).to be(false)
+    end
+
+    it "still renames a local to a name nothing else uses" do
+      target = local_target("def go\n  total = 0\n  [1].each { |x| total += x }\n  total\nend\n", "total")
+
+      plan = planner.plan(target, new_name: "running_sum", generation: 1)
+
+      expect(plan.refused?).to be(false)
+      expect(plan.confirmed_edits).not_to be_empty
+    end
+
+    it "still renames a method to a name no ancestor declares" do
+      index_source("class Base\n  def shared; 1; end\nend\nclass Child < Base\n  def own; 2; end\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Child", name: "own"),
+                          new_name: "mine", generation: 1)
+
+      expect(plan.refused?).to be(false)
+    end
+
+    it "still renames an ivar to one nothing else uses" do
+      target = local_target("class W\n  def go\n    @a = 1\n    @b = 2\n    @a + @b\n  end\nend\n", "@a")
+
+      plan = planner.plan(target, new_name: "@count", generation: 1)
+
+      expect(plan.refused?).to be(false)
     end
   end
 
@@ -348,6 +626,129 @@ RSpec.describe Ovallsp::Rename::Planner do
 
       expect(plan.confirmed_edits).not_to be_empty
       expect(plan.warnings).to eq([])
+    end
+  end
+
+  # **A rename that keeps the file parsing and changes what it answers.**
+  # `Planner`'s own header argues that not touching an override is the
+  # safe boundary, because an override has a different SymbolId. It is
+  # not: the *name* is what binds the two together, and renaming one end
+  # of that binding is exactly what breaks it.
+  #
+  #   $ ruby -e '
+  #   class Parent; def hello = 1; end
+  #   class Child < Parent; def hello = super + 1; end
+  #   p Child.new.hello
+  #   class Parent2; def world = 1; end
+  #   class Child2 < Parent2; def hello = super + 1; end
+  #   begin; Child2.new.hello; rescue NoMethodError => e; puts e.message; end
+  #   '
+  #   # => 2
+  #   #    super: no superclass method 'hello' for an instance of Child2
+  #   # ruby 3.4.10
+  #
+  # The second half is the tree after the rename this planner accepted:
+  # `Parent#hello` became `world`, `Child#hello` was correctly left alone,
+  # and the program stopped working. Renaming the *child* is the same
+  # binding broken from the other end -- `Child.new.hello` silently
+  # reaches the parent's instead of raising.
+  #
+  # A single-symbol rename cannot preserve an override, so it is refused
+  # rather than extended to rewrite both: rewriting every same-named
+  # method on a chain is a different operation with its own failure modes,
+  # and `docs/design/tasks/042` D1 is what a fix that *resolves* rather
+  # than refuses would need. Found by the 2026-09-05 critical review, R02.
+  describe "a method that overrides or is overridden" do
+    let(:pair) do
+      "class Parent\n  def hello = 1\nend\nclass Child < Parent\n  def hello = super + 1\nend\n"
+    end
+
+    it "refuses to rename the parent's method" do
+      index_source(pair)
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Parent", name: "hello"),
+                          new_name: "world", generation: 1)
+
+      expect(plan.refused?).to be(true)
+      expect(plan.confirmed_edits).to eq([])
+    end
+
+    it "refuses to rename the child's method" do
+      index_source(pair)
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Child", name: "hello"),
+                          new_name: "world", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    # Through a module, not only a superclass: `include` puts the module
+    # on the chain and an override there binds the same way.
+    it "refuses when the other end is an included module" do
+      index_source("module Greets\n  def hello = 1\nend\nclass Child\n  include Greets\n  def hello = super\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Greets", name: "hello"),
+                          new_name: "world", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    # **The controls.** Without them a planner that refused every method
+    # rename would pass all three.
+    it "still renames a method no ancestor or descendant declares" do
+      index_source(pair)
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Parent", name: "hello"),
+                          new_name: "greeting", generation: 1)
+      expect(plan.refused?).to be(true) # `Child#hello` still binds to it
+
+      solo = "class Solo\n  def only_here = 1\n  def go = only_here\nend\n"
+      index_source(solo, uri: "file:///solo.rb")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Solo", name: "only_here"),
+                          new_name: "renamed", generation: 1)
+
+      expect(plan.refused?).to be(false)
+      expect(plan.confirmed_edits).not_to be_empty
+    end
+
+    # **A workspace `class Object` is the other end too.** `#method_owners`
+    # answers with stored owners, which are qualified (`::Object`), and
+    # `HierarchyIndex#ancestors` names its entries bare -- so the one case
+    # `#inherited_owners`'s comment says the root classes are *kept* in
+    # the chain for was the one it could never match. Ruby:
+    #
+    #   $ ruby -e '
+    #   class Object; def blank? = :object_blank; end
+    #   class A8; def blank? = :a8_blank; end
+    #   p A8.new.blank?
+    #   class A9; def renamed = :a9; end
+    #   p A9.new.blank?
+    #   '
+    #   # => :a8_blank
+    #   #    :object_blank
+    #   # ruby 3.4.10
+    #
+    # Renaming `A8#blank?` makes every `A8` call reach `Object`'s instead
+    # of raising. Found by cold review.
+    it "refuses when the other end is a workspace Object" do
+      index_source("class Object\n  def blank? = 1\nend\nclass A8\n  def blank? = 2\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::A8", name: "blank?"),
+                          new_name: "empty_ish", generation: 1)
+
+      expect(plan.refused?).to be(true)
+    end
+
+    # Two unrelated classes may share a method name without either
+    # overriding the other, and renaming one of them is ordinary.
+    it "still renames a name an unrelated class also declares" do
+      index_source("class A\n  def shared = 1\nend\nclass B\n  def shared = 2\nend\n")
+
+      plan = planner.plan(sym(kind: :instance_method, owner: "::A", name: "shared"),
+                          new_name: "renamed", generation: 1)
+
+      expect(plan.refused?).to be(false)
     end
   end
 end

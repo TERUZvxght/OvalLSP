@@ -243,7 +243,12 @@ module Ovallsp
         # for a type RBS *does* declare and could not build, so a type it
         # has never heard of comes back `false` and keeps the answer
         # below.
-        declared = signatures.declares?(entry.name)
+        # `#declared_outside_stdlib?`, not `#declares?` (`024.321`). A
+        # stdlib library may be answered *from* and not judged *against*:
+        # RBS cannot express an `included` hook, so `include Singleton`
+        # would make `.instance` a reported typo -- which is the report
+        # 0.2.6 fixed, arriving again by a different door.
+        declared = signatures.declared_outside_stdlib?(entry.name)
         return false if declared.nil?
         return true if entry.kind
 
@@ -333,8 +338,19 @@ module Ovallsp
       # declined about, and only that owner.**
       def synthesised_link?(entry) = entry.synthesised?
 
+      # `HOOK_RELATIONS`: an `included`/`prepended` hook runs when the
+      # module is *included* or *prepended*, and not when it is extended.
+      # A class that only `extend`s such a module gets nothing from the
+      # hook, so the surface it opened says nothing about that class --
+      # and reading it flatly declined about every class-level call there
+      # (`concurrent-ruby/promises.rb:47 extend ReInclude`).
+      HOOK_RELATIONS = %i[include prepend].freeze
+
       def open_surface?(entry, singleton)
         return false if synthesised_link?(entry)
+
+        return true if HOOK_RELATIONS.include?(entry.origin) &&
+                       @workspace_index.open_surface?(entry.name, kind: :included_hook)
 
         @workspace_index.open_surface?(entry.name, singleton: entry.origin == :extend ? false : singleton)
       end

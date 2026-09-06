@@ -172,4 +172,117 @@ RSpec.describe Ovallsp::Semantic::HierarchyIndex do
       expect(elapsed).to be < 1.0
     end
   end
+
+  # **A memo that survives a mutation is a wrong answer, not a fast one.**
+  # `#ancestors` is memoised for one generation, because `024.45`'s
+  # profile puts the chain walk and everything it allocates near the top
+  # of an analysis and a file asks about the same few receivers
+  # repeatedly. The whole of its correctness is that every mutation --
+  # and a gem-index swap, which changes chains without bumping the
+  # generation -- clears it.
+  describe "the ancestor memo" do
+    def summarize(text, uri)
+      Ovallsp::ParserService.new.summarize(
+        Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+      )
+    end
+
+    it "reflects a file's ancestors being replaced" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      index = described_class.new(workspace_index: workspace)
+      %w[a.rb].each do |_|
+        summary = summarize("module Mixin\nend\nclass Widget\n  include Mixin\nend\n", "file:///a.rb")
+        workspace.replace_file(summary)
+        index.replace_file(summary)
+      end
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to include("::Mixin")
+
+      summary = summarize("module Mixin\nend\nclass Widget\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+
+      expect(index.ancestors("Widget").map(&:name_or_nil)).not_to include("::Mixin")
+    end
+
+    # **The third input, and the one that changes without either index
+    # being written to.** `#canonical_name` asks `@signatures.declares?`
+    # through `#free_for_a_gem_to_claim?`, and
+    # `Signatures::Environment#load` mutates the environment in place --
+    # so reloading a workspace's `sig/` changed what a name resolves to
+    # while every memoised chain kept the old answer. Found by cold
+    # review, which built the disagreement between a memoised index and a
+    # fresh one given the same three inputs.
+    it "reflects a signature environment that reloaded under it" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      signatures = instance_double(Ovallsp::Signatures::Environment)
+      allow(signatures).to receive(:declares?).and_return(false)
+      gems = Ovallsp::Semantic::GemIndex.from_agent(
+        { gems: { "ar-1.0.0": { classes: [
+          { name: "ActiveRecord::Relation",
+            ancestors: %w[ActiveRecord::Relation Object Kernel BasicObject],
+            instanceMethods: %w[to_a], singletonMethods: [], definesMethodMissing: false }
+        ] } } }
+      )
+      index = described_class.new(workspace_index: workspace, gem_index: gems, signatures: signatures)
+      summary = summarize("class Widget < Relation\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      before = index.ancestors("Widget").map(&:name_or_nil)
+      expect(before).to include("ActiveRecord::Relation")
+
+      # `sig/` now declares a `Relation` of the workspace's own, so the
+      # gem may no longer claim the bare name.
+      allow(signatures).to receive(:declares?).and_return(true)
+      index.signatures_reloaded
+
+      expect(index.ancestors("Widget").map(&:name_or_nil)).not_to include("ActiveRecord::Relation")
+    end
+
+    # **The gem index is an input too, and swapping it bumps nothing.**
+    # `HierarchyIndex#gem_index=` clears the memo for that reason -- the
+    # Runtime Agent installs its index after construction, and a chain
+    # computed before that reaches a name the gem index would have
+    # answered for. The clear was written with the memo and pinned by
+    # nothing: reverting it left every example in this file and in
+    # `workspace_index_spec` green, because no spec swapped a gem index
+    # after construction. Found by cold review.
+    it "reflects a gem index installed after a chain was computed" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      # A signature environment is required for the gem index to be
+      # consulted at all: `#free_for_a_gem_to_claim?` returns false
+      # without one, so a fixture that omits it never reaches the input
+      # this example is about.
+      signatures = instance_double(Ovallsp::Signatures::Environment)
+      allow(signatures).to receive(:declares?).and_return(false)
+      index = described_class.new(workspace_index: workspace, signatures: signatures)
+      summary = summarize("class Widget < Relation\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to eq(["::Widget", "Relation"])
+
+      index.gem_index = Ovallsp::Semantic::GemIndex.from_agent(
+        { gems: { "ar-1.0.0": { classes: [
+          { name: "ActiveRecord::Relation",
+            ancestors: %w[ActiveRecord::Relation Object Kernel BasicObject],
+            instanceMethods: %w[to_a], singletonMethods: [], definesMethodMissing: false }
+        ] } } }
+      )
+
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to include("ActiveRecord::Relation")
+    end
+
+    it "reflects the file being removed entirely" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      index = described_class.new(workspace_index: workspace)
+      summary = summarize("class Base\nend\nclass Widget < Base\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to include("::Base")
+
+      workspace.remove_file("file:///a.rb")
+      index.remove_file("file:///a.rb")
+
+      expect(index.ancestors("Widget").map(&:name_or_nil)).not_to include("::Base")
+    end
+  end
 end

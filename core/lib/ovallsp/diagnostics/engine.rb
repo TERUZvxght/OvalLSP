@@ -111,9 +111,25 @@ module Ovallsp
         # `puts` as unknown, this whole check simply doesn't run.
         return [] unless context.signatures
 
+        # A call the file guards with `respond_to?` is one the author has
+        # already said may not be there, which is the same shape as the
+        # `defined?(@x)` exemption the unassigned-ivar check carries. By
+        # name rather than by position: a file defensive about a name is
+        # defensive about it, and the typo this check exists for appears
+        # in no `respond_to?`.
+        guards = names_guarded_by_respond_to(document)
+        return [] if guards.nil?
+
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call
           next if resolved_locations[candidate.location]
+          next if guarded_here?(guards, candidate)
+          # The call this parser read as a macro, at the range it was
+          # written. A recognised `delegate`/`scope`/`enum` leaves the
+          # class's surface closed -- correctly, the parser read it -- and
+          # that is what exposed the macro's own call here (`024.327`).
+          # By range, so `delegate` stays reportable where it is not one.
+          next if summary.macro_call_ranges.include?(candidate.location)
           # A name Ruby gives every object that the signature set does
           # not declare on `::Object` (`024.91` shape D). Asked before
           # the receiver because everything inherits from `Object`.
@@ -292,6 +308,194 @@ module Ovallsp
         collector.names
       rescue StandardError
         nil
+      end
+
+      # Every name a *receiverless* `respond_to?` names with a literal
+      # symbol or string, in one parse of the document.
+      #
+      # **Receiverless**, because `other.respond_to?(:x)` is a statement
+      # about `other` and says nothing about what `self` answers to.
+      # **Literal**, because a computed name is exactly what cannot be
+      # read, and a guard this cannot read must not be treated as one.
+      #
+      # `nil` on any failure, which every caller turns into "do not
+      # assert": enumerating is what decides whether to speak, so a
+      # failure to enumerate has to decline (`024.122`).
+      def names_guarded_by_respond_to(document)
+        collector = RespondToGuardCollector.new
+        Prism.parse(document.text).value.accept(collector)
+        collector.guards
+      rescue StandardError
+        nil
+      end
+
+      # **A guard says something about `self`, on the side of the condition
+      # that runs when it is true.**
+      #
+      # Two versions preceded this. The first collected bare names and the
+      # check read them file-wide, which said that a guard in one method
+      # covers an unguarded call in another and that a guard on `self`
+      # covers `Other.new.maybe_there`. The second scoped a guard to the
+      # body it was written in and *documented* that it did not model the
+      # branch -- and a follow-up review's verdict was that documenting
+      # the gap does not satisfy the condition. It does not: a guard in
+      # the false arm exempted the true arm, and Ruby raises there.
+      #
+      #   $ ruby -e '
+      #   class W
+      #     def guarded_true;  if respond_to?(:maybe) then maybe else 0 end; end
+      #     def guarded_false; if respond_to?(:maybe) then 0 else maybe end; end
+      #     def early;         return 1 unless respond_to?(:maybe); maybe; end
+      #     def andform;       respond_to?(:maybe) && maybe; end
+      #   end
+      #   %i[guarded_true guarded_false early andform].each do |m|
+      #     begin
+      #       W.new.send(m); puts "#{m}: ran"
+      #     rescue NameError => e
+      #       puts "#{m}: NameError"
+      #     end
+      #   end'
+      #   # => guarded_true: ran
+      #   #    guarded_false: NameError
+      #   #    early: ran
+      #   #    andform: ran
+      #   # ruby 3.4.10
+      #
+      # So the scope is the *consequent*, in four shapes:
+      #
+      # - `if` (block and modifier alike, which Prism gives as one node):
+      #   the statements. Its `subsequent` is not guarded.
+      # - `unless`: the `else_clause` -- **and**, when its statements
+      #   cannot fall through (`return`, `raise`, `next`, `break`,
+      #   `throw`), everything after it in the enclosing body. That is
+      #   `return unless respond_to?(:x)`, the commonest spelling in Ruby
+      #   and the one a rule that only reads the arms would lose.
+      # - `and`: the right operand.
+      # - `or` whose right cannot fall through: everything after it.
+      #
+      # A `respond_to?` that is not a condition at all guards nothing,
+      # which is the one case the body-scoped version got backwards.
+      #
+      # Line ranges rather than node identity, because the check compares
+      # against a `ReferenceCandidate`'s location and has no node.
+      class RespondToGuardCollector < Prism::Visitor
+        Guard = Struct.new(:name, :first_line, :last_line)
+
+        # A statements node that cannot fall through to what follows it.
+        # `return` and `raise` are the two this idiom is written with;
+        # `next` and `break` are the same claim inside a block.
+        LEAVES = [Prism::ReturnNode, Prism::NextNode, Prism::BreakNode].freeze
+
+        attr_reader :guards
+
+        def initialize
+          @guards = []
+          @bodies = []
+          super
+        end
+
+        def visit_def_node(node) = within(node) { super }
+        def visit_class_node(node) = within(node) { super }
+        def visit_module_node(node) = within(node) { super }
+        def visit_singleton_class_node(node) = within(node) { super }
+
+        def visit_if_node(node)
+          record(node.predicate, node.statements)
+          super
+        end
+
+        def visit_unless_node(node)
+          record(node.predicate, node.else_clause)
+          record(node.predicate, rest_of_body_after(node)) if leaves?(node.statements)
+          super
+        end
+
+        def visit_and_node(node)
+          record(node.left, node.right)
+          super
+        end
+
+        def visit_or_node(node)
+          record(node.left, rest_of_body_after(node)) if leaves?(node.right)
+          super
+        end
+
+        private
+
+        # `nil` and `self` alike, which is what the parser's own
+        # `#open_surface_kind` already does. Reading only `nil` left the
+        # explicit spelling -- ordinary in application code -- reported.
+        def about_self?(node) = node.receiver.nil? || node.receiver.is_a?(Prism::SelfNode)
+
+        def within(node)
+          @bodies.push(node)
+          yield
+        ensure
+          @bodies.pop
+        end
+
+        # Every literal name a receiverless `respond_to?` inside
+        # `condition` tests. Inside rather than "is": `a && respond_to?(:x)`
+        # and `respond_to?(:x) && b` both make the consequent conditional
+        # on it.
+        def guarded_names(condition)
+          return [] unless condition
+
+          names = []
+          walk(condition) do |node|
+            next unless node.is_a?(Prism::CallNode) && node.name == :respond_to? && about_self?(node)
+
+            Array(node.arguments&.arguments).each do |argument|
+              names << argument.unescaped.to_s if argument.is_a?(Prism::SymbolNode) || argument.is_a?(Prism::StringNode)
+            end
+          end
+          names
+        end
+
+        def record(condition, consequent)
+          return unless consequent
+
+          names = guarded_names(condition)
+          return if names.empty?
+
+          names.each do |name|
+            @guards << Guard.new(name, consequent.location.start_line, consequent.location.end_line)
+          end
+        end
+
+        # Whether `node` transfers control rather than falling through, so
+        # that reaching the line after it means the condition was true.
+        # A `raise` is a call, not a node type, which is why it is named.
+        def leaves?(node)
+          return false unless node
+
+          statements = node.is_a?(Prism::StatementsNode) ? node.body : [node]
+          last = statements.last
+          return false unless last
+          return true if LEAVES.any? { |kind| last.is_a?(kind) }
+
+          last.is_a?(Prism::CallNode) && last.receiver.nil? && %i[raise throw fail exit abort].include?(last.name)
+        end
+
+        # From just after `node` to the end of the body it is written in.
+        # A struct with the two line numbers rather than a Prism node,
+        # because there is no node for "the rest of this body".
+        def rest_of_body_after(node)
+          body = @bodies.last
+          return nil unless body
+
+          last_line = body.location.end_line
+          return nil if node.location.end_line >= last_line
+
+          Range.new(node.location.end_line + 1, last_line).then do |lines|
+            Struct.new(:location).new(Struct.new(:start_line, :end_line).new(lines.first, lines.last))
+          end
+        end
+
+        def walk(root, &block)
+          block.call(root)
+          root.compact_child_nodes.each { |child| walk(child, &block) }
+        end
       end
 
       class DefinedIvarCollector < Prism::Visitor
@@ -687,6 +891,14 @@ module Ovallsp
         signature = declared_signature_for(receiver_type, candidate, context, binding_only: true)
         return nil unless signature
         return nil unless signature.overloads.size == 1
+        # **A stdlib library may be answered from and not judged against**
+        # (`024.321`). Loading all 61 took the parameters this check can
+        # judge from 368 to 1,699, and library signatures lag the runtime:
+        # `shellwords.rbs` types `escape` as taking a `String` where the
+        # implementation calls `to_s`, so `Shellwords.escape(pathname)` --
+        # correct Ruby -- was reported. Core and the project's own `sig/`
+        # keep judging; a library only answers.
+        return nil unless context.signatures&.declared_outside_stdlib?(signature.symbol_id.owner) == true
 
         overload = signature.overloads.first
         # A `*rest` parameter makes the positional list a prefix rather
@@ -751,6 +963,13 @@ module Ovallsp
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :constant
           next if context.workspace_index.resolve_type_name(candidate.name)
+          # A class or module is what `#resolve_type_name` answers about;
+          # a plain `A = [1].freeze` is indexed as a `:constant` and could
+          # never match it, so every reference to one was reported
+          # (`024.330`). Asked beside that route rather than folded into
+          # it: every other caller of `#resolve_type_name` wants a *type*,
+          # and a constant is not one.
+          next if constant_within_reach?(candidate, context)
           next if context.signatures && rbs_known_constant?(candidate.name, context.signatures)
 
           Finding.new(
@@ -759,6 +978,124 @@ module Ovallsp
             evidence: { name: candidate.name }, generation: context.generation
           )
         end
+      end
+
+      # Whether a `respond_to?` guard covers *this* call: the same name,
+      # a call on `self` (written or implicit -- a call with any other
+      # receiver is about a different object), and inside the body the
+      # guard was written in.
+      def guarded_here?(guards, candidate)
+        return false unless candidate.receiver.nil? || written_self?(candidate)
+
+        name = candidate.name.to_s
+        line = candidate.location[:start][:line] + 1
+        guards.any? { |guard| guard.name == name && line >= guard.first_line && line <= guard.last_line }
+      end
+
+      # **Ruby's constant lookup, to the depth this index can follow it.**
+      #
+      # `WorkspaceIndex#constant_declaration_owners` answers which owners
+      # declare a constant of this simple name; deciding from that list
+      # alone is what the first version of `024.330` did, and it was wrong
+      # in both directions -- a bare `LIMIT` accepted because an unrelated
+      # `Foreign::LIMIT` existed, and `Child::LIMIT` reported although
+      # `Parent` declares it. Ruby, 3.4.10:
+      #
+      #     $ ruby -e '
+      #     class Parent; LIMIT = 3; end
+      #     class Child < Parent; def go = LIMIT; end
+      #     class Consumer; def go = LIMIT; end
+      #     p [Child.new.go, Child::LIMIT]
+      #     begin; Consumer.new.go; rescue NameError => e; puts e.message; end
+      #     '
+      #     # => [3, 3]
+      #     #    uninitialized constant Consumer::LIMIT
+      #
+      # So the *reach* is computed: for a bare name, every lexical nesting
+      # frame and its ancestors, plus the top level; for a qualified one,
+      # the written namespace and its ancestors. A name outside that reach
+      # is reported, which is the whole point of the check.
+      #
+      # **An unbuildable chain declines**, the way `#ancestor_names` does:
+      # "no ancestor declares it" answered from a chain with an
+      # unidentified link is an assertion made from a question that could
+      # not be asked (`024.224`'s shape).
+      def constant_within_reach?(candidate, context)
+        written = candidate.name.to_s
+        simple = written.split("::").last.to_s
+        owners = context.workspace_index.constant_declaration_owners(simple)
+        return false if owners.empty?
+
+        reach = constant_reach(written, candidate, context)
+        return true if reach.nil? # the chain could not be built: decline
+
+        owners.any? { |owner| reach.include?(owner) }
+      end
+
+      # The owners a name written here can reach, or `nil` where that
+      # cannot be determined. `nil` inside the set is the top level, which
+      # is how `#visit_constant_write_node` records a constant written
+      # outside any class or module body.
+      def constant_reach(written, candidate, context)
+        namespace = written.sub(/::[^:]*\z/, "")
+        # **The namespace is resolved with the nesting too.** `Utils::X`
+        # written inside `module Rack` means `Rack::Utils`, and resolving
+        # `Utils` workspace-wide picks whichever of hashie's, i18n's and
+        # rack's the index happens to rank first -- then `X` is outside
+        # that one's reach and is reported. Measured on rack 3.2.7:
+        # `Utils::STATUS_WITH_NO_ENTITY_BODY`, `Utils::URI_PARSER` and
+        # `Parser::TEMPFILE_FACTORY` were all reported. Found by cold
+        # review; `024.15`'s ambiguity, in a new reader.
+        return owners_reachable_from([namespace], context, nesting: candidate.lexical_nesting) if namespace != written
+
+        frames = Array(candidate.lexical_nesting)
+        reach = owners_reachable_from(frames, context)
+        reach&.<<(nil)
+        reach
+      end
+
+      # Each frame, plus everything on its instance chain. `nil` from any
+      # one chain propagates: a single unidentified ancestor makes the
+      # whole answer "cannot tell" rather than a shorter list, because a
+      # shorter list is indistinguishable from a complete one downstream.
+      def owners_reachable_from(names, context, nesting: [])
+        reach = Set.new
+        names.each do |name|
+          canonical = context.workspace_index.resolve_type_symbol(name, nesting: Array(nesting))&.name ||
+                      Index::SymbolId.qualify_owner(name)
+          reach << canonical
+          entries = context.hierarchy_index.ancestors(canonical, singleton: false)
+          return nil unless entries.all? { |entry| chain_link_understood?(entry, context) }
+
+          entries.each { |entry| reach << Index::SymbolId.qualify_owner(entry.name_or_nil.to_s) }
+        end
+        reach
+      end
+
+      # **Identified is not the same as understood.** `class Pool < Impl`
+      # where `Impl = case ... end` gives an entry *named* `Impl` with
+      # nothing behind it -- the chain stops there, and reading it as
+      # complete reported `RubyImpl`'s constants as unresolved. Measured
+      # on concurrent-ruby, whose `ThreadPoolExecutorImplementation` is
+      # exactly this: `Concurrent::CachedThreadPool::DEFAULT_THREAD_IDLETIMEOUT`
+      # is `60` in ruby 3.4.10 and was reported. Found by cold review.
+      #
+      # A name is understood when something can say what is behind it:
+      # the workspace declares it as a type, or the signature environment
+      # declares it -- which is how `Object`, `Kernel` and `BasicObject`
+      # stay understood without the workspace owning them.
+      def chain_link_understood?(entry, context)
+        return false unless entry.identified?
+        return true if context.workspace_index.type_kind(entry.name_or_nil)
+
+        signatures = context.signatures
+        return false unless signatures
+
+        signatures.declares?(Index::SymbolId.qualify_owner(entry.name_or_nil)) != false
+      rescue StandardError
+        # A question that could not be asked is not an answer of "no": the
+        # same direction `#rbs_known_constant?` takes beside this.
+        true
       end
 
       # **`true` on failure, not `false`** (`024.122`). This decides
@@ -1107,7 +1444,12 @@ module Ovallsp
         # suppressed here.
         return true if context.hierarchy_index.gem_index.knows?(name)
 
-        context.signatures&.declares?(name) == true
+        # `#declared_outside_stdlib?`, not `#declares?`: `024.321` loaded
+        # 61 stdlib libraries so the engine could *answer* about them, and
+        # a library signature is not evidence a surface is complete enough
+        # to call a name absent. Driven: `include Open3` made `popen2e` a
+        # reported typo, because RBS 4.0.3 omits it.
+        context.signatures&.declared_outside_stdlib?(name) == true
       end
 
       # Every Ruby class inherits from BasicObject, so a chain that does

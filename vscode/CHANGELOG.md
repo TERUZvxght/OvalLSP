@@ -6,6 +6,69 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.3.4 — twenty-three defects, most of them found by review rather than by use
+
+No capability is added, and that fact decided this release's number: the
+branch was opened as `0.4.0`, and when everything it accumulated turned
+out to be fixes it was renamed to the patch its content is —
+`docs/PUBLISHING.md`'s rule, "nothing new is announced". `0.4.0` keeps
+its promised capabilities for a release that actually adds them.
+
+Sixteen of the twenty-three answer an outside critical review, committed
+with its reproduction scripts at `docs/reviews/2026-09-05-critical-review.md`
+together with a table saying what happened to each finding. Three are
+regressions this branch's own fixes introduced, caught by two further
+independent reviews. Four are from the sweep that opened the branch.
+
+- **A stale disk result can no longer be dated newer than the file it read** `024.345`
+- **A `respond_to?` guard covers the branch that runs when it holds, not the whole body** `024.335`
+- **A caller is re-checked when its callee's signature or your RBS changes** `024.344`
+- **A stale disk result no longer overwrites a newer one, or a deletion's clear** `024.342`
+- **Turning `ovallsp.enabled` on or off takes effect without a window reload** `024.343`
+- **A rename that would break an override is refused rather than applied** `024.341`
+- **A signature's go-to-definition works under a path containing `#`** `024.340`
+- **A slow first index no longer overwrites newer content read after it** `024.338`
+- **A keyword argument completes as a keyword, not as a positional** `024.339`
+- **Cache pruning no longer deletes through a symlink out of the cache** `024.337`
+- **The watcher applies the same workspace boundary the first index does** `024.336`
+- **A constant your workspace declares is no longer reported unresolved** `024.330`
+- **`respond_to?` reads `self.` too, and no longer exempts another object or another method** `024.335`
+- **A method can be renamed to `world!` or `world?`** `024.334`
+- **A `.rake` file edited outside the editor is noticed** `024.333`
+- **A `*rest` no longer waives a required argument when choosing an overload** `024.332`
+- **A macro this parser reads is no longer reported as a method that does not exist** `024.327`
+- **A call guarded by `respond_to?` is no longer reported** `024.328`
+- **A `self.included` hook that includes, `class_eval`s or extends is read** `024.329`
+- **The Define quick fix no longer writes a file that does not parse, over a class made by assignment** `024.323`
+- **A Ruby keyword is refused as a method's new name, before the rewrite breaks the call sites** `024.324`
+- **PRIVACY discloses that the Runtime Agent forwards the arguments you run observations with** `024.325`
+- **Rename asks what the new name already means at each site, in four places it did not** `024.326`
+
+### Details
+
+The review's sixteen and their dispositions are in
+`docs/reviews/2026-09-05-critical-review.md` — the reasoning and the
+measurements live with the register entries (`ruby scripts/issues.rb show
+024.N`) rather than being restated here. Three numbers worth carrying:
+
+- Corpus runs on real gems bracket the diagnostic changes at **0
+  introduced** reports across every A/B this branch ran, with the removed
+  side always verified against Ruby.
+- Analysis of a large file dropped from 8.5–26.6 s to 4.2–12.3 s
+  (`024.45`), which is still 14–37x the stated 300 ms target — measured,
+  not fixed, and the entry now carries the save-to-publish and
+  hover-during-analysis numbers its own condition asked for.
+- The rename refusals added for overrides were counted over real gems:
+  57 new refusals on thor and 67 on activesupport's core_ext, **none of
+  them a rename Ruby accepts**.
+
+One process fact belongs to the record: the follow-up review
+(`docs/reviews/2026-09-06-astra-followup.md`) judges fifteen of sixteen
+fixes "Partly met", consistently because each fix passes its own examples
+while the review's stated conditions asked for wider controls — and that
+follow-up itself stopped part-way, so its verdicts mix "narrower than
+asked" with "not finished checking".
+
 ## 0.3.3 — the record said one thing and the product did another
 
 Nothing you can notice changes in the extension itself. This release

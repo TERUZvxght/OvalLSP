@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**317 entries below** <!-- measured: register-entries = 317 -->,
+**342 entries below** <!-- measured: register-entries = 342 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -493,6 +493,31 @@ nobody can search is the recording habit without the benefit.
 | [`024.318`](#024318-a-workspace-directory-shaped-like-a-gem-path-would-be-attributed-to-a-gem) | open | 0.4.0 | A workspace directory shaped like a gem path would be attributed to … |
 | [`024.319`](#024319-a-bare-name-no-signature-declares-is-still-read-as-the-one-gem-class-sharing-its-last-segment) | open | 0.4.0 | A bare name no signature declares is still read as the one gem class… |
 | [`024.320`](#024320-no-check-knows-which-lock-guards-what) | open | 0.4.0 | No check knows which lock guards what |
+| [`024.321`](#024321-a-stdlib-class-can-be-answered-about-but-not-judged-against-the-half-0-4-0-left) | open | 0.4.0 | A stdlib class can be answered about but not judged against — the ha… |
+| [`024.322`](#024322-the-server-never-passes-bundle-context-so-gem-rbs-is-never-loaded-while-the-cache-fingerprint-hashes-the-lockfile-that-decides-it) | open | 0.4.0 | The server never passes bundle_context, so gem RBS is never loaded -… |
+| [`024.323`](024-deferred-review-findings-resolved.md#024323-the-define-quick-fix-writes-a-file-that-does-not-parse-on-a-class-made-by-assignment) | fixed | 0.4.0 | The Define quick fix writes a file that does not parse, on a class m… |
+| [`024.324`](024-deferred-review-findings-resolved.md#024324-rename-accepts-a-ruby-keyword-as-a-method-s-new-name-and-the-rewritten-call-sites-do-not-parse) | fixed | 0.4.0 | Rename accepts a Ruby keyword as a method's new name, and the rewrit… |
+| [`024.325`](024-deferred-review-findings-resolved.md#024325-privacy-does-not-disclose-that-the-agent-forwards-the-user-s-own-application-output-to-the-log-channel) | fixed | 0.4.0 | PRIVACY does not disclose that the Agent forwards the user's own app… |
+| [`024.326`](024-deferred-review-findings-resolved.md#024326-rename-changes-what-the-program-answers-in-four-ways-none-of-which-breaks-its-syntax) | fixed | 0.4.0 | Rename changes what the program answers in four ways, none of which … |
+| [`024.327`](024-deferred-review-findings-resolved.md#024327-a-generated-method-macro-the-parser-read-is-reported-as-an-unknown-method) | fixed | 0.4.0 | A generated-method macro the parser read is reported as an unknown m… |
+| [`024.328`](024-deferred-review-findings-resolved.md#024328-a-call-guarded-by-respond-to-is-still-reported-as-an-unknown-method) | fixed | 0.4.0 | A call guarded by respond_to? is still reported as an unknown method |
+| [`024.329`](024-deferred-review-findings-resolved.md#024329-a-self-included-hook-doing-anything-but-base-extend-const-is-read-as-nothing) | fixed | 0.4.0 | A self.included hook doing anything but base.extend(Const) is read a… |
+| [`024.330`](024-deferred-review-findings-resolved.md#024330-every-reference-to-a-workspace-constant-that-is-not-a-class-or-module-is-reported-unresolved) | fixed | 0.4.0 | Every reference to a workspace constant that is not a class or modul… |
+| [`024.331`](024-deferred-review-findings-resolved.md#024331-2026-09-05-review-r16-the-current-protocol-document-disagrees-with-its-implementation) | fixed | 0.4.0 | 2026-09-05 review R16: The current protocol document disagrees with … |
+| [`024.332`](024-deferred-review-findings-resolved.md#024332-2026-09-05-review-r14-rest-parameters-waive-required-arguments-during-overload-selection) | fixed | 0.4.0 | 2026-09-05 review R14: Rest parameters waive required arguments duri… |
+| [`024.333`](024-deferred-review-findings-resolved.md#024333-2026-09-05-review-r12-the-watcher-glob-omits-rake-files-that-cold-indexing-includes) | fixed | 0.4.0 | 2026-09-05 review R12: The watcher glob omits rake files that cold i… |
+| [`024.334`](024-deferred-review-findings-resolved.md#024334-2026-09-05-review-r08-method-rename-rejects-ordinary-bang-and-predicate-names) | fixed | 0.4.0 | 2026-09-05 review R08: Method rename rejects ordinary bang and predi… |
+| [`024.335`](024-deferred-review-findings-resolved.md#024335-2026-09-05-review-r07-respond-to-exemptions-leak-across-classes-and-miss-explicit-self) | fixed | 0.4.0 | 2026-09-05 review R07: respond_to? exemptions leak across classes an… |
+| [`024.336`](024-deferred-review-findings-resolved.md#024336-2026-09-05-review-r11-watcher-indexing-bypasses-the-cold-index-workspace-boundary) | fixed | 0.4.0 | 2026-09-05 review R11: Watcher indexing bypasses the cold-index work… |
+| [`024.337`](024-deferred-review-findings-resolved.md#024337-2026-09-05-review-r01-cache-generation-pruning-follows-an-intermediate-symlink-outside-its-root) | fixed | 0.4.0 | 2026-09-05 review R01: Cache generation pruning follows an intermedi… |
+| [`024.338`](024-deferred-review-findings-resolved.md#024338-2026-09-05-review-r04-cold-indexing-assigns-read-sequence-after-reading-stale-content) | fixed | 0.4.0 | 2026-09-05 review R04: Cold indexing assigns read_sequence after rea… |
+| [`024.339`](024-deferred-review-findings-resolved.md#024339-2026-09-05-review-r03-keyword-completion-inserts-a-positional-argument) | fixed | 0.4.0 | 2026-09-05 review R03: Keyword completion inserts a positional argum… |
+| [`024.340`](024-deferred-review-findings-resolved.md#024340-2026-09-05-review-r10-signature-locations-bypass-uri-escaping-and-posix-backslashes-are-rewritten) | fixed | 0.4.0 | 2026-09-05 review R10: Signature locations bypass URI escaping and P… |
+| [`024.341`](024-deferred-review-findings-resolved.md#024341-2026-09-05-review-r02-renaming-a-parent-method-breaks-an-overriding-method-that-calls-super) | fixed | 0.4.0 | 2026-09-05 review R02: Renaming a parent method breaks an overriding… |
+| [`024.342`](024-deferred-review-findings-resolved.md#024342-2026-09-05-review-r06-disk-diagnostics-can-overwrite-newer-results-and-a-deletion-clear) | fixed | 0.4.0 | 2026-09-05 review R06: Disk diagnostics can overwrite newer results … |
+| [`024.343`](024-deferred-review-findings-resolved.md#024343-2026-09-05-review-r13-the-enabled-setting-is-read-only-during-activation) | fixed | 0.4.0 | 2026-09-05 review R13: The enabled setting is read only during activ… |
+| [`024.344`](024-deferred-review-findings-resolved.md#024344-2026-09-05-review-r05-dependency-and-rbs-changes-do-not-republish-caller-diagnostics) | fixed | 0.4.0 | 2026-09-05 review R05: Dependency and RBS changes do not republish c… |
+| [`024.345`](024-deferred-review-findings-resolved.md#024345-a-disk-result-is-dated-after-its-content-is-read-so-a-reindex-in-the-gap-gives-stale-content-a-fresh-generation) | fixed | 0.4.0 | A disk result is dated after its content is read, so a reindex in th… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | 1.0.0 | Feature parity roadmap, measured against Pylance |
@@ -2159,6 +2184,80 @@ is what the profile predicted and less than the count suggested. RBS's
 own `DefinitionBuilder` was absorbing most of those 76,365 calls; what
 they cost was the call, not the build. Recorded because the inference
 "76,365 calls must be the cost" was wrong and the profile was right.
+
+### Re-measured in 0.4.0, and two memos took half of it
+
+**The numbers had got worse, not better.** One `analyze`, warm stack,
+three repeats, median, `mode: :safe` -- the same shape as 0.2.18's
+measurement above:
+
+| file | lines | 0.2.18 | 0.4.0 before | 0.4.0 after |
+|---|---|---|---|---|
+| `net/http.rb` | 2,608 | 3.53 s | 8.51 s | 3.96 s |
+| `uri/generic.rb` | 1,592 | 4.96 s | 26.61 s | 10.87 s |
+| `rubygems/specification.rb` | 2,594 | 5.41 s | 24.14 s | 12.02 s |
+
+The middle column is this tree at `bb1c450`, so the releases between
+0.2.18 and here made it two to five times slower and nothing was
+measuring it. That is its own finding and is the reason this section
+exists rather than a note in a commit message.
+
+**Two memos, each keyed to a generation and cleared by every mutation.**
+Sampled first rather than guessed at -- the profile below still held, and
+`workspace_index.rb`'s `to_s`/`each`/`split`/`lambda` were the top four:
+
+- `WorkspaceIndex#resolve_type_symbol_locked`, keyed by the written name.
+  `#ordered_symbol_ids` does a `select` and a `sort_by` whose key calls
+  `#to_s` three times per candidate, and one file resolves the same
+  handful of names over and over. 8.51 -> 5.20, 26.61 -> 14.99,
+  24.14 -> 15.96.
+- `HierarchyIndex#ancestors`, keyed by `[name, singleton]`. Each question
+  rebuilt the whole chain, its `AncestorEntry`s and the `dedupe_named`
+  pass over them. 5.20 -> 3.96, 14.99 -> 10.87, 15.96 -> 12.02. Its
+  `gem_index=` clears too: swapping the gem index changes chains without
+  bumping the generation.
+
+**Still 13-36x the stated 300 ms**, so this entry stays open. What the
+measurement establishes is that the cost is in *repeating* work rather
+than in any one answer, which is the direction the next attempt should
+take -- and that a profile, not a count, is what found it, for the third
+time in this entry.
+
+### The latency this entry's own condition asks for, measured
+
+The 2026-09-05 critical review's R15 asked for two numbers this entry had
+never produced: **the wall clock from a save to its diagnostics**, and
+**what a hover waits while that is in flight**. A follow-up review's
+verdict on R15 was "not met -- acceptance not demonstrated", and it was
+right: everything above measures `analyze` in isolation, which is the
+cost and not the latency.
+
+Driven through the real Server -- one open buffer, warmed, then one
+`didChange` plus the settle drain, and a `hover` issued on another thread
+while that runs:
+
+| file | lines | save -> publish | hover during it |
+|---|---|---|---|
+| `net/http.rb` | 2,608 | 4.22 s | 4.33 s |
+| `uri/generic.rb` | 1,592 | 11.25 s | 12.79 s |
+
+So the answer to "does the analysis block the editor" is **yes, for its
+whole duration**. `#with_index_snapshot` is `@index_mutation_mutex`
+held around the block, the dispatch loop wraps *every* request in it
+(hover, completion, definition, signature help, rename -- 19 sites), and
+`#publish_diagnostics` wraps the whole analysis in the same lock. A hover
+landing in that window queues behind it.
+
+**The first version of this measurement said 0.000 and was wrong**, which
+is worth recording because the mistake is easy: it called `#hover_result`
+directly, and the lock is taken by the *dispatch loop* one level above.
+Bypassing the lock measures the hover's own work, which is microseconds,
+and says nothing about the wait.
+
+`docs/design/docs/01-product-requirements.md` states `p95 <= 300ms` for
+single-file re-analysis. Save-to-publish is 14-37x that, and the hover
+wait is the same figure -- the two are one number, because the analysis
+is the only thing in the interval.
 
 ### Where the time actually is, for whoever takes this
 
@@ -5286,6 +5385,86 @@ mutex needs its guarded state written down and argued, which is what
 ---
 
 
+## 024.321 A stdlib class can be answered about but not judged against — the half 0.4.0 left
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/signatures/environment.rb
+
+- found by: core/lib/ovallsp/signatures/environment.rb:119 and :305
+- RBS::EnvironmentLoader.new is used with no add(library:), which loads Ruby's core signatures and no stdlib library. Driven: env.load(workspace_root: nil) then declares? is true for String/Integer/Array/Hash/Set/Time/File and false for JSON/Date/URI/Logger/CSV/Digest, with 0 ancestors for each. Costs answers rather than correctness -- a fixture requiring json and date produced no diagnostics at all in :safe mode, so the engine declines rather than reporting wrongly. What a user loses is hover, completion and go-to-definition on the stdlib beyond core.
+
+**Direction:** Add the stdlib libraries RBS ships to the loader, and decide the set deliberately rather than by listing what came to mind: RBS::Repository knows what is available, and loading everything costs startup time this project measures. The control that matters is that no *new* report appears -- the gap costs answers, not correctness, so the fix must not turn a silence into a wrong answer. Drive it with a corpus run before and after, with unknown-method as the control.
+
+---
+
+
+
+## Half of this shipped in 0.4.0, and the half that did not is a decision
+
+**Fixed:** the loader adds every stdlib library RBS ships — 61 of them,
+listed through `RBS::Repository#gems.keys` rather than a directory guess.
+`JSON`, `Date`, `URI`, `Logger`, `CSV` and `Digest` are names the engine
+knows, so hover, completion and go-to-definition answer about them.
+Measured on activesupport + i18n, 335 files: `unresolved-constant`
+916 → 741, `unknown-method` 19 → 11, **0 introduced across every
+category**, corpus-sha256 identical on both sides.
+
+**Open, and this is what the entry is now about:** the diagnostics do not
+use those signatures. A library signature is good enough to answer *from*
+and not good enough to judge *against*, and that is measured rather than
+cautious. Three silences became wrong reports the moment `declares?`
+alone decided, each driven:
+
+    include Singleton   `.instance` reported as a typo. RBS writes it
+                        `def self.instance` on the module and cannot
+                        express the `included` hook.
+    include Open3       `popen2e` reported. Ruby 3.4.10 has it; RBS
+                        4.0.3 omits it, with `pipeline*`.
+    Shellwords.escape   a `Pathname` argument reported wrong.
+                        `shellwords.rbs` says `(String str)`; the
+                        implementation calls `to_s`.
+
+And the libraries reopen core classes, which is a second shape: `json`
+puts `to_json` on `Object`, `pp` puts `pretty_inspect` there,
+`shellwords` puts `shellescape` on `String`, `bigdecimal` puts `to_d`
+there from its own gem `sig/`. Ruby has none of them unless the program
+required the library. Offered, they complete a label that raises when
+picked; asserted, they silenced three correct `unknown-method` reports on
+a plain fixture. So a member declared only outside core and the project's
+own `sig/` is dropped from a type core declares.
+
+**What is left is to make a library's signature judgeable when the
+project actually loads it.** The parser already sees every `require`, and
+the Runtime Agent already reports what the running application defines —
+either could say which libraries are real for this project, which is the
+fact both rules are standing in for. That is an experiment to design, not
+a hunk, so it moves rather than closing.
+
+## 024.322 The server never passes bundle_context, so gem RBS is never loaded -- while the cache fingerprint hashes the lockfile that decides it
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: core/lib/ovallsp/server.rb:1681 and :1704
+- Signatures::Environment#load takes bundle_context: for gem RBS directories, and add_gem_signatures returns immediately when it is nil. Both production call sites -- server.rb:1704 and :3853 -- pass only workspace_root:, so no gem RBS is ever loaded; the parameter is exercised by specs alone. Thirty lines above the first of them, the cache fingerprint deliberately includes rbs_collection.lock.yaml with a comment saying the lockfile decides which gem RBS get loaded. One file states that the lockfile matters and then loads nothing it names.
+
+**Direction:** Either pass a bundle_context the server actually builds -- resolving rbs_collection.lock.yaml to its gem signature directories, which add_gem_signatures already knows how to consume -- or remove the parameter and the lockfile from the cache fingerprint, so one file stops saying the lockfile decides something and then ignoring it. Decide which before writing either. The control is the same as the stdlib entry's: gem RBS arriving must not turn a silence into a wrong answer.
+
+---
+
+
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml
@@ -5350,7 +5529,7 @@ kind: roadmap
 target: 1.0.0
 ```
 
-roadmap. Its three 0.2.0 rows are done; the table below carries a **shipped in** column so the entry can be read as a record rather than only as a plan. Two of the three shipped outright; whole-project diagnostics shipped without a capability row, because the E2E example written for it did not pass (024.14) -- README marks that row ⚠️ and both changelogs say so.
+roadmap. Its three 0.2.0 rows are done; the table below carries a **shipped in** column so the entry can be read as a record rather than only as a plan. All three shipped outright. This sentence said whole-project diagnostics shipped *without* a capability row because its E2E example did not pass -- true of 0.2.0, retracted in 0.2.1 when `024.14` closed as "it does not reproduce, and did not need fixing". Row `G17` reads PASS with an example, and README marks the row ✅, not ⚠️. `024.14`'s correction reached five documents and not this one; caught in 0.4.0's opening.
 
 Pylance is the closest well-known reference point for "what a language
 server is expected to do" in a dynamically typed language with optional
@@ -5368,7 +5547,7 @@ still absent.
 
 | Pylance capability | OvalLSP before it | Planned for | Shipped in | Notes |
 |---|---|---|---|---|
-| Diagnostics across the whole project | Open files only | **0.2.0** | 0.2.0, no capability row (024.14) | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
+| Diagnostics across the whole project | Open files only | **0.2.0** | 0.2.0 (`G17`) | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
 | Docstrings in hover and completion | Type, origin and definition location only | **0.2.0** | 0.2.0 | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
 | Semantic highlighting (semantic tokens) | None | **0.2.0** | 0.2.0 | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
 | Inlay hints (inferred types, parameter names) | None | **0.3.0** | 0.3.0 | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |

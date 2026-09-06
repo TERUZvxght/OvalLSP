@@ -12,13 +12,24 @@ RSpec.describe Ovallsp::WorkspaceDiagnostics do
   let(:analyzed) { [] }
   let(:open_uris) { [] }
 
+  def published
+    @published ||= []
+  end
+
+  def build_with_publish(analyze:)
+    described_class.new(
+      logger: logger, open_in_buffer: ->(_) { false }, analyze: analyze,
+      publish: ->(_uri, _findings, document: nil, generation: nil) { published << [document.uri, generation] }
+    )
+  end
+
   def build(root, max_files: described_class::DEFAULT_MAX_FILES, analyze: nil)
     described_class.new(
-      analyze: analyze || ->(document) { analyzed << document.uri; [] },
+      analyze: analyze || ->(document) { analyzed << document.uri; [[], 1] },
       # The document is what the pass analysed, handed to the funnel
       # rather than discarded (037's C3) -- recorded here so an example
       # can assert the answer and the text it came from travel together.
-      publish: ->(uri, findings, document: nil) { published << [uri, findings, document] },
+      publish: ->(uri, findings, document: nil, generation: nil) { published << [uri, findings, document, generation] },
       open_in_buffer: ->(uri) { open_uris.include?(uri) },
       logger: logger, max_files: max_files
     )
@@ -52,7 +63,7 @@ end
       pass = build(root)
       pass.run([uri], pass.begin_pass)
 
-      document = published.first.last
+      document = published.first[2]
       expect(document.text).to eq("class OnlyThisText\nend\n")
       expect(document.uri).to eq(uri)
       # Nil, which is what makes the funnel read it as a disk answer that
@@ -95,7 +106,7 @@ end
       uris = write_files(root, 1)
       pass = build(root, analyze: lambda do |document|
         open_uris << document.uri
-        []
+        [[], 1]
       end)
 
       pass.run(uris, pass.begin_pass)
@@ -129,7 +140,7 @@ end
       pass = nil
       pass = build(root, analyze: lambda do |document|
         pass.begin_pass if document.uri == uris[1]
-        []
+        [[], 1]
       end)
 
       outcome = pass.run(uris, pass.begin_pass)
@@ -205,7 +216,7 @@ end
       pass = build(root, analyze: lambda do |document|
         raise "boom" if document.uri == uris[0]
 
-        []
+        [[], 1]
       end)
 
       outcome = pass.run(uris, pass.begin_pass)
@@ -242,11 +253,65 @@ end
       File.write(path, "<p><%= @user %></p>\n")
       uri = Ovallsp::UriUtil.from_path(path)
       language_ids = []
-      pass = build(root, analyze: ->(document) { language_ids << document.language_id; [] })
+      pass = build(root, analyze: ->(document) { language_ids << document.language_id; [[], 1] })
 
       pass.run([uri], pass.begin_pass)
 
       expect(language_ids).to eq(["erb"])
+    end
+  end
+
+  # **A result is dated after its content is read, so a reindex in the gap
+  # gives stale content a fresh generation.**
+  #
+  # `#publish_for` reads the file and *then* calls `@analyze`, which takes
+  # the index generation inside its own snapshot. So the number meant to
+  # date the result is taken after the thing it dates: anything that bumps
+  # the generation in between -- another file indexed, this one reindexed,
+  # this one deleted -- stamps a result computed from old text with a
+  # generation equal to or above the fresh result's, and every rule in the
+  # publish funnel then admits it (`<` refused, `<=` after a clear, equal
+  # accepted, because a later pass usually knows more).
+  #
+  # **This is `024.338` one layer up**: `ColdIndexer` took its
+  # `read_sequence` after reading for the same reason and was fixed in the
+  # same release. The remedy is the same -- take the number before the
+  # read -- and it was not applied here, because `024.342`'s examples all
+  # give the stale result an *older* generation, which is the assumption
+  # that fails.
+  #
+  # The window is between this background thread's `File.read` and its
+  # acquiring `@index_mutation_mutex`, which another analysis can hold for
+  # the seconds `024.45` records. Not a regression: it is wrong on
+  # `9c17dc2` too, and `024.342` did not reach it.
+  describe "the generation that dates a disk result" do
+    it "is taken before the content is read, not after" do
+      read_at = []
+      pass = described_class.new(
+        logger: logger, open_in_buffer: ->(_) { false },
+        generation: -> { read_at << :asked; read_at.length },
+        analyze: ->(_document) { [[], 99] },
+        publish: ->(_uri, _findings, document: nil, generation: nil) { published << [document.uri, generation] }
+      )
+      Dir.mktmpdir do |root|
+        uris = write_files(root, 1)
+        pass.run(uris, pass.begin_pass)
+      end
+
+      # 1, not 99: the pass dates by what it read before opening the file,
+      # and `@analyze`'s own number is the fallback for a caller that
+      # supplies none.
+      expect(published.map(&:last)).to eq([1])
+    end
+
+    it "falls back to the analysis's own generation when no getter is given" do
+      pass = build_with_publish(analyze: ->(_document) { [[], 7] })
+      Dir.mktmpdir do |root|
+        uris = write_files(root, 1)
+        pass.run(uris, pass.begin_pass)
+      end
+
+      expect(published.map(&:last)).to eq([7])
     end
   end
 end

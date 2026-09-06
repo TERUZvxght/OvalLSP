@@ -713,6 +713,43 @@ argument the cursor is in".
 argument. That is fixed; the signature is now spelled the way you wrote
 it.*
 
+## The stdlib is described, but only Ruby's core is judged against
+
+0.4.0 loaded every stdlib library RBS ships, so `JSON`, `Date`, `URI`,
+`Logger`, `CSV` and the rest are names the engine knows: hover,
+completion and go to definition answer about them where before they said
+nothing.
+
+**Diagnostics deliberately do not use them.** A library signature is good
+enough to answer *from* and not good enough to judge *against*, and that
+is measured rather than cautious: RBS cannot express an `included` hook,
+so `include Singleton` would have made `.instance` a reported typo; RBS
+4.0.3 omits `Open3.popen2e`, which Ruby has; and it types
+`Shellwords.escape` as taking a `String` where the implementation accepts
+anything with `to_s`. Each of those was driven, and each turned a silence
+into a wrong report before the rule was put in.
+
+So a mistake in a call on a stdlib class is not reported. That is the
+same trade this page describes elsewhere — a missed report rather than a
+wrong one.
+
+One thing to know if you read ancestor chains: every object now shows
+`PP::ObjectMixin`, because the `pp` library reopens `Object` to add it.
+Ruby agrees once anything requires `pp`, which Rails does. <!-- documents: 024.321 -->
+
+## Gem signatures are not loaded at all
+
+If your project uses `rbs collection` to pull in signatures for the gems
+you depend on, the engine does not read them. The machinery to load them
+exists and the server never asks it to.
+
+The same is true of the cache: the engine treats
+`rbs_collection.lock.yaml` as an input worth noticing when it changes,
+which is a promise about a file whose contents currently reach nothing.
+As above, the cost is answers rather than wrong ones — a gem whose
+signatures are missing is a receiver the engine declines to judge, not
+one it judges wrongly. <!-- documents: 024.322 -->
+
 ## Smaller things
 
 - A typo on a core-library receiver is not reported: `"hello".upcse` and

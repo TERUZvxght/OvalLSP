@@ -1,0 +1,215 @@
+{
+  "reviewed_head": "9c17dc2bbcd9860138f7557c7eeff428ff1cf4d6",
+  "full_core_run": {
+    "summary": {
+      "duration": 551.865063,
+      "example_count": 3293,
+      "failure_count": 9,
+      "pending_count": 4,
+      "errors_outside_of_examples_count": 0
+    },
+    "seed": 33989,
+    "failed_examples": [
+      {
+        "file": "./spec/meta/changelog_shape_spec.rb",
+        "line": 137,
+        "description": "the shape of a changelog entry reports nothing about the changelogs this repository ships"
+      },
+      {
+        "file": "./spec/meta/changelog_parity_spec.rb",
+        "line": 40,
+        "description": "changelog parity documents the version this build is for"
+      },
+      {
+        "file": "./spec/meta/home_path_guard_spec.rb",
+        "line": 104,
+        "description": "no real home directory path in tracked content would cry wolf if it were case-insensitive, which is why it is not"
+      },
+      {
+        "file": "./spec/meta/home_path_guard_spec.rb",
+        "line": 48,
+        "description": "no real home directory path in tracked content names no one's home directory anywhere in the tracked tree"
+      },
+      {
+        "file": "./spec/meta/deferred_findings_spec.rb",
+        "line": 876,
+        "description": "deferred findings metadata has no open entry naming a release that has already shipped"
+      },
+      {
+        "file": "./spec/meta/documented_counts_spec.rb",
+        "line": 75,
+        "description": "documented example counts states this suite's size correctly in docs/SUPPORT_MATRIX.md"
+      },
+      {
+        "file": "./spec/meta/documented_counts_spec.rb",
+        "line": 75,
+        "description": "documented example counts states this suite's size correctly in docs/RELEASE_CHECKLIST.md"
+      },
+      {
+        "file": "./spec/meta/documented_counts_spec.rb",
+        "line": 75,
+        "description": "documented example counts states this suite's size correctly in docs/SUPPORT_MATRIX.ja.md"
+      },
+      {
+        "file": "./spec/meta/measured_claims_spec.rb",
+        "line": 542,
+        "description": "numbers documented about this tree pointers into the deferred-findings register all resolve to an entry that exists"
+      }
+    ],
+    "pending_examples": [
+      {
+        "file": "./spec/ovallsp/diagnostics/bare_name_argument_type_spec.rb",
+        "line": 101,
+        "reason": "correct for the workspace it can see; needs Module.nesting respected for a bare name — 024.19"
+      },
+      {
+        "file": "./spec/ovallsp/diagnostics/shadowed_literal_spec.rb",
+        "line": 78,
+        "reason": "rooting the name breaks 11 examples in 7 files; the identity belongs beside it — 024.47"
+      },
+      {
+        "file": "./spec/ovallsp/diagnostics/reopened_foreign_class_spec.rb",
+        "line": 89,
+        "reason": "the only fix found silences real typos; see 024.13"
+      },
+      {
+        "file": "./spec/ovallsp/diagnostics/namespaced_argument_type_spec.rb",
+        "line": 114,
+        "reason": "Key is declared only in sig/, with no Ruby class of that name to qualify it — 024.224"
+      }
+    ]
+  },
+  "original_tree_meta_recheck": {
+    "example_count": 125,
+    "failures": 0,
+    "seed": 43886
+  },
+  "vscode_unit": {
+    "passing": 202,
+    "exit_code": 0
+  },
+  "source_manifest": {
+    "core/lib/ovallsp/agent_process_manager.rb": "4b4d719cfbfcdf2e4e6e3686bf667dd847a0c98594e141c7e20a7da584a6614e",
+    "core/lib/ovallsp/agent_supervisor.rb": "59ee227ea4acefa5562046bdae7401ba0ff972831fc82aefb8f8482300adb8b8",
+    "core/lib/ovallsp/analysis_stack.rb": "f4395e120d008d7e793f91a518716ad30c9dd6a561b90c21521de62b040a0788",
+    "core/lib/ovallsp/background_tasks.rb": "35f5d3e84d870bc0ef9d9b5034f4b6543301827de6cde7009fbb0c625f64587c",
+    "core/lib/ovallsp/benchmark/cold_index_benchmark.rb": "7a31c342b49267210a56a0e22fb4b36f3e5ef44629f92964be1091bb5592a34c",
+    "core/lib/ovallsp/build_manifest.rb": "54afc0996eed50a1ec667e5a2eb6bea91483d736a7ea9220fbc3331cc3da033c",
+    "core/lib/ovallsp/bundle_environment.rb": "31c6e13341f78cfcee3f25a9505f8d22be58f904770052a1fc7140a58fb5f7ab",
+    "core/lib/ovallsp/cache/key.rb": "9a040182347075e4ddfe873dba0f4d48474deeca484d67f6d0a726c6315fbd79",
+    "core/lib/ovallsp/cache/store.rb": "2c199c732711ee6a95ffdeb546a58aefa929a921b2aa79b48e0d934cf2ebcb8b",
+    "core/lib/ovallsp/child_process.rb": "6f2b5f4807efb456289a93166b79166cebd9d1d00a98cdfb5813cfbcfb0c6d81",
+    "core/lib/ovallsp/cold_indexer.rb": "ebf5bf66deefc4eef086722f5e94d22209bd2891324c0b6dfffcba7013ca4efe",
+    "core/lib/ovallsp/diagnostics/engine.rb": "d88ca7545a8ec3872cc2aa356fff6853b38a56a04bdc494d037d4523ec0d231d",
+    "core/lib/ovallsp/diagnostics/finding.rb": "5dcda336d759d325f8f684452a462d48100df308d6133e6700290e5e7ac14bc3",
+    "core/lib/ovallsp/diagnostics/mid_edit_call.rb": "e65294131d96999c4be3c068118d64f4c3b14fc7d1537bfdf4e1dd9a89115d51",
+    "core/lib/ovallsp/diagnostics/semantic_context.rb": "c36d77c57c3058348d8ff3120e39d8656377e5f3225122b0c18b5bfdf2908462",
+    "core/lib/ovallsp/document_from_disk.rb": "a24056475e10e15e63cd4acd851f2f8e29c6f58a2587f9c158722a1b4ddefea2",
+    "core/lib/ovallsp/document_store.rb": "1704a5931a7472f18914624304f4b8306901233d10487a65d2896b58ea9eea78",
+    "core/lib/ovallsp/documentation.rb": "59720de46cfae7e208d3601cbb8cf290be3470c048f9530d82e18fa292f465ac",
+    "core/lib/ovallsp/erb/ruby_region_extractor.rb": "61258962dd190467187fd7bb0d5b4c6d07fa1831491b3f25994d4e9df0f091d7",
+    "core/lib/ovallsp/index/alias_fact.rb": "df28ed31272de23eba3d407dd06f9552b14068a9de65c455e6a6a4a5bb6deef9",
+    "core/lib/ovallsp/index/ancestor_fact.rb": "358fb6538f06d30e253492a0a3860bf1499ec80f300bbb03d5d07deb77a9501f",
+    "core/lib/ovallsp/index/cref.rb": "0865d18cd8d7816847a837561e07cd7600437507127d44b8517b467e9cdd4ec8",
+    "core/lib/ovallsp/index/declaration.rb": "224671d8de1d9fbd6d8db7cb32a10085545307ee5bd43279a5b00f180b847cf6",
+    "core/lib/ovallsp/index/document_symbol_builder.rb": "fc074267b0ad54fb8f64eb761101e303b5347a1dd4bec678c0d4a621a953a52f",
+    "core/lib/ovallsp/index/file_summary.rb": "de1ff878ec48fb05efb36946088fe39d55ea45af2e2b399cf507a22873c68b8a",
+    "core/lib/ovallsp/index/generated_method_fact.rb": "9111b7620dc89dcf61af6bca884721beadfa62f8219968e308ea767e30c942aa",
+    "core/lib/ovallsp/index/parameter.rb": "86733787d88b429b9c9bfd2832a145b74db74f41b613fd5a632c6330bc45d848",
+    "core/lib/ovallsp/index/reference.rb": "2195ca4331fc8bc2e8793d41bd553d752ad521889bbc04f09ae163fe547765b6",
+    "core/lib/ovallsp/index/reference_candidate.rb": "d09f819b4d71f9c40eda666e8551c50ddedaa68b94d1d96e4c19c09ecea9889a",
+    "core/lib/ovallsp/index/source_location.rb": "18a3a9ea9c1266bc6e45f84b412867b1a44707cb766db463b4e7be4ed8453e04",
+    "core/lib/ovallsp/index/symbol_id.rb": "39bde6647a972d410d447dfc299bbab5f95734e0982e7cbf1f1e580d993a2944",
+    "core/lib/ovallsp/index/type_name_resolution.rb": "edab94ad543544e0f189822a7697ebe221c94035c1d617ad2928b1d44dad2f7b",
+    "core/lib/ovallsp/io/framed_reader.rb": "ea2cd85ef8c2735c7b60043a6cf5649f1a21deb447ed2cd63b6a9c64793d20e2",
+    "core/lib/ovallsp/io/framed_writer.rb": "05a05b565cba4e094eb6b6c53df8ac67baaea9b486da8baadd5145dae0d9f5e3",
+    "core/lib/ovallsp/local_inferencer.rb": "98dba44a5258c567a3a1f170ba8e684028d43d7cce51e6148ace77f618edff50",
+    "core/lib/ovallsp/logger.rb": "96ca6a3752878daa16d1b088dab3eab42115077c18f5e62476866678b5cd296c",
+    "core/lib/ovallsp/models/model_registry.rb": "b0010037dcd5eaf22ae4ea3eb35dfdf9e55b48a1c06672f05aad3d4115dcf61c",
+    "core/lib/ovallsp/observation/call_stack_machine.rb": "54ec035dba2ccf9b2832d12f8d0683f1a911b823c89f7364032930560f00f76a",
+    "core/lib/ovallsp/observation/collector.rb": "f6e68daa82a5cbd0427a2908e25a97037be9a69e8ed5403b4e91e0b138bb6e3a",
+    "core/lib/ovallsp/observation/fingerprint.rb": "e8b12edac3fbb3e89700a627864cef0e337033b5eed2407ae8aaacb4b908d74d",
+    "core/lib/ovallsp/observation/harness.rb": "1d5ba29f932f2321e2bb9406337a1501eab9291fc4bac61473b01e91dd1c295c",
+    "core/lib/ovallsp/observation/observed_signature.rb": "015f0181575a21ebe86eb4bcd4d44dfd75d044e0b86be73bde76d8241afb1fc4",
+    "core/lib/ovallsp/observation/runner.rb": "59ed48ac2f236b1c895ee4f1e343d3de9adaacddf9cafe75ead9e49c472ee20f",
+    "core/lib/ovallsp/observation/store.rb": "d11b92e1e73bf76a339f8b77746b1d81ade4f0887700ad204b7fe1b5b86ca9e7",
+    "core/lib/ovallsp/observation/type_normalizer.rb": "9c21aa785021d1a26152db96047a940daa1b050eea811930e798f5fb1cb80a61",
+    "core/lib/ovallsp/observation/wire.rb": "7bc1b895ca998911abab4580399a1169a161d567d983c9c1eb07b43f52cae2e4",
+    "core/lib/ovallsp/parser_service.rb": "a9a5fcc25370537be5b0c1b386b2a8d2748047573d32c5d2c6d8ac0fc99c444a",
+    "core/lib/ovallsp/protocol_version.rb": "422583b84459c008bdd06c7696cc6e7094a2c89adea7bdebff53b02bc1998cb0",
+    "core/lib/ovallsp/rails_bootstrap.rb": "b1d3696f28b9fb7238aa6629c38ca75bab9504d2f1f7c4c9f1c5bff17f97b896",
+    "core/lib/ovallsp/redactor.rb": "165906131c7e3ac489a725bca98be45c0a0b6d53baafad4b6018c8feb1c7ac49",
+    "core/lib/ovallsp/rename/plan.rb": "3c12876612db55a304dc6b1c0406dd65675d85a47393e3c0e20cb8ab076acbcb",
+    "core/lib/ovallsp/rename/planner.rb": "953883e46cd9bd5e6c965debcdad9a98335a479ac9c024b08a93b885c4301c95",
+    "core/lib/ovallsp/routes/controller_naming.rb": "60762862563fe330bec563920ce30e5b823d07e35e4085d37569693b24097767",
+    "core/lib/ovallsp/routes/route_registry.rb": "b5c8761b951329c24cea25d5350fb57ab9a04f764b226322162e2be8ccbfbff0",
+    "core/lib/ovallsp/runtime/ancestry_registry.rb": "29e7af48e6191d201b7d707939e4c55fdd9f412a4e10a9b8b2996d08f748aa56",
+    "core/lib/ovallsp/runtime_agent/agent.rb": "51e0e6427f06b57830bfe8cc0feb0cc3082ca8747a68336f987222484ac4d7b3",
+    "core/lib/ovallsp/runtime_agent/boot.rb": "49984fb9f3dbb0540934a9b9874adc3e40096a35efd39f554c3eb4c393fac942",
+    "core/lib/ovallsp/semantic/gem_index.rb": "f6c414ad84336dbcf6f3bc970384abc357a7d8e137c6e385572a22e9326b02a4",
+    "core/lib/ovallsp/semantic/generated_method_index.rb": "139734527ff2e61a573b076ba93a0191a729dd34006d8d0b21b9312c4deac5e6",
+    "core/lib/ovallsp/semantic/generic_rule_registry.rb": "95edb0210f4e12448be5bea8793bd70fa905a8fd3c55dad1d938930743e7b470",
+    "core/lib/ovallsp/semantic/hierarchy_index.rb": "1f8ca1b5d5817c9dfd610c3ecea7a8813f979d283ccb5c2e47a3143228a6759c",
+    "core/lib/ovallsp/semantic/member_availability.rb": "8749d9a8ea83e8f923a57f448eb5d8d79f39e420aad1907014118180605a84c5",
+    "core/lib/ovallsp/semantic/method_analyzer.rb": "7d8a538e6d6c122250801bb34f1d38c4ea0e0c9cf71e68f62c21dac175efe31f",
+    "core/lib/ovallsp/semantic/method_resolver.rb": "d75b0af8ee04d15797186483eb0ba7029dbe4e4ed331f9497ad2ee960cfcd0c9",
+    "core/lib/ovallsp/semantic/method_summary_store.rb": "d93c13a961bc974d47475ba9fe127eb267fdfac3e29a5ac9220dc6374a428d65",
+    "core/lib/ovallsp/semantic/prefix_completion.rb": "e7a1e6d25d4b518fbd6977f5f2c929f0d762864444029f1660d19f95fb1024f3",
+    "core/lib/ovallsp/semantic/query_context.rb": "e53a5ea082b912d205946a4b91b393b38ff19176e18ca870ed07dcc1d535f7e8",
+    "core/lib/ovallsp/semantic/query_service.rb": "edcbd8da39c7aeba3b2b91b858c30ca2ebaa83d6e6eb9dcf0396efbcba1a9622",
+    "core/lib/ovallsp/semantic/receiver_resolution.rb": "e488e56ede5d6967da140c90b08900b14481131c07067ca5062a11b7cfe97376",
+    "core/lib/ovallsp/semantic/reference_index.rb": "a4db8782344089dbfbaf742f2498cafb6b093160c88debac290e61a58b43a13b",
+    "core/lib/ovallsp/semantic/reference_resolver.rb": "ed8e34128bcb32cf70a9fd1baa5e3607637be9088a2127eabe9fb5cc4ac771cd",
+    "core/lib/ovallsp/semantic_tokens.rb": "cb802b605ba3a8e4bc074679f140c5ec0a02ebf1fcc36254ce69bc5ffdf94764",
+    "core/lib/ovallsp/server.rb": "c41ca60d383479e87467e610f151edb1609a08ea4eb444a3c583c25181f7cb7e",
+    "core/lib/ovallsp/signatures/environment.rb": "0e981517ab2cb08bf30eacd58b1eb3456bf0504381d12a97ee2cd70d866530d4",
+    "core/lib/ovallsp/signatures/overload_resolver.rb": "f546412d9449a2d6fc3a9bf67045535f2cfd421abcd3ffe157f90518a8afe5f5",
+    "core/lib/ovallsp/signatures/rbi_parser.rb": "7cdfd469a54a5b55d6f3ae250604b6fa464565367bc1ec3aab8fa784acaa4084",
+    "core/lib/ovallsp/signatures/signature_method.rb": "a38d40104a55e1e471379b94758eb7231077f16ef1a6c620584bc90ffc782752",
+    "core/lib/ovallsp/signatures/type_converter.rb": "548f07a6be2bc8fede2b8b58697fb1f574c926eeb773770d0a97bfb5fceb161b",
+    "core/lib/ovallsp/text_document.rb": "da682ec6e29a127b351b33653ef449cc83d2d8c0019b1d9aef3305735410083f",
+    "core/lib/ovallsp/types/literal_types.rb": "15938deb06a682ac87bdd5ce3b9f3a62a3233cddf272705294b3c3eb2b6a855b",
+    "core/lib/ovallsp/types.rb": "e118db3037145d23355f17fc21f3acc804be0ce8b08a541eb8787b114c9f7aa1",
+    "core/lib/ovallsp/uri_util.rb": "bd453d33ff20ac31db0ce4db16336e48c3aab4d0f7b5678d26d2a20ff10cdf3e",
+    "core/lib/ovallsp/vendor_bootstrap.rb": "61ce37bfbcf96a0f18a5f2cb45915c66978f66e8094200d9152f162b82c5e2cc",
+    "core/lib/ovallsp/vendor_compatibility.rb": "7461943983c7239ae43d37dea8e62b14327ad828a71f4399396a597de31e75ed",
+    "core/lib/ovallsp/version.rb": "938bfb52549d93617dccbcbc247f5c134017ba95df356280601b46de5d3e3e26",
+    "core/lib/ovallsp/views/controller_ivars.rb": "df15cd620d29f7ee50792975376660953498a4511f243eec4167367abc11c08f",
+    "core/lib/ovallsp/workspace_diagnostics.rb": "aee3655fa7267aaace01fc2b53befb8456f8e3b0f055b5f73f06ba63051cba28",
+    "core/lib/ovallsp/workspace_index.rb": "2bb2ae27015825b7c5a1e42c5e4b4a6a43db5b321763f416c92e83c5eca5ff58",
+    "core/lib/ovallsp.rb": "7e63762ea446b0be302f5ebc2d37c5c8d68ee3d2ee616a3342c684334bfd7a72",
+    "vscode/src/clientErrorNotifications.ts": "57e615bd424f17ebd68210e3b0f57a481f50da682a8b0dbd686c95e7ea627f6a",
+    "vscode/src/clientLifecycle.ts": "33bbc4c54c83aa922d9624ac64b3337352860e6e835e4b22576c1c49705ee066",
+    "vscode/src/clientPresentation.ts": "67c9714f8ec2eb02e914e310223e30cb302e0429726b61b02f1a137f0cd381a9",
+    "vscode/src/clientTeardown.ts": "95a229d51c2f3ee8749245c954ccc9ccc461363ccae43be7fea4643168ae8182",
+    "vscode/src/coreProcess.ts": "64edaba3fb7427f25f86bd5002b97c957d6a91325a0b931760469f9a3c6a0316",
+    "vscode/src/extension.ts": "c214c1d7b6a932b44941becffe5e3570329e8a39f3d3a88f57ca7cbb5f1e2f1c",
+    "vscode/src/platformCompatibility.ts": "fa90ee10ff7feb0a6892cbbf1819cf61ff66225d42e5b0f740896cc730f21de5",
+    "vscode/src/rubyResolver.ts": "3a252c1090f070366ee71e889f33cf21b3e7a6a8612674db675c817b790654c6",
+    "vscode/src/serverConfig.ts": "a667290e157aa839ed27e6da2eebab7b777eb616a7ae1fbe6b8b9c0c4c6a45c4",
+    "vscode/src/startupGate.ts": "8ba18c068ef6855eb3de9b60ea3d8bca066b8ac8462b52f0ec7fd8ba05e6df5d",
+    "vscode/src/test/integration/erb.spec.ts": "9301b89fb909b9e5d82673c4c939baaceae73dc4b6a621350952d87ae7bc9371",
+    "vscode/src/test/integration/handshake.spec.ts": "2e95ae4efd847df13fd6b8dd08a2ba28a09033f448637fe3dda22a88142a4081",
+    "vscode/src/test/integration/hover.spec.ts": "4922495226292cf9adf641e24e888af102b8982c6fb707d8e99be8b093a375a3",
+    "vscode/src/test/integration/index.ts": "85dcf7f72075de601e11e6d20b07733492adbd71c75530fa840072ef3adece86",
+    "vscode/src/test/integration/runTest.ts": "d417bed634c077fe0ec93c7f84826f473cc094837803f57a6246d12e2baccc1d",
+    "vscode/src/test/integration/watcher.spec.ts": "514854b7ca43490ee3980e39d166583627250f6b27fc3115cb500a41cdf5706f",
+    "vscode/src/test/support/executableFixture.ts": "c405f49f1a24ebf94521c4c60acaf6573de8bfd39ac9243573d3404a6e7f7edf",
+    "vscode/src/test/unit/clientErrorNotifications.test.ts": "6afb95f8f42960d64843211da6d853570491c22a8b4288b3e6f3c202b6aa5856",
+    "vscode/src/test/unit/clientLifecycle.test.ts": "7cba5010803920b71bfde3167a9369afe27ce3c3992b1956e63dd5e39093ca8f",
+    "vscode/src/test/unit/clientPresentation.test.ts": "fdb1628dacf98c0e52ef8f1f45be9f58c10729fca4634981f8da5771d37a5c66",
+    "vscode/src/test/unit/clientTeardown.test.ts": "4ad90cbcd4af41d6eff6b434223d3ba38dfd47d46dad8076fbfa0a5239b4eac3",
+    "vscode/src/test/unit/coreProcess.test.ts": "e73d8dbef507f41cef62d1bab6e3174ccb4ac5b1183c86781080ac28ec003e89",
+    "vscode/src/test/unit/coreSelection.test.ts": "003f1fc3185226c3a9151991e1ab14da77c307c329460df2f29b77718bd7808a",
+    "vscode/src/test/unit/platformCompatibility.test.ts": "f2a77b3e8fc0290cd31994d2f5505886159e97ba8981a72bb0f238298d808f93",
+    "vscode/src/test/unit/rubyResolver.test.ts": "9d9c56bbd6c5fd81a5e163e646c50347354d667aff53a5c40909efcb2bdb3888",
+    "vscode/src/test/unit/serverConfig.test.ts": "2a7bc7f580d3b843255d3833a72a3beb49c91edd965e68e4dd5deedc7d7bc7e2",
+    "vscode/src/test/unit/startupGate.test.ts": "0e19e53c873c09080135270b9cab8f7a311b9419231dd5944bb21bfa6f1aea3e",
+    "vscode/src/test/unit/versionInfo.test.ts": "ba702066685c22c86f89183253a85805a3848531bacfa18b68c6d74d6111e2b2",
+    "vscode/src/test/unit/versionPairing.test.ts": "e5ebedb518ba8b9f844d7572a513b7c1d6d4fea2e9b63c88aa173ffc967bf01c",
+    "vscode/src/test/unit/workspaceTrust.test.ts": "98af5bce4c13a753c30df1b42bc2b8a64c15a7bb59fc89b4bf3f0bd4d87edde1",
+    "vscode/src/versionInfo.ts": "6918813527ee1298c5a8489aefa09a1454dfdc7356a0bf602525bd933ad2d776",
+    "vscode/src/watchedFiles.ts": "ee077147ed1deea4fa95d9b7fe2cb68656f6d4ce05e7f02e5185ddf617cb7a19"
+  },
+  "review_start_patch_sha256": "3eab1297fd82717a04dc35a9cc88cb3987427910de5fe268d13972fa369ab487"
+}

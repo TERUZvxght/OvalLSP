@@ -28,9 +28,18 @@ RSpec.describe "a project signature whose ancestry cannot be built" do
     end
   RBS
 
-  # The only difference. `_ToJson` is declared in `stdlib/json/0/json.rbs`,
-  # which the loader never adds.
-  UNBUILDABLE_UNRESOLVABLE_RBS = UNBUILDABLE_RESOLVABLE_RBS.sub("  class Key\n", "  class Key\n    include _ToJson\n")
+  # The only difference: an interface the signature *names* and nothing
+  # *declares*, which is what makes the chain unbuildable.
+  #
+  # **This was `_OvallspNothingDeclaresThis` until `024.321`.** That name was chosen because
+  # `stdlib/json/0/json.rbs` declares it and the loader never added the
+  # library -- so it was absent in practice while being a real name. When
+  # 0.4.0 loaded all 61 stdlib libraries the name became declared, every
+  # fixture here built, and nine examples in this file passed while
+  # asserting nothing. A fixture that depends on a library *not* being
+  # loaded is a fixture with a second subject; this one names something
+  # nothing ships, so it cannot be neutralised by loading more.
+  UNBUILDABLE_UNRESOLVABLE_RBS = UNBUILDABLE_RESOLVABLE_RBS.sub("  class Key\n", "  class Key\n    include _OvallspNothingDeclaresThis\n")
 
   def environment_for(rbs)
     Dir.mktmpdir("unbuildable-ancestry-") do |root|
@@ -44,7 +53,17 @@ RSpec.describe "a project signature whose ancestry cannot be built" do
 
   it "builds the chain when every include resolves" do
     environment_for(UNBUILDABLE_RESOLVABLE_RBS) do |environment|
-      expect(environment.ancestors("::App::Key")).to eq(%w[App::Key Object Kernel BasicObject])
+      # `PP::ObjectMixin` sits between `Object` and `Kernel` because
+      # `024.321` loads the `pp` library, which reopens `Object` to
+      # include it. Ruby agrees once `pp` is required -- `ruby -e 'p
+      # Object.ancestors'` is `[Object, Kernel, BasicObject]` and
+      # `ruby -e 'require "pp"; p Object.ancestors'` inserts it -- and
+      # Rails requires `pp`, so for the application this targets the
+      # longer chain is the true one. It is the only core chain the
+      # stdlib load moves: measured across Object, String, Integer,
+      # Array, Hash, Symbol, Float and Range, this module is the whole
+      # difference.
+      expect(environment.ancestors("::App::Key")).to eq(%w[App::Key Object PP::ObjectMixin Kernel BasicObject])
     end
   end
 
@@ -292,7 +311,7 @@ RSpec.describe "a project signature whose ancestry cannot be built" do
       RBS
 
       SUBSTITUTION_UNRESOLVABLE_RBS =
-        SUBSTITUTION_RESOLVABLE_RBS.sub("class Widget\n") { "class Widget\n  include _ToJson\n" }
+        SUBSTITUTION_RESOLVABLE_RBS.sub("class Widget\n") { "class Widget\n  include _OvallspNothingDeclaresThis\n" }
 
       SUBSTITUTION_SOURCE = <<~SRC
         module Zoo
@@ -388,7 +407,7 @@ RSpec.describe "a project signature whose ancestry cannot be built" do
       RBS
 
       FOREIGN_ANCESTOR_UNRESOLVABLE_RBS =
-        FOREIGN_ANCESTOR_RESOLVABLE_RBS.sub("  class Thing\n") { "  class Thing\n    include _ToJson\n" }
+        FOREIGN_ANCESTOR_RESOLVABLE_RBS.sub("  class Thing\n") { "  class Thing\n    include _OvallspNothingDeclaresThis\n" }
 
       # `Receiver`'s own static chain is complete and reaches
       # `BasicObject`, so nothing about *it* is in doubt. Only the

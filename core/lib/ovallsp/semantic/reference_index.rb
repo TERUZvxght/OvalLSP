@@ -65,7 +65,25 @@ module Ovallsp
         end
       end
 
+      # **Every reference in one file, whatever its scope.**
+      #
+      # A local's `symbol_id.owner` is `"<uri>\0<owner>#<scope_id>"`, so
+      # asking `#references` about a name can only ever see the one scope
+      # frame it was asked under. Rename needs the other question --
+      # *does this name already mean something anywhere in this file* --
+      # because a `do |x|` in a nested block captures a local renamed
+      # onto `x` and the file still parses (`024.326`).
+      #
+      # Confidence is filtered the same way `#references` filters it, so
+      # the two readers cannot disagree about what counts as a reference.
+      def references_in(uri, minimum_confidence: :high)
+        @mutex.synchronize do
+          @by_uri.fetch(uri, []).select { |r| meets?(r.confidence, minimum_confidence) }
+        end
+      end
+
       private
+
 
       def meets?(confidence, minimum)
         minimum == :low || confidence == :high

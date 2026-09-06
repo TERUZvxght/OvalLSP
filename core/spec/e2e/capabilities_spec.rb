@@ -441,6 +441,40 @@ end
       end
     end
 
+    # **A keyword parameter's completion inserted a positional argument.**
+    # `#source_parameter_names` returned names and dropped
+    # `Parameter#kind`, so `def take(required:)` completed as
+    # `take(${1:required})` -- the tab stop is there, the author types a
+    # value into it, and the call does not bind. Ruby:
+    #
+    #   $ ruby -e '
+    #   class K; def take(required:) = required; end
+    #   begin; K.new.take(1); rescue ArgumentError => e; puts e.message; end
+    #   p K.new.take(required: 1)
+    #   '
+    #   # => wrong number of arguments (given 1, expected 0; required keyword: required)
+    #   #    1
+    #   # ruby 3.4.10
+    #
+    # Found by the 2026-09-05 critical review, R03.
+    it "C8b: inserts a keyword argument as a keyword, not a positional" do
+      with_file("app/models/keyword_probe.rb", <<~RUBY) do |uri|
+        class KeywordProbe
+          def takes_keywords(first, second:, third: 3); end
+
+          def run
+            value = KeywordProbe.new
+            value.
+          end
+        end
+      RUBY
+        item = @client.completion_item(uri, 5, 10, "takes_keywords")
+
+        expect(item[:insertTextFormat]).to eq(2)
+        expect(item[:insertText]).to eq("takes_keywords(${1:first}, second: ${2:second}, third: ${3:third})")
+      end
+    end
+
     it "C9: inserts a no-argument method without parentheses" do
       with_file("app/models/no_arg_probe.rb", <<~RUBY) do |uri|
         class NoArgProbe

@@ -1,0 +1,14 @@
+{
+  "positional": {
+    "missing_required_matches": true,
+    "selected_return": "Integer | String"
+  },
+  "keywords": {
+    "missing_required_matches": true,
+    "selected_return": "Integer | String"
+  },
+  "control": {
+    "zero_arity_matches": true,
+    "required_without_rest_matches": false
+  }
+}

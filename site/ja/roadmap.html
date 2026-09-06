@@ -198,6 +198,40 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v034">
+          <div class="tl-version">
+            <span class="v">0.3.4</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>23件の修正。大半は利用ではなくレビューが見つけたもの</h3>
+          <ul class="feature-list">
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>外部の批判的レビューがエンジンに対して実行され</strong>、その指摘16件を修正しました &mdash; レビュー本文・再現スクリプト・各指摘の顛末はリポジトリに収めてあります。</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>誤った報告が止まります:</strong> <code>respond_to?</code> で守った呼び出し、<code>self.included</code> フックの mixin、パーサ自身が読んだマクロ、ワークスペースが宣言した定数は報告されなくなりました。</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>編集が安全になります:</strong> override を壊すリネームは拒否され、<code>world!</code> / <code>world?</code> がメソッド名として通り、キーワード引数はキーワードとして補完されます。</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>古い答えが新しい答えを上書きしなくなりました</strong> &mdash; 初回索引でも、バックグラウンドの診断でも、開いているファイルの下で RBS や呼び出し先が変わったときも。</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>能力の追加はありません。</strong> このブランチは 0.4.0 として開かれ、中身がすべて修正だと確定した時点で改名されました。下の 0.4.0 の約束は変わっていません。</span>
+                    </li>
+          </ul>
+          <p class="text-mute">
+            完全な記録は
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>にあります。
+          </p>
+        </article>
+
         <article class="tl-item" id="v033">
           <div class="tl-version">
             <span class="v">0.3.3</span>

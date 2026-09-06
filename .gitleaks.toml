@@ -12,3 +12,20 @@ description = "Known test fixtures for Ovallsp::Redactor's own tests -- syntheti
 paths = [
   '''core/spec/(ovallsp|rslsp)/redactor_spec\.rb'''
 ]
+
+# **A source manifest's digests are not credentials.** The 2026-09-05
+# critical review commits `verification.json`, whose `source_manifest`
+# maps every file it reviewed to that file's SHA-256 -- provenance, in a
+# review that refuses to claim it read what it cannot prove it read. Two
+# of those ~90 digests trip the generic-api-key rule because the
+# *filenames beside them* contain "key" and "tokens" (`cache/key.rb`,
+# `semantic_tokens.rb`). A regex for exactly that shape -- a `.rb` path
+# as a JSON key whose value is exactly 64 lowercase hex characters --
+# rather than a path exemption, so a real secret landing in the same
+# file is still caught. Both flagged values confirmed by hand on
+# 2026-09-06 to be the digests of the named files at the reviewed
+# revision.
+regexTarget = "line"
+regexes = [
+  '''"[A-Za-z0-9_/.-]+\.rb": "[0-9a-f]{64}"''',
+]

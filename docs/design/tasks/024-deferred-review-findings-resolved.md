@@ -17161,6 +17161,490 @@ for closing the rest.
 
 **Fixed in 0.3.2.** Three of the six closed, and the three that remain are named rather than left as a count. The extension id is compared against `vscode/package.json`, which is the only place it is true; SECURITY gets the parity check PRIVACY has had, on structure and the reporting route rather than on prose; and the Ruby patch releases named as tested must agree across both support matrices and both Marketplace READMEs -- a set the matrices had three of and the READMEs two for a whole release. What is left is two rows that ask for a judgement no scanner can make (whether a revert left documentation behind, whether a review round found the same place twice) and one that could be mechanised in the rescue-verdicts shape but is a release of its own: every `Mutex.new` in `core/lib` accounted for in the architecture document. `024.320` carries that.
 
+## 024.323 The Define quick fix writes a file that does not parse, on a class made by assignment
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: core/lib/ovallsp/server.rb#insertion_for
+- insertion_for aims at range.end.character - 3, which is where a one-line class keeps its end. A class made by assignment has none: the last three characters of 'Widget = Class.new(Base)' are 'se)', so one click produced 'Widget = Class.new(Badef missing_thing / end / se)' -- source the user did not write and Ruby cannot parse. The edit lands in the declaring file, which need not be the file the diagnostic was reported on. Driven on three shapes: with a parent, with none, and across lines. 024.82 is why this is indexed as a class at all, so the diagnostic is right and only the fix was wrong. Fixed by declining: a keyword class's location starts at 'class', strictly before its name; an assignment's starts at the name itself, and class_declarations now carries name_range so the two can be told apart.
+
+**Direction:** Fixed in 0.4.0 by declining. What is left is the general shape: every quick fix computes an insertion point from a declaration's range, and a declaration that is not a keyword body has no interior position to name. Struct.new and Data.define are the same shape and are silent today only because opening their member surface stops the diagnostic being reported at all -- so the guard is load-bearing for them the moment that changes.
+
+---
+
+
+## 024.324 Rename accepts a Ruby keyword as a method's new name, and the rewritten call sites do not parse
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/rename/planner.rb
+
+- found by: core/lib/ovallsp/rename/planner.rb#valid_identifier?
+- reserved_word? was applied only when kind == :local_variable. The instance_method and singleton_method patterns match every Ruby keyword, so 'end', 'if', 'class' and 'def' were accepted. The definition survives -- def end is legal Ruby -- and a receiverless call does not, which is what a rename produces because it rewrites the declaration and every reference including bare ones. Taken from the interpreter: eval('class Z; def if; 1; end; def go; if; end; end') raises SyntaxError on ruby 3.4.10, while the same with self.end is legal. Constants, classes and modules were never exposed: their patterns require a leading capital and every keyword is lower case. Fixed by naming the three kinds a keyword breaks.
+
+**Direction:** Fixed in 0.4.0 by naming the kinds a keyword breaks rather than the one kind that was guarded. What the fix does not settle is the wider shape the hunt found beside it: rename also accepts a name already bound in an enclosing scope, a name a method in the same scope answers to receiverlessly, and a name an ancestor already defines -- each silently changes what the program does without breaking its syntax, so none is caught by a parse check. Those want one refusal rule that asks what the new name already means at each edit site, not four.
+
+---
+
+
+## 024.325 PRIVACY does not disclose that the Agent forwards the user's own application output to the log channel
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** vscode/PRIVACY.md
+
+- found by: vscode/PRIVACY.md and .ja.md, against core/lib/ovallsp/agent_process_manager.rb#log_stderr
+- runtime_agent/boot.rb reopens STDOUT onto STDERR so the protocol pipe on fd 1 stays clean -- correct and deliberate -- and agent_process_manager.rb#log_stderr forwards every line of the agent's stderr into the output channel. Between them the channel carries the workspace application's own output: Rails boot output, the user's puts, a logger on stdout, anything a subprocess writes to the inherited fd. PRIVACY.md described that channel as holding OvalLSP's own diagnostics and its Runtime Agent section disclosed nothing about it, while making exactly this disclosure for the observation feature. Nothing leaves the machine; what was wrong was the document. Disclosed in both languages in 0.4.0.
+
+**Direction:** Disclosed in 0.4.0. The behaviour is deliberate and stays; what changed is that the document says so. If the volume ever becomes a complaint, the fix is a level filter on the forwarded lines rather than dropping them -- the agent's own stderr is how a failed boot is diagnosed.
+
+---
+
+
+## 024.326 Rename changes what the program answers in four ways, none of which breaks its syntax
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/rename/planner.rb
+
+- found by: core/lib/ovallsp/rename/planner.rb#conflicts_for, #binding_conflicts, #method_conflicts
+- The conflict check asked what the new name means in one place -- the target's own scope frame, or the method's own owner -- and the name could already mean something in a neighbouring one. Four shapes, each driven, each printed before and after on ruby 3.4.10: a local renamed onto a name a nested block binds (3 -> 0); a local renamed onto a method called receiverlessly in the same scope (99 -> 0); a method renamed onto a name its superclass declares (['base','own'] -> 'own'); an @ivar renamed onto one already in use (3 -> 4). All four left a file that parses, so no parse check saw them. Fixed as one question -- does the new name already mean something here -- asked per kind: the whole file for a local (scope ids carry no nesting, so the choice is the file or the frame, and the frame is what let this through), the ancestor chain for a method, the same owner for an ivar or cvar.
+
+**Direction:** Fixed in 0.4.0. What is deliberately not solved is precision on the local half: a scope id is counted per file and carries no nesting, so 'encloses or is enclosed by' is not computable from what the index holds, and the refusal is file-wide. That costs a rename onto a name an unrelated method of the same file uses. Narrowing it means recording scope nesting in the reference index, which is a change to what every reference carries.
+
+---
+
+
+## 024.327 A generated-method macro the parser read is reported as an unknown method
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/parser_service.rb
+
+- found by: core/lib/ovallsp/parser_service.rb#visit_call_node
+- record_generated_methods reads delegate/enum/scope and declares what they define; the same visit then emitted the macro call itself as a method-call candidate. Recognising the macro is what leaves the surface CLOSED -- correctly, since the parser read it -- and that is exactly what exposed the macro's own call to the undefined-method check: 'W has no method named delegate' on a class whose size had just been declared from that call. Either the call is a macro this engine understands, in which case reporting it is wrong, or it is not, in which case declaring from it was. An unrecognised class-body call stays silent for the different reason that it opens the surface. Found also: @recorded_a_declaration is recomputed only in the receiverless branch, so a first attempt that read it directly silenced W.new.definitely_absent later in the same file; the value is call-local now.
+
+**Direction:** Fixed in 0.4.0. The wider shape stays open as its own question: the surface is closed or open per owner, and a macro that is read contributes both a closure and a call, so any future DSL added to the recognised set inherits this unless the candidate is suppressed at the same place.
+
+---
+
+
+## 024.328 A call guarded by respond_to? is still reported as an unknown method
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/diagnostics/engine.rb
+
+- found by: core/lib/ovallsp/diagnostics/engine.rb#unknown_method_findings
+- return unless respond_to?(:maybe_there) followed by maybe_there was reported. That guard is the idiom written to be safe about exactly what this check reports, so the report tells the author something the code already says they know. The unassigned-ivar check has carried the same exemption for defined?(@x) since it was written; this one had none. Read by name rather than by position, for the reason that exemption gives: a file defensive about a name is defensive about it, and the typo this check exists for appears in no respond_to?. Only a receiverless guard with a literal symbol or string counts -- other.respond_to?(:x) is about other, and a computed name is what cannot be read.
+
+**Direction:** Fixed in 0.4.0. Deliberately not extended to the other guards a defensive author writes -- rescue NoMethodError, method_defined?, a try/&. chain -- because each is a different question and the by-name rule is only defensible where the guard names the method literally.
+
+---
+
+
+## 024.329 A self.included hook doing anything but base.extend(Const) is read as nothing
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/parser_service.rb
+
+- found by: core/lib/ovallsp/parser_service.rb, core/lib/ovallsp/semantic/hierarchy_index.rb
+- Three shapes measured false on ruby 3.4.10: base.include(M), base.class_eval { def x; end }, and base.extend(M) where M is not the concern's own ClassMethods (the recorded hook target was discarded and '#{module}::ClassMethods' synthesised in its place). Ruby says all three methods exist; the check reported all three. A fourth shape -- self.extended's hook calling base.include -- Ruby says false and the report on it is correct.
+
+**Direction:** wrong-report
+
+---
+
+
+## 024.330 Every reference to a workspace constant that is not a class or module is reported unresolved
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: no
+user-visible-note: >-
+  The check is gated at mode >= standard and the extension sends no
+  diagnosticsMode, so it never runs in the shipped product (061). A
+  user meets this only through corpus_diagnostics.rb, which sets the
+  mode deliberately. It becomes user-visible the moment per-check
+  severity makes the check reachable, which is what 0.4.0 is for.
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/diagnostics/engine.rb
+
+- found by: core/lib/ovallsp/diagnostics/engine.rb, core/lib/ovallsp/workspace_index.rb
+- unresolved_constant_findings asks workspace_index.resolve_type_name, whose candidate filter is %i[class module] -- so a plain 'A = [1].freeze' referenced from the same class body, or from a method in it, is reported 'cannot resolve constant A'. Measured on actionpack 8.1.3.1/lib: 1,613 constant references fail type resolution, and a workspace :constant declaration exists by simple name for 427 of them. The check is gated at mode >= standard, which 061 records as unreachable in the shipped product, so nothing ships wrong today -- but per-check severity is what 0.4.0 is for, and this check cannot be offered until it is right.
+
+**Direction:** wrong-report
+
+---
+
+
+## 024.331 2026-09-05 review R16: The current protocol document disagrees with its implementation
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: no
+user-visible-note: >-
+  An internal design document. A user meets it only through a
+  contributor reading it, and the two names it got wrong name no
+  shipped behaviour.
+target: 0.4.0
+```
+
+**Area:** docs/design/docs/05-protocol.md
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R16)
+- Static comparison found Agent v1 in section 1 versus v2 in section 2 and implementation, plus obsolete Core custom request names in section 9; the existing checker does not cover those parts.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-record
+
+---
+
+
+## 024.332 2026-09-05 review R14: Rest parameters waive required arguments during overload selection
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/signatures/overload_resolver.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R14)
+- Direct OverloadResolver calls accepted zero arguments for a required positional plus rest and for a required keyword plus keyword rest, contaminating the selected return union.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-report
+
+---
+
+
+## 024.333 2026-09-05 review R12: The watcher glob omits rake files that cold indexing includes
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** vscode/src/watchedFiles.ts
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R12)
+- The exported glob matched a Ruby control and did not match a rake file. This is a source/glob comparison, not a VS Code host run.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-answer
+
+---
+
+
+## 024.334 2026-09-05 review R08: Method rename rejects ordinary bang and predicate names
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/rename/planner.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R08)
+- Server rename accepted world and rejected world! and world? because the reserved-word check parses local-variable assignment syntax; end remained refused as a control.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** refusal
+
+---
+
+
+## 024.335 2026-09-05 review R07: respond_to? exemptions leak across classes and miss explicit self
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/diagnostics/engine.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R07)
+- After the 024.328 repair, a guard in another class suppressed an unconditional missing call, while self.respond_to? still produced a false warning. Both have controls.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-report
+
+---
+
+
+## 024.336 2026-09-05 review R11: Watcher indexing bypasses the cold-index workspace boundary
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R11)
+- A linked Ruby file pointing outside the workspace was rejected by ColdIndexer but indexed through a watched-file notification. No external code was executed.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** boundary
+
+---
+
+
+## 024.337 2026-09-05 review R01: Cache generation pruning follows an intermediate symlink outside its root
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/cache/store.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R01)
+- Default-retention prune_generations removed an outside victim directory; current generation and unrelated file survived. All files were synthetic and contained in one temporary directory.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** data-loss
+
+---
+
+
+## 024.338 2026-09-05 review R04: Cold indexing assigns read_sequence after reading stale content
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/cold_indexer.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R04)
+- A controlled read interleaving left OldVersion indexed after a watcher-equivalent read had registered NewVersion; the disk still held NewVersion.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-edit
+
+---
+
+
+## 024.339 2026-09-05 review R03: Keyword completion inserts a positional argument
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/semantic/query_service.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R03)
+- The Server completion for take(required:) inserts take(${1:required}), losing the keyword colon.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-edit
+
+---
+
+
+## 024.340 2026-09-05 review R10: Signature locations bypass URI escaping and POSIX backslashes are rewritten
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/signatures/environment.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R10)
+- RBS and RBI paths containing # failed the URI round trip. Separately, a literal POSIX backslash was changed to a directory separator. Actual editor navigation was not exercised.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-location
+
+---
+
+
+## 024.341 2026-09-05 review R02: Renaming a parent method breaks an overriding method that calls super
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/rename/planner.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R02)
+- Applying the Server rename changed a synthetic Ruby result from 2 to NoMethodError while the edited source still parsed.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** wrong-edit
+
+---
+
+
+## 024.342 2026-09-05 review R06: Disk diagnostics can overwrite newer results and a deletion clear
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R06)
+- Ordered publish calls accepted stale disk findings after fresh empty findings and after clear_findings; disk publication lacks a read identity or sequence guard.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-state
+
+---
+
+
+## 024.343 2026-09-05 review R13: The enabled setting is read only during activation
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** vscode/src/extension.ts
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R13)
+- Static control-flow inspection found no configuration-change subscription to start or stop clients after ovallsp.enabled changes. UI behavior was not measured.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-state
+
+---
+
+
+## 024.344 2026-09-05 review R05: Dependency and RBS changes do not republish caller diagnostics
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/server.rb
+
+- found by: docs/reviews/2026-09-05-critical-review.md (R05)
+- Changing a source method arity or an RBS argument type left an open caller unchanged until forced analysis produced the expected diagnostic.
+- verified: evidence and limits recorded in the review; kind, release target and publication triage remain pending
+
+**Direction:** stale-answer
+
+---
+
+
+## 024.345 A disk result is dated after its content is read, so a reindex in the gap gives stale content a fresh generation
+
+```yaml
+status: fixed
+released-in: 0.3.4
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** core/lib/ovallsp/workspace_diagnostics.rb
+
+- found by: core/lib/ovallsp/workspace_diagnostics.rb, core/lib/ovallsp/server.rb
+- publish_for reads the file and then calls @analyze, which takes the index generation inside its own snapshot -- so the number meant to date the result is taken after the content it dates. Anything bumping the generation in that gap stamps a result computed from old text with a generation at or above the fresh result's, and every rule in the funnel then admits it. 024.338's shape one layer up; 024.342's examples all give the stale result an older generation, which is the assumption that fails. Demonstrated in four orderings (change-twice, delete-recreate, close-mid-flight, delete-then-other-change) through the real Server; wrong on 9c17dc2 too, so not a regression.
+
+**Direction:** stale-answer
+
+---
+
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

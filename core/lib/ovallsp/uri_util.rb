@@ -51,7 +51,7 @@ module Ovallsp
 
       return path if path.start_with?("file://") # already a URI; pass through as-is
 
-      normalized = path.tr("\\", "/")
+      normalized = normalize_separators(path)
 
       if (match = WINDOWS_DRIVE_PATH.match(normalized))
         "file:///#{match[:drive]}:#{escape(match[:rest] || "")}"
@@ -69,7 +69,25 @@ module Ovallsp
       return true if path.start_with?("file://")
       return true if path.start_with?("/") || path.start_with?("\\")
 
-      WINDOWS_DRIVE_PATH.match?(path.tr("\\", "/"))
+      WINDOWS_DRIVE_PATH.match?(normalize_separators(path))
+    end
+
+    # **A backslash is a separator on Windows and an ordinary filename
+    # character on POSIX**, and this was `path.tr("\\\\", "/")` on every
+    # path. So `/tmp/one\\two.rb` -- legal, if unusual -- produced a URI
+    # naming `/tmp/one/two.rb`, a different file, and the round trip did
+    # not come back. Found by the 2026-09-05 critical review, R10.
+    #
+    # **Decided by the path's own shape, not by the host OS.** A drive
+    # letter or a UNC prefix is what says a backslash is a separator, and
+    # neither can begin a POSIX path that means something else -- so the
+    # Windows paths this converter is handed still normalise when the
+    # tests for them run on macOS, which asking `File::ALT_SEPARATOR`
+    # would have broken.
+    def normalize_separators(path)
+      return path.tr("\\", "/") if path.start_with?("\\\\") || WINDOWS_DRIVE_PATH.match?(path.tr("\\", "/"))
+
+      path
     end
 
     # Escapes every path segment individually so a literal `/` in the

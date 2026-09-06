@@ -86,6 +86,339 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     end
   end
 
+  # **A macro the parser read, and then reported.** `delegate` is one of
+  # three DSLs `#record_generated_methods` understands: the parser reads
+  # `delegate :size, to: :inner` and declares `size` from it. It then
+  # emitted the `delegate` call itself as an ordinary method-call
+  # candidate, so the check reported the very macro whose meaning the
+  # parser had just used:
+  #
+  #     class W
+  #       delegate :size, to: :inner    # W has no method named `delegate`
+  #       def inner; []; end
+  #     end
+  #
+  # Either the call is a macro this engine understands, in which case
+  # reporting it is wrong, or it is not, in which case declaring `size`
+  # from it was. What holds the answer is a *call-local* value, computed
+  # where the declarations are counted and passed to the two readers that
+  # want it -- see the two examples below, each of which is a defect the
+  # ivar form had and no example caught.
+  #
+  # The control is the same class with a name nothing recorded: a macro
+  # the parser cannot read must still leave the surface open rather than
+  # silently exempting its own call.
+  it "does not report a generated-method macro whose declarations it read" do
+    expect(unknown_methods("class W\n  delegate :size, to: :inner\n  def inner; []; end\nend\n")).to be_empty
+    expect(unknown_methods("class W\n  enum :status, %i[on off]\nend\n")).to be_empty
+    expect(unknown_methods("class W\n  scope :recent, -> { 1 }\nend\n")).to be_empty
+  end
+
+  # **The control**, and it has to be a typo the check actually reaches:
+  # an unrecognised *class-body* call is deliberately silent, because it
+  # opens the surface. That asymmetry is the mechanism here -- reading
+  # the macro is what closes the surface and exposes the macro's own call
+  # to the check -- so the control is a typo inside a method body, where
+  # the surface is closed for the ordinary reason.
+  it "still reports an ordinary typo beside a macro it read" do
+    expect(unknown_methods("class W\n  delegate :size, to: :inner\n  def inner; []; end\n  def go; definitely_absent; end\nend\n"))
+      .to include(a_string_including("definitely_absent"))
+  end
+
+  # **A call the file guards with `respond_to?` is a call the author
+  # already knows may not be there.** It is the idiom written to be safe
+  # about exactly what this check reports, and reporting it tells the
+  # author something they have said in the code that they know:
+  #
+  #     def go
+  #       return unless respond_to?(:maybe_there)
+  #       maybe_there
+  #     end
+  #
+  # The same shape as the `defined?(@x)` exemption the unassigned-ivar
+  # check already carries, and read the same way: by *name*, because a
+  # file defensive about a name is defensive about it, and the typo this
+  # check exists for appears in no `respond_to?`.
+  it "does not report a call the file guards with respond_to?" do
+    expect(unknown_methods("class W\n  def go\n    return unless respond_to?(:maybe_there)\n    maybe_there\n  end\nend\n"))
+      .to be_empty
+    expect(unknown_methods("class W\n  def go\n    maybe_there if respond_to?(\"maybe_there\")\n  end\nend\n"))
+      .to be_empty
+  end
+
+  # **The guard is the *true* branch, not the body it was written in.**
+  # `024.335` scoped a guard to its enclosing `def`/`class`/file, and said
+  # so: a guard in the false arm exempted the true arm as well. The
+  # 2026-09-05 review's condition for R07 asked for the true branch alone,
+  # and a follow-up review's verdict was that documenting the gap does not
+  # satisfy the condition. It does not. Ruby, 3.4.10:
+  #
+  #   $ ruby -e '
+  #   class W
+  #     def guarded_true;  if respond_to?(:maybe) then maybe else 0 end; end
+  #     def guarded_false; if respond_to?(:maybe) then 0 else maybe end; end
+  #     def early;         return 1 unless respond_to?(:maybe); maybe; end
+  #     def andform;       respond_to?(:maybe) && maybe; end
+  #   end
+  #   %i[guarded_true guarded_false early andform].each do |m|
+  #     begin
+  #       W.new.send(m); puts "#{m}: ran"
+  #     rescue NameError => e
+  #       puts "#{m}: NameError"
+  #     end
+  #   end'
+  #   # => guarded_true: ran
+  #   #    guarded_false: NameError
+  #   #    early: ran
+  #   #    andform: ran
+  #   # ruby 3.4.10
+  #
+  # So three of the four shapes are guarded and one raises, and the
+  # implementation must tell them apart.
+  describe "which side of the condition the guard covers" do
+    it "exempts the true branch of an if" do
+      expect(unknown_methods("class W\n  def go\n    if respond_to?(:maybe)\n      maybe\n    end\n  end\nend\n"))
+        .to be_empty
+    end
+
+    it "reports the same call in the else branch" do
+      source = "class W\n  def go\n    if respond_to?(:maybe)\n      1\n    else\n      maybe\n    end\n  end\nend\n"
+
+      expect(unknown_methods(source)).to include("maybe")
+    end
+
+    # `unless` is the mirror: its `else` is the guarded side.
+    it "reports the statements of an unless and exempts its else" do
+      guarded = "class W\n  def go\n    unless respond_to?(:maybe)\n      1\n    else\n      maybe\n    end\n  end\nend\n"
+      reported = "class W\n  def go\n    unless respond_to?(:maybe)\n      maybe\n    end\n  end\nend\n"
+
+      expect(unknown_methods(guarded)).to be_empty
+      expect(unknown_methods(reported)).to include("maybe")
+    end
+
+    # **The commonest spelling in Ruby, and the one a branch rule loses if
+    # it only reads the arms.** `return unless` leaves the guard true for
+    # everything after it, so the scope is the rest of the enclosing body.
+    %w[return raise\ "x" next break].each do |jump|
+      it "exempts the rest of the body after `#{jump} unless`" do
+        source = "class W\n  def go\n    #{jump} unless respond_to?(:maybe)\n    maybe\n  end\nend\n"
+
+        expect(unknown_methods(source)).to be_empty
+      end
+    end
+
+    # Its control: an `unless` whose body does *not* leave guards nothing
+    # after it, and Ruby agrees -- execution falls through.
+    it "still reports after an unless whose body does not leave" do
+      source = "class W\n  def go\n    1 unless respond_to?(:maybe)\n    maybe\n  end\nend\n"
+
+      expect(unknown_methods(source)).to include("maybe")
+    end
+
+    it "exempts the right of an and, and the body of an or-return" do
+      expect(unknown_methods("class W\n  def go\n    respond_to?(:maybe) && maybe\n  end\nend\n")).to be_empty
+      expect(unknown_methods("class W\n  def go\n    respond_to?(:maybe) or return\n    maybe\n  end\nend\n")).to be_empty
+    end
+
+    it "reports the right of an or, which runs when the guard is false" do
+      expect(unknown_methods("class W\n  def go\n    respond_to?(:maybe) || maybe\n  end\nend\n")).to include("maybe")
+    end
+
+    # A `respond_to?` that is not a condition at all guards nothing.
+    it "reports a call beside a bare respond_to? that decides nothing" do
+      expect(unknown_methods("class W\n  def go\n    respond_to?(:maybe)\n    maybe\n  end\nend\n")).to include("maybe")
+    end
+  end
+
+  # **The controls.** A guard on one name says nothing about another, and
+  # a guard with a receiver is about *that* object rather than self.
+  it "still reports a different name beside a respond_to? guard" do
+    expect(unknown_methods("class W\n  def go\n    return unless respond_to?(:maybe_there)\n    definitely_absent\n  end\nend\n"))
+      .to include(a_string_including("definitely_absent"))
+  end
+
+  it "still reports when the guard is about another object" do
+    expect(unknown_methods("class W\n  def go(other)\n    return unless other.respond_to?(:maybe_there)\n    maybe_there\n  end\nend\n"))
+      .to include(a_string_including("maybe_there"))
+  end
+
+  # **`self.respond_to?` is the same guard.** The parser's own
+  # `#open_surface_kind` reads `nil` and `Prism::SelfNode` alike, and this
+  # collector did not -- so the explicit spelling, which is ordinary in
+  # application code, was still reported. Ruby runs both. Found by two
+  # independent cold reviews and by the 2026-09-05 critical review (R07).
+  it "reads an explicit self on the guard" do
+    expect(unknown_methods("class W\n  def go\n    return unless self.respond_to?(:maybe_there)\n    maybe_there\n  end\nend\n"))
+      .to be_empty
+  end
+
+  # **The exemption is about `self`, so it applies to calls on `self`.**
+  # By name and nothing else, a guard silenced `Other.new.maybe_there`
+  # in the same file -- a different object, about which the guard says
+  # nothing. This is the half of the `defined?(@x)` analogy that does not
+  # carry: an ivar has no receiver and a method call does.
+  it "still reports the guarded name on another object" do
+    index("class Other\nend\n", uri: "file:///other.rb")
+    source = "class W\n  def go\n    return unless respond_to?(:maybe_there)\n    Other.new.maybe_there\n  end\nend\n"
+
+    expect(unknown_methods(source)).to include(a_string_including("maybe_there"))
+  end
+
+  # **A guard scopes to the body it was written in.** File-wide by name,
+  # a guard in one method silenced the same name called *unguarded* in
+  # another -- which is the forgotten-guard mistake, not the typo this
+  # check is framed around, and it is the one a reader would most want
+  # reported.
+  it "does not carry the guard into another method" do
+    source = "class W\n  def guarded\n    maybe_there if respond_to?(:maybe_there)\n  end\n" \
+             "  def unguarded\n    maybe_there\n  end\nend\n"
+
+    expect(unknown_methods(source)).to include(a_string_including("maybe_there"))
+  end
+
+  it "does not carry the guard into another class in the same file" do
+    source = "class A\n  def go\n    maybe_there if respond_to?(:maybe_there)\n  end\nend\n" \
+             "class B\n  def go\n    maybe_there\n  end\nend\n"
+
+    expect(unknown_methods(source)).to include(a_string_including("maybe_there"))
+  end
+
+  # The control for the three above: the guard still works where it is
+  # written, in each of the idiom's three spellings. Without this, a fix
+  # that scoped the guard to nothing would pass all of them.
+  it "still exempts the call in the body the guard is written in" do
+    guard_then_call = "class W\n  def go\n    return unless respond_to?(:maybe_there)\n    maybe_there\n  end\nend\n"
+    trailing_if = "class W\n  def go\n    maybe_there if respond_to?(:maybe_there)\n  end\nend\n"
+    block_form = "class W\n  def go\n    if respond_to?(:maybe_there)\n      maybe_there\n    end\n  end\nend\n"
+
+    expect(unknown_methods(guard_then_call)).to be_empty
+    expect(unknown_methods(trailing_if)).to be_empty
+    expect(unknown_methods(block_form)).to be_empty
+  end
+
+  # **A macro is a class-body call, and the recorders never asked.**
+  # `#record_generated_methods` runs wherever `current_owner` is set, so a
+  # `delegate` written *inside a method body* declared a method from it --
+  # and, once `024.327` marked what the parser read, silenced the call
+  # too. Both are wrong, and Ruby says so:
+  #
+  #   $ ruby -e '
+  #   gem "activesupport"; require "active_support/all"
+  #   class Q
+  #     def inner = []
+  #     def setup; delegate :size, to: :inner; end
+  #   end
+  #   begin; Q.new.setup; rescue NoMethodError => e; puts e.message; end
+  #   p Q.new.respond_to?(:size)
+  #   '
+  #   # => undefined method 'delegate' for an instance of Q
+  #   #    false
+  #   # ruby 3.4.10, activesupport 8.1.3.1
+  #
+  # `delegate` is `Module`'s, so an instance has none, and nothing named
+  # `size` is ever defined. Found independently by two cold reviews.
+  #
+  # `in_method_body?` rather than `#defines_surface?`: a block is the
+  # other thing that method refuses, and `included do ... end` runs in
+  # class context, where the macro really does define what it says.
+  it "declares nothing from a macro written inside a method body" do
+    source = "class Q\n  def inner; []; end\n  def setup\n    delegate :size, to: :inner\n  end\nend\n"
+
+    expect(unknown_methods(source)).to include("delegate")
+  end
+
+  # **The block has to be one that does not open the surface**, or the
+  # example cannot fail. The first version used `included do ... end`,
+  # which is itself an unreadable class-body call: `size` was silent
+  # whether or not the block's `delegate` was read, and the example passed
+  # on the parent commit too. Found by cold review -- an assertion that
+  # cannot fail, arriving through the fixture.
+  #
+  # `%i[...].each { }` has a receiver, so it opens nothing, and `self` in
+  # the block is still the class -- which is the claim being made.
+  it "still reads a macro written inside a class-context block" do
+    source = "class Q\n  def inner; []; end\n  %i[a].each do |_|\n    delegate :size, to: :inner\n  end\n  def go = size\nend\n"
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
+  # Its control: the same class without the block reports `size`, so the
+  # example above is the macro being read and not the class being silent.
+  it "reports the same call when no macro declared it" do
+    expect(unknown_methods("class Q\n  def inner; []; end\n  def go = size\nend\n")).to include("size")
+  end
+
+  # **The candidate survives; only the report stops.** The first fix
+  # withheld the method-call candidate for any call that recorded a
+  # declaration, and `#record_attribute_methods` records them too -- so
+  # `attr_reader` lost the candidate that hover, go to definition,
+  # references and documentHighlight all read, and so did a `scope` or
+  # `delegate` in a workspace that defines one of its own. None of that
+  # was the defect. Marked by range instead, which stops the report and
+  # touches nothing else.
+  #
+  # Asserted on the summary rather than through a feature, because that is
+  # where the loss was: every one of the four reads this list.
+  it "keeps the method-call candidate for a macro it read" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///c.rb", version: 1, language_id: "ruby",
+      text: "class W\n  attr_reader :one\n  delegate :size, to: :inner\n  def inner; []; end\nend\n"
+    )
+    summary = Ovallsp::ParserService.new.summarize(document)
+    names = summary.reference_candidates.select { |c| c.kind == :method_call }.map(&:name)
+
+    expect(names).to include("attr_reader", "delegate")
+    expect(summary.macro_call_ranges.length).to eq(2)
+  end
+
+  # **The sticky-ivar defect, in the reader `024.327` itself added.** The
+  # flag was an ivar recomputed only in the receiverless branch, so a
+  # later call *with* a receiver read a stale `true` and had its candidate
+  # withheld. `W.new.definitely_absent` lost its report entirely, on a
+  # class the macro above had nothing to do with.
+  #
+  # **In one file**, because that is the whole of the defect: the visitor
+  # is per-document, so a fresh one starting with the flag unset hides it
+  # entirely. The first version of this example indexed the macro and then
+  # analysed the call as a separate document and passed under the sticky
+  # form, which is `024.109`'s shape and is why this file has mutations.
+  it "still reports a call with a receiver written after a macro" do
+    expect(unknown_methods("class W\n  delegate :size, to: :inner\n  def inner; []; end\nend\nW.new.definitely_absent\n"))
+      .to include("definitely_absent")
+  end
+
+  # **The same staleness, one reader over**, and this one predates
+  # `024.327`. `#record_open_surface` exempts a call on `RECORDING_CALLS`
+  # when a declaration was recorded, and read the same ivar:
+  #
+  #     class Sticky
+  #       attr_reader :first                  # sets the flag
+  #       self.delegate(*NAMES, to: :inner)   # receiver, so no reset
+  #     end
+  #
+  # The splat is exactly what this parser cannot read, so `delegate`
+  # declared nothing and the surface had to open. The stale flag said a
+  # declaration had been recorded and it stayed closed, so every method
+  # the macro defines was reported missing. Found by cold review.
+  #
+  # The control is the same file without the `attr_reader`: nothing sets
+  # the flag, the surface opens, and `x` is silent on both trees -- so the
+  # example that matters is this one, which is silent only with the fix.
+  it "opens the surface for an unreadable macro written after a readable one" do
+    source = "class Sticky\n  NAMES = %i[x y].freeze\n  attr_reader :first\n  def inner; []; end\n" \
+             "  self.delegate(*NAMES, to: :inner)\n  def go; x; end\nend\n"
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
+  # Its control: with the surface genuinely closed, the same call *is*
+  # reported. Without this, a change that opened every class's surface
+  # would pass the example above.
+  it "still reports the same call when no macro opened the surface" do
+    expect(unknown_methods("class Sticky\n  attr_reader :first\n  def go; x; end\nend\n"))
+      .to include("x")
+  end
+
   it "does not report `include` or `extend` in a class body" do
     index("module Helper\nend\n", uri: "file:///helper.rb")
 

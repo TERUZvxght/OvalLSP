@@ -62,7 +62,7 @@ module Ovallsp
     FileSummary = Data.define(:uri, :content_hash, :document_version, :declarations, :diagnostics, :source,
                                :read_sequence, :ancestor_facts, :alias_facts, :reference_candidates,
                                :generated_method_facts, :open_surface_owners, :module_function_names,
-                               :buffer_id, :pattern_bound_names) do
+                               :buffer_id, :pattern_bound_names, :macro_call_ranges) do
       # `module_function_names`: `[owner, name]` pairs this file wrote a
       # `module_function :name` for. A *fact*, not a rewrite, because the
       # method it names may be declared in a different file -- which is
@@ -71,6 +71,17 @@ module Ovallsp
       # so cross-file never worked and `Reopened.r_a` was reported as
       # missing (`024.114`). `WorkspaceIndex` applies these once every
       # file is in, the way it already does for `open_surface_owners`.
+      # `macro_call_ranges`: the ranges of receiverless calls this parser
+      # read as a macro and declared something from -- `delegate :size,
+      # to: :inner`, `scope :active, -> {}`, `enum status: {}`. A macro
+      # this parser understands leaves the class's surface closed, which
+      # is right, and that is what exposed the macro's *own* call to the
+      # undefined-method check. Ranges rather than names, and a mark
+      # rather than a withheld candidate: `delegate` may be an ordinary
+      # method somewhere else in the same workspace, and hover, go to
+      # definition, references and highlight all read the candidate and
+      # must keep answering on it (`024.327`).
+      #
       # `pattern_bound_names`: names this file's patterns bind and the
       # occurrence list deliberately does *not* carry. An `_`-prefixed
       # name inside a pattern is left unrecorded because a pattern may
@@ -93,11 +104,12 @@ module Ovallsp
       # the publish funnel and this layer kept it.
       def initialize(source: :buffer, read_sequence: 0, ancestor_facts: [], alias_facts: [], reference_candidates: [],
                       generated_method_facts: [], open_surface_owners: [], module_function_names: [],
-                      buffer_id: nil, pattern_bound_names: [], **rest)
+                      buffer_id: nil, pattern_bound_names: [], macro_call_ranges: [], **rest)
         super(source: source, read_sequence: read_sequence, ancestor_facts: ancestor_facts, alias_facts: alias_facts,
               reference_candidates: reference_candidates, generated_method_facts: generated_method_facts,
               open_surface_owners: open_surface_owners, module_function_names: module_function_names,
-              buffer_id: buffer_id, pattern_bound_names: pattern_bound_names, **rest)
+              buffer_id: buffer_id, pattern_bound_names: pattern_bound_names,
+              macro_call_ranges: macro_call_ranges, **rest)
       end
     end
   end

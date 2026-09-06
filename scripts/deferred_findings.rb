@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "utf8"
+require_relative "repo_files"
 
 require "yaml"
 
@@ -233,12 +234,34 @@ end
   # `friction` or `roadmap` entry naming a shipped release passed
   # silently -- exactly the state `024.124` was written to make
   # unreachable, in the guard written to make it so.
-  def open_entries_targeting_a_shipped_release(markdown, artifacts, changelog = nil)
-    shipped = published_versions(artifacts) | changelog_versions(changelog)
+  # **`preparing:` is the version this branch is cutting, and it is not
+  # shipped however the changelog reads.** `release.rb open` writes the
+  # changelog section at the *start* of a release -- that is where the
+  # bullets accumulate -- so without this, every entry the release is
+  # working on reads as one naming a shipped version, and preflight is red
+  # from `open` until the tag. `059`'s B2 is the same defect one reader
+  # over: `check_changelog.rb` was taught that the branch is the evidence
+  # of what is being prepared, and this was not.
+  #
+  # `nil` keeps the old strictness, which is what `main` gets: once the
+  # release has merged, an entry still naming it is stale again and this
+  # says so.
+  def open_entries_targeting_a_shipped_release(markdown, artifacts, changelog = nil, preparing: nil)
+    shipped = (published_versions(artifacts) | changelog_versions(changelog)) - [preparing].compact
     open_entries(markdown).filter_map do |number, fields|
       target = fields["target"]
       "#{number} (#{target})" if target && shipped.include?(target)
     end
+  end
+
+  # The version this checkout is cutting, from the branch name, or `nil`
+  # off a release branch. Same rule and same spelling as
+  # `check_changelog.rb`'s, which is the reader this one is catching up
+  # with.
+  def preparing_version(root = File.expand_path("..", __dir__))
+    RepoFiles.capture(root, %w[branch --show-current]).to_s.strip[%r{\Arelease/(\d+\.\d+\.\d+)\z}, 1]
+  rescue StandardError
+    nil
   end
 
   def open_entries(markdown)

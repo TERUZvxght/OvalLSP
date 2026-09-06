@@ -1267,3 +1267,269 @@
   to: "    rescue Errno::EACCES\n"
   spec: spec/meta/release_flow_spec.rb
   example: "refuses, naming the tool and how to install it"
+- why: "The release being prepared is not shipped; without it, `release.rb open` writes the changelog section and every entry the release is working on reads as stale, so preflight is red from `open` until the tag."
+  file: scripts/deferred_findings.rb
+  from: "    shipped = (published_versions(artifacts) | changelog_versions(changelog)) - [preparing].compact\n"
+  to: "    shipped = published_versions(artifacts) | changelog_versions(changelog)\n"
+  spec: spec/meta/deferred_findings_spec.rb
+  example: "leaves an entry alone when its target is the release the branch is preparing"
+- why: "The Define quick fix on a class made by assignment: without the refusal it inserts at `end - 3`, which on `Widget = Class.new(Base)` lands inside the superclass expression and leaves a file that does not parse."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] if declared_by_assignment?(target)\n"
+  to: "      return [] if false\n"
+  spec: spec/ovallsp/server_code_action_spec.rb
+  example: "offers no definition fix for a class made by assignment with a parent"
+- why: "A Ruby keyword as a method's new name: without the widened set, `end`/`if`/`class` are accepted and the rewritten receiverless call sites do not parse."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        return true unless KEYWORD_WOULD_BREAK.include?(kind)\n"
+  to: "        return true unless kind == :local_variable\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses it for an instance method"
+- why: "A method's name is its own grammar: asking the local's assignment question of a method refuses `world!` and `world?`, which are ordinary Ruby method names."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        usable_as_a_bare_call?(name.to_s)\n"
+  to: "        !reserved_word?(name.to_s)\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "renames a method to world!"
+- why: "Parsing is not enough: `nil` and `self` parse and are not calls, so a method renamed to either breaks every call site while the file still parses."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        call.is_a?(Prism::CallNode) && call.receiver.nil? && call.name.to_s == name\n"
+  to: "        true\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "still refuses nil, which parses and is not a call"
+- why: "A rest lifts the ceiling and not the floor: returning true on its mere presence matched `(Integer, *String)` against a call with no arguments, which Ruby refuses."
+  file: core/lib/ovallsp/signatures/overload_resolver.rb
+  from: "        return count >= min if overload.rest_positional\n"
+  to: "        return true if overload.rest_positional\n"
+  spec: spec/ovallsp/signatures/overload_resolver_spec.rb
+  example: "does not let a rest positional waive a required one"
+- why: "`**rest` waives the unknown-keyword limit and not the required keywords: returning true on its presence matched `(required: Integer, **String)` against a call with no keywords."
+  file: core/lib/ovallsp/signatures/overload_resolver.rb
+  from: "        return required_present if overload.rest_keyword\n"
+  to: "        return true if overload.rest_keyword\n"
+  spec: spec/ovallsp/signatures/overload_resolver_spec.rb
+  example: "does not let a rest keyword waive a required one"
+- why: "A local renamed onto a name the same file already binds or calls: without the file-wide look, a nested block parameter captures it and a receiverless call becomes a read of the local, both with the file still parsing."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        elsewhere_in_file(symbol_id, new_name)\n"
+  to: "        []\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses a local renamed onto a name a nested block binds"
+- why: "A method renamed onto a name an ancestor declares: without the chain walk the rename silently begins overriding it, and the owner-only check sees nothing."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        owners = [symbol_id.owner] + inherited_owners(symbol_id.owner)\n"
+  to: "        owners = [symbol_id.owner]\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses a method renamed onto a name its superclass declares"
+- why: "An @ivar renamed onto one already in use merges two variables into one; asking under :local_variable found nothing."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        occupant = Index::SymbolId.new(kind: symbol_id.kind, owner: symbol_id.owner,\n"
+  to: "        occupant = Index::SymbolId.new(kind: :local_variable, owner: symbol_id.owner,\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses an ivar renamed onto one already in use"
+- why: "A generated-method macro the parser read is marked at its range: without the mark, reading `delegate :size, to: :inner` closes the surface and the check then reports `delegate` itself on a class whose `size` it just declared."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        record_macro_call_range(node) if read_as_a_macro\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "does not report a generated-method macro whose declarations it read"
+- why: "The mark stops the report and nothing else: withholding the candidate instead takes hover, definition, references and highlight off `attr_reader` and off a workspace's own `scope`/`delegate`."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        record_method_call_candidate(node)\n        record_macro_call_range(node) if read_as_a_macro\n"
+  to: "        record_method_call_candidate(node) unless read_as_a_macro\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "keeps the method-call candidate for a macro it read"
+- why: "`read_as_a_macro` is call-local: as an ivar recomputed only in the receiverless branch it went stale, and a later call with a receiver had its candidate withheld on a class the macro had nothing to do with."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "      def visit_call_node(node)\n        read_as_a_macro = false\n"
+  to: "      def visit_call_node(node)\n        read_as_a_macro = @sticky_read_as_a_macro\n      ensure\n        @sticky_read_as_a_macro = read_as_a_macro\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "still reports a call with a receiver written after a macro"
+- why: "`#record_open_surface` reads the same call-local value: the ivar it read before was stale after any call with a receiver, so `self.delegate(*NAMES, to: :inner)` written under an `attr_reader` left the surface closed over a macro this parser cannot read."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        return if RECORDING_CALLS.include?(node.name) && read_as_a_macro\n"
+  to: "        return if RECORDING_CALLS.include?(node.name)\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "opens the surface for an unreadable macro written after a readable one"
+- why: "An `included`/`prepended` hook calling something on the class opens the module's hook surface: without it a class whose hook calls `base.include(M)` or `base.class_eval` looks fully enumerated and every method the hook gave it is reported."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), :included_hook]\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "declines about a class whose hook includes another module"
+- why: "Only a call *on* the class counts: counting every mention opened 42 of 51 hooks across eleven gems and stopped 55 of 994 types being checked, for hooks that add no member at all."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        calls = hook_calls_on_parameter(node.body, parameter)\n"
+  to: "        calls = hook_parameter_mentions(node.body, parameter)\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "does not open the surface for a hook that only reads the class"
+- why: "An operator is not a method-defining call: without the name shape, `raise ArgumentError unless base <= Hashie::Mash` opens the surface of a hook that adds nothing."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "            candidate.receiver.name == parameter &&\n            DEFINING_CALL_NAME.match?(candidate.name.to_s)\n"
+  to: "            candidate.receiver.name == parameter\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "does not open the surface for a hook that only compares the class"
+- why: "An `included` hook does not run on `extend`: read as an ordinary instance surface, a class that merely extends the module has every class-level call declined about."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "        return true if HOOK_RELATIONS.include?(entry.origin) &&\n                       @workspace_index.open_surface?(entry.name, kind: :included_hook)\n"
+  to: "        return true if @workspace_index.open_surface?(entry.name, kind: :included_hook)\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "does not decline about a class that extends the module"
+- why: "A macro is a class-body call: without the `self_is_module?` gate, `def setup; delegate :size, to: :inner; end` declares a method Ruby never defines and silences the report on `delegate`, which Ruby does raise on an instance."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "          in_class_body = current_owner && @cref.self_is_module?\n"
+  to: "          in_class_body = current_owner\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "declares nothing from a macro written inside a method body"
+- why: "A `respond_to?` guard scopes to a line range: without it, a guard silences the same name called unguarded anywhere in the file, which is the forgotten-guard mistake."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        guards.any? { |guard| guard.name == name && line >= guard.first_line && line <= guard.last_line }\n"
+  to: "        guards.any? { |guard| guard.name == name }\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "does not carry the guard into another method"
+- why: "The guard covers the consequent, not the whole body: scoped to the enclosing body, a guard written in the false arm exempts the true arm, where Ruby raises."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        def visit_if_node(node)\n          record(node.predicate, node.statements)\n"
+  to: "        def visit_if_node(node)\n          record(node.predicate, @bodies.last)\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "reports the same call in the else branch"
+- why: "An `unless` whose body leaves guards everything after it: `return unless respond_to?(:x)` is the commonest spelling of this idiom, and a rule that reads only the arms loses it."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          record(node.predicate, rest_of_body_after(node)) if leaves?(node.statements)\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "exempts the rest of the body after `return unless`"
+- why: "An `unless` whose body does NOT leave guards nothing after it: without the check, execution falling through the unless is treated as though the guard had held."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          return true if LEAVES.any? { |kind| last.is_a?(kind) }\n"
+  to: "          return true\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "still reports after an unless whose body does not leave"
+- why: "A disk result is dated by what was known when its content was read: taken after the analysis, a reindex in the gap gives stale content a fresh generation and every rule in the funnel admits it."
+  file: core/lib/ovallsp/workspace_diagnostics.rb
+  from: "      generation = read_generation || analysed_generation\n"
+  to: "      generation = analysed_generation\n"
+  spec: spec/ovallsp/workspace_diagnostics_spec.rb
+  example: "is taken before the content is read, not after"
+- why: "A guard is about `self`, so it exempts only calls on self: by name alone it silenced the same name on another object, about which the guard says nothing."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        return false unless candidate.receiver.nil? || written_self?(candidate)\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "still reports the guarded name on another object"
+- why: "`self.respond_to?` is the same guard: reading only a nil receiver left the explicit spelling, ordinary in application code, reported."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        def about_self?(node) = node.receiver.nil? || node.receiver.is_a?(Prism::SelfNode)\n"
+  to: "        def about_self?(node) = node.receiver.nil?\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "reads an explicit self on the guard"
+- why: "A constant reference is decided by the lookup, not the simple name: answering from the candidate list alone accepted a bare name on an unrelated namespace's constant and reported one an ancestor declares."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        owners.any? { |owner| reach.include?(owner) }\n"
+  to: "        true\n"
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "reports a bare name only another namespace declares"
+- why: "The reach includes each frame's ancestors: without them `Child::LIMIT` is reported although `Parent` declares it, which Ruby resolves."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          entries.each { |entry| reach << Index::SymbolId.qualify_owner(entry.name_or_nil.to_s) }\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "does not report a constant an ancestor declares"
+- why: "An unbuildable chain declines: `no ancestor declares it` answered from a chain with an unidentified link is an assertion made from a question that could not be asked."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          return nil unless entries.all? { |entry| chain_link_understood?(entry, context) }\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "declines when the ancestry cannot be built"
+- why: "Identified is not understood: a link naming something nothing can see behind -- `class Pool < Impl` where `Impl = RubyImpl` -- stops the chain, and reading it as complete reports the real ancestor's constants."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        return false unless entry.identified?\n        return true if context.workspace_index.type_kind(entry.name_or_nil)\n"
+  to: "        return entry.identified?\n"
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "declines when a link in the chain names something it cannot see behind"
+- why: "A written namespace is resolved with the nesting it was written in: a workspace-wide pick among three gems' `Utils` put the constant outside the reach of whichever ranked first."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        return owners_reachable_from([namespace], context, nesting: candidate.lexical_nesting) if namespace != written\n"
+  to: "        return owners_reachable_from([namespace], context) if namespace != written\n"
+  spec: spec/ovallsp/diagnostics/workspace_constant_spec.rb
+  example: "resolves a written namespace with the nesting it was written in"
+- why: "A clear is floored by the index generation: keeping only the last published generation recorded nothing for a clear with no prior publish, and let a result one generation above the last publish land after it."
+  file: core/lib/ovallsp/server.rb
+  from: "        @last_disk_generation[uri] = [[last_disk, @workspace_index.generation].compact.max, :cleared]\n"
+  to: "        @last_disk_generation[uri] = [last_disk, :cleared]\n"
+  spec: spec/ovallsp/server_publish_ordering_spec.rb
+  example: "refuses a result after a clear that had nothing before it"
+- why: "Both sides of an override check are qualified: `#method_owners` answers `::Object` and `#ancestors` answers `Object`, so a workspace `class Object` was never seen as the other end."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        qualified_owners(owner).include?(wanted) || qualified_owners(other).include?(mine)\n"
+  to: "        inherited_owners(owner).include?(other) || inherited_owners(other).include?(owner)\n"
+  spec: spec/ovallsp/rename/planner_spec.rb
+  example: "refuses when the other end is a workspace Object"
+- why: "The ancestor chain is memoised for one generation and cleared by every mutation: without the clear a caller reads a chain from a shape that has changed."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "          @generation += 1\n          @ancestors_memo.clear\n        end\n      end\n\n      def remove_file(uri)"
+  to: "          @generation += 1\n        end\n      end\n\n      def remove_file(uri)"
+  spec: spec/ovallsp/semantic/hierarchy_index_spec.rb
+  example: "reflects a file's ancestors being replaced"
+- why: "The type resolution is memoised for one generation and cleared by every mutation: without the clear a name keeps whatever it resolved to before the file that declares it was indexed."
+  file: core/lib/ovallsp/workspace_index.rb
+  from: "        @generation += 1\n        @type_resolution_memo.clear\n"
+  to: "        @generation += 1\n"
+  spec: spec/ovallsp/workspace_index_spec.rb
+  example: "resolves a class declared after the first question was asked"
+- why: "A concern's class methods come from the module its hook actually extends: synthesising `#{module}::ClassMethods` instead is right only when the extended module happens to be spelled that."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "        hooked = @concern_markers_by_owner.fetch(target, []).map do |fact|\n          @workspace_index.nested_type_name(fact.target, nesting: fact.nesting) || fact.target\n        end\n"
+  to: "        hooked = []\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "puts the extended module's methods on the including class"
+- why: "The hook's target is resolved with the hook's own nesting: a workspace-wide pick among every module nesting a `ClassMethods` gives one concern another's class methods."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "          @workspace_index.nested_type_name(fact.target, nesting: fact.nesting) || fact.target\n"
+  to: "          fact.target\n"
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "resolves the hook's target within the module that wrote it"
+- why: "An `extend` the hook names and this workspace cannot resolve is unidentified, not absent: read as absent, a gem mixin's class methods are all reported missing."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "            next [AncestorEntry.unidentified(origin: :extend, location: nil)] if name && !kind_of(name)\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/included_hook_spec.rb
+  example: "records the unresolvable target as one entry with no name and no tail"
+- why: "A call guarded by a receiverless `respond_to?` is one the author has already said may not be there; without the exemption the check reports the idiom written to be safe about exactly what it reports."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "          next if guarded_here?(guards, candidate)\n"
+  to: "          next if false\n"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "does not report a call the file guards with respond_to?"
+
+- why: "`#signatures_reloaded` actually clears the memo: it is the third input to a chain and the only one that changes without either index being written to."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "      def signatures_reloaded\n        @mutex.synchronize { @ancestors_memo.clear }\n      end\n"
+  to: "      def signatures_reloaded; end\n"
+  spec: spec/ovallsp/semantic/hierarchy_index_spec.rb
+  example: "reflects a signature environment that reloaded under it"
+- why: "The first index does not queue dependents: a file it has not seen has no previous declarations, so every cold summary read as a change and every quiet moment re-analysed every open document."
+  file: core/lib/ovallsp/server.rb
+  from: "      apply_file_summary(summary, queue_dependents: false)\n"
+  to: "      apply_file_summary(summary)\n"
+  spec: spec/ovallsp/server_dependent_refresh_spec.rb
+  example: "does not queue open documents for each file the first index reads"
+- why: "Ancestors and aliases are compared too: a superclass changed, an include removed or an alias deleted alters what a caller may call while every declaration stays identical."
+  file: core/lib/ovallsp/server.rb
+  from: "        previous_summary = @file_summaries[summary.uri]\n"
+  to: "        previous_summary = summary\n"
+  spec: spec/ovallsp/server_dependent_refresh_spec.rb
+  example: "republishes the caller when an include is removed"
+- why: "A missing previous summary has empty ancestor and alias sets, not unknown ones: read as nil the first index of any file read as a change."
+  file: core/lib/ovallsp/server.rb
+  from: "       (summary&.ancestor_facts || []).map { |fact| [fact.owner, fact.relation, fact.target] }.to_set,\n"
+  to: "       summary&.ancestor_facts&.map { |fact| [fact.owner, fact.relation, fact.target] }&.to_set,\n"
+  spec: spec/ovallsp/server_dependent_refresh_spec.rb
+  example: "does not republish every open file for an unrelated watched change"
+
+- why: "The gem index is an input to a chain and swapping it bumps no generation: without the clear, a chain computed before the Runtime Agent installed its index keeps an answer the gem index would have changed."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "          @gem_index = index\n          @ancestors_memo.clear\n"
+  to: "          @gem_index = index\n"
+  spec: spec/ovallsp/semantic/hierarchy_index_spec.rb
+  example: "reflects a gem index installed after a chain was computed"

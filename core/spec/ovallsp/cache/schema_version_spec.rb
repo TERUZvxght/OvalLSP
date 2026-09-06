@@ -43,11 +43,11 @@ RSpec.describe "the cache schema version and the shape it protects" do
 
   it "moves whenever a shape a FileSummary can hold does" do
     expect([Ovallsp::Cache::Key::SCHEMA_VERSION, reachable_shapes]).to eq(
-      [7,
+      [8,
        { FileSummary: %i[uri content_hash document_version declarations diagnostics source read_sequence
                          ancestor_facts alias_facts reference_candidates generated_method_facts
                          open_surface_owners module_function_names buffer_id
-                         pattern_bound_names],
+                         pattern_bound_names macro_call_ranges],
          Declaration: %i[symbol_id location visibility parameters origin body_source name_location],
          SymbolId: %i[kind owner name discriminator],
          Parameter: %i[name kind default_source],

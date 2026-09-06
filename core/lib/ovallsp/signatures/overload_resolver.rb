@@ -82,24 +82,43 @@ module Ovallsp
           block_arity_matches?(overload, block_given)
       end
 
+      # **A rest lifts the ceiling, not the floor.** Both of these returned
+      # `true` on the mere presence of a rest, so `(Integer, *String)`
+      # matched a call with no arguments and `(required: Integer,
+      # **String)` matched one with no keywords -- each then joined the
+      # union, and a call whose type is `Integer` was answered
+      # `Integer | String`. Ruby refuses both:
+      #
+      #   $ ruby -e '
+      #   def a(x, *rest); end
+      #   def b(required:, **rest); end
+      #   begin; a(); rescue ArgumentError => e; puts e.message; end
+      #   begin; b(); rescue ArgumentError => e; puts e.message; end
+      #   '
+      #   # => wrong number of arguments (given 0, expected 1+)
+      #   #    missing keyword: :required
+      #   # ruby 3.4.10
+      #
+      # So the minimum is computed first and the rest is applied after it.
+      # Found by the 2026-09-05 critical review, R14.
       def positional_arity_matches?(overload, count)
-        return true if overload.rest_positional
-
         # A trailing positional -- `(String, ?Integer, Symbol)` -- is
         # required too, so it raises the floor as well as the ceiling.
         min = overload.required_positionals.size + overload.trailing_positionals.size
+        return count >= min if overload.rest_positional
+
         max = min + overload.optional_positionals.size
         count.between?(min, max)
       end
 
       def keyword_arity_matches?(overload, keyword_names)
-        return true if overload.rest_keyword
+        required_present = overload.required_keywords.keys.all? { |k| keyword_names.include?(k) }
+        # `**rest` waives the *unknown-keyword* limit and nothing else.
+        return required_present if overload.rest_keyword
         return keyword_names.empty? if overload.required_keywords.empty? && overload.optional_keywords.empty?
 
         known = overload.required_keywords.keys + overload.optional_keywords.keys
-        required_present = overload.required_keywords.keys.all? { |k| keyword_names.include?(k) }
-        all_known = keyword_names.all? { |k| known.include?(k) }
-        required_present && all_known
+        required_present && keyword_names.all? { |k| known.include?(k) }
       end
 
       def block_arity_matches?(overload, block_given)

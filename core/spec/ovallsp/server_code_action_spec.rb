@@ -246,4 +246,51 @@ RSpec.describe "Ovallsp::Server textDocument/codeAction" do
     expect(apply(source, offered.first))
       .to eq("module Ns\n  class Baz\n    def known; end\n    def whatever\n    end\n  end\nend\nNs::Baz.new.whatever\n")
   end
+
+  # **A class made by assignment has no `end` to insert before, and the
+  # fix inserted there anyway.**
+  #
+  # `#insertion_for` aims at `range.end.character - 3`, which is exactly
+  # where a one-line class's `end` sits. The last three characters of
+  # `Widget = Class.new(Base)` are `se)`, so one click produced:
+  #
+  #     Widget = Class.new(Badef missing_thing
+  #     end
+  #     se)
+  #
+  # -- source the user did not write and Ruby cannot parse, and it lands
+  # in the *declaring* file, which need not be the file the diagnostic
+  # was reported on.
+  #
+  # `024.82` is why this is indexed as a class at all: `A = Class.new(B)`
+  # creates a class as surely as `class A < B` does. The diagnostic is
+  # right; only the fix was wrong. The rule that tells them apart is that
+  # a keyword class's location starts at `class`, strictly before its
+  # name, and an assignment's starts at the name itself.
+  {
+    "with a parent" => "class Base\nend\nWidget = Class.new(Base)\nWidget.new.missing_thing\n",
+    "with none" => "Widget = Class.new\nWidget.new.missing_thing\n",
+    "across lines" => "class Base\nend\nWidget = Class.new(\n  Base\n)\nWidget.new.missing_thing\n"
+  }.each do |label, source|
+    it "offers no definition fix for a class made by assignment #{label}" do
+      offered = actions(source).select { |a| a[:title].to_s.start_with?("Define") }
+
+      expect(offered).to be_empty,
+                         "offered #{offered.map { |a| a[:title] }.inspect}, and applying it does not parse"
+    end
+  end
+
+  # CONTROL. Without it, a fix that stopped being offered at all would
+  # pass every example above. The keyword form must keep working, and the
+  # result must still parse -- two of this file's earlier defects left a
+  # file that parsed and did not run, so parsing alone is not the test.
+  it "still offers it for the keyword form, and the result parses" do
+    source = "class Widget\n  def real; end\nend\nWidget.new.missing_thing\n"
+
+    offered = actions(source).select { |a| a[:title].to_s.start_with?("Define") }
+
+    expect(offered.length).to eq(1)
+    expect(apply(source, offered.first))
+      .to eq("class Widget\n  def real; end\n  def missing_thing\n  end\nend\nWidget.new.missing_thing\n")
+  end
 end

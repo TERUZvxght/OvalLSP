@@ -1,0 +1,27 @@
+{
+  "ruby": "3.4.10",
+  "ovallsp": "0.3.3",
+  "corpus": "net/http.rb",
+  "corpus_sha256": "fbc7b88fed01a64b54bbe0101def39fdbfb06213b0b8b6b71b5a39f82317e4da",
+  "mode": "safe",
+  "signatures": "core and stdlib, no project sig",
+  "runtime_agent": false,
+  "workspace_index": "single corpus file",
+  "samples": [
+    {
+      "parse_seconds": 0.0094,
+      "analyze_seconds": 7.7852,
+      "findings": {}
+    },
+    {
+      "parse_seconds": 0.0082,
+      "analyze_seconds": 7.7226,
+      "findings": {}
+    },
+    {
+      "parse_seconds": 0.0084,
+      "analyze_seconds": 7.7163,
+      "findings": {}
+    }
+  ]
+}
