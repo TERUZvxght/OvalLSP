@@ -67,94 +67,21 @@ changing a trigger file and touching none of its companions.
 
 ## The site is documentation
 
-`site/` is the public face and goes stale the same way the rest does. It
-is *not* generated from the Markdown docs, so nothing propagates on its
-own. Treat every page as another row above.
+`site/` is in this tree (17 HTML files) and is the public face. It is *not*
+generated from Markdown docs, so nothing propagates automatically. Every
+page exists in both English and Japanese.
 
-**It is in this tree**, as of 0.2.0, and the trigger table's site rows
-are followable directly — `git ls-files site` lists seventeen files.
-This paragraph said the opposite until 0.2.1, because the sentence was
-written while the site was still on a branch and the section two below
-was rewritten when it landed without anyone re-reading this one. A
-mandatory checklist that contradicts itself is worse than one that is
-merely stale: a contributor who believes this paragraph skips five rows
-and defers them to a list that no longer exists.
+### Site coverage and verification
 
-| Page | Mirrors |
-|---|---|
-| `site/index.html`, `site/ja/index.html` | README's pitch and capability summary |
-| `site/capabilities.html`, `site/ja/capabilities.html` | `docs/EXTENSION_CAPABILITIES.md` + README's matrix |
-| `site/roadmap.html`, `site/ja/roadmap.html` | `docs/ROADMAP.md` |
-| `site/getting-started.html`, `site/ja/getting-started.html` | README's install section, `docs/PUBLISHING.md` |
-| `site/security.html`, `site/ja/security.html` | `SECURITY.md` |
+| Site page | Mirrors / Source of truth | Checked by | Unchecked / Manual review |
+|---|---|---|---|
+| `site/index.html`, `site/ja/index.html` | README pitch, capability summary, version badge | `scripts/check_site_links.rb` (badge ⇔ `vscode/package.json`, capability table ⇔ README), `core/spec/meta/site_version_guard_spec.rb` | Prose wording, non-table layout, announcements |
+| `site/capabilities.html`, `site/ja/capabilities.html` | `docs/EXTENSION_CAPABILITIES.md` + README matrix | `scripts/check_site_links.rb` (row counts & order ⇔ README matrix) | Detailed capability descriptions (HTML vs Markdown) |
+| `site/roadmap.html`, `site/ja/roadmap.html` | `docs/ROADMAP.md` + `.ja.md` | `scripts/check_site_links.rb` (item count per version) | Sentence-level explanations |
+| `site/getting-started.html`, `site/ja/getting-started.html` | README install section, `docs/PUBLISHING.md` | `core/spec/meta/extension_identity_spec.rb` (extension ID) | Installation instructions prose |
+| `site/security.html`, `site/ja/security.html` | `SECURITY.md`, `vscode/PRIVACY.md` | `scripts/check_doc_triggers.rb` (`security-surface`, `privacy` rules) | Security prose and claims |
 
-Every page exists in both languages. Adding one to `site/` without its
-`site/ja/` counterpart leaves the site half-translated, which is worse
-than not having the page.
+English tables are verified by feature name against README; Japanese
+tables are verified positionally against `README.ja.md` and `index.html`.
+Any page or text outside table rows and counts must be verified by reading.
 
-## The site, and what still is not checked
-
-`site/` is on `main` as of 0.2.0. The list this section used to carry --
-eleven discrepancies found by an independent read of the branch -- is
-gone because every item on it is fixed, and the two that were about the
-capability matrix are now *machine*-checked rather than remembered:
-`scripts/check_site_links.rb` compares the site's matrix against
-README's, all three columns, on `capabilities.html` and on both index
-pages, and the version the index pages advertise against
-`vscode/package.json`. The deploy gates on it.
-
-English is compared by feature name, against the README. Japanese is
-compared *positionally* — `ja/capabilities.html` against `README.ja.md`,
-and `ja/index.html` against `index.html`, which is itself checked by
-name. The site's Japanese was translated independently of `README.ja.md`
-and the two disagree about wording that means the same thing
-(`Coreが起動し` against `Core が起動し`), so demanding identical prose
-would buy a stricter check by making the prose worse. What both copies
-really share is the order of the table.
-
-That `ja/index.html` clause is 0.2.1's correction and worth the sentence
-it costs: comparing it by name meant comparing it to nothing at all,
-because no row name matches (`ホバー: リテラル…` against
-`Hover: リテラル…`), and every row fell into a branch that was skipped
-for Japanese pages. Eight rows, none checked, on the Japanese landing
-page — while this document said the matrix was machine-checked. The
-mutation test that caught the English half was never run against the
-Japanese one; it is now, in both directions.
-
-The roadmap pages joined that list in 0.2.3, by item count per version
-against `ROADMAP.md` and `ROADMAP.ja.md`. It was added because the site
-had been a whole release behind on *two* separate moves — 0.2.1 sent
-`activeParameter` to 0.4.0 and brought `documentHighlight` and `@ivar`
-completion back to 0.3.0, and updated the Markdown and README each time
-and the site neither time. The check found both the moment it was
-written, which is the only endorsement it needs.
-
-Counting is deliberately all it does. The site's prose is written for the
-site and does not match the Markdown sentence for sentence, in either
-language; a count catches an item that never arrived, which is the whole
-failure mode observed so far.
-
-What these checks do *not* cover, and what therefore still has to be
-read: every page that is not `capabilities.html`, a roadmap page or an
-index page — and, on the pages they do cover, everything that is not a
-row or an item. The security page's two retracted claims, the
-requirements list, the patch definition and the 404 page's issue-tracker
-line were each found by a person reading, and nothing would have caught
-them. The version badge used to be on this list; it is machine-checked
-now, and 0.2.2 still shipped a stale one, because the check ran only when
-a site file changed — the wiring that lets it fire on a version bump
-arrived in 0.2.3, pinned by `site_version_guard_spec.rb`.
-
-## Where a check is missing
-
-Nothing compares `site/capabilities.html` against
-`docs/EXTENSION_CAPABILITIES.md` — the row counts are pinned to README's
-matrix, and the *descriptions* to nothing. Nothing compares `site/` to
-`site/ja/` as documents, only within the checks above. The honest reason
-is that the site is HTML and the sources are Markdown, so a comparison of
-prose needs a real extractor rather than a regex.
-
-Until one exists, the site rows above are enforced by reading this file —
-and every check that does exist was added *after* a reviewer found the
-drift it now catches, which is the argument for adding the next one
-before that happens again.

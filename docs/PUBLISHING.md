@@ -45,74 +45,22 @@ meaning of both.
 | minor (`0.**1**.5`) | A capability is added | A new row in the capability matrix, a `NOT YET` becoming ✅, a new setting or command |
 | major (`**0**.1.5`) | Something a user already relies on stops working | A setting or command removed or renamed, a supported environment tier dropped, an older protocol version no longer accepted, a ✅ row removed |
 
-**"Some earlier release", not "the previous one".** A patch may close a
-gap against any claim the product has ever made, however long ago.
-Written as *the previous* release until 0.2.14, and that reading made a
-patch nearly impossible to construct: the only way to find a defect in
-`0.N.0` is to be working on `0.N+1`, by which point the defect belongs
-to a release two behind. Bug fixes would have had nowhere to go. The
-version position answers *what kind of change is this*, not *which
-release introduced the problem*.
-
-Note what the patch row does **not** say: that nothing a user sees
-changes. A bug fix changes what a user sees — that is the whole point of
-it — and a rule reading otherwise would have no patch releases in it at
-all. 0.1.7 is the worked example: two false diagnostics stop appearing in
-every Rails project, which every user sees, and it is still a patch
-because the extension gained no capability it did not already claim.
-
-"Capability" means a row of
-[`docs/EXTENSION_CAPABILITIES.md`](EXTENSION_CAPABILITIES.md), which is
-also what README's matrix summarises. That is deliberate: the version
-number and the capability list move together, so "what changed" is
-answerable from the two of them without reading the diff.
+**"Some earlier release", not "the previous one".** A patch closes a
+gap against any claim the product has ever made, without adding new
+capabilities. A bug fix is user-visible by definition and remains a patch.
+"Capability" means a row of [`docs/EXTENSION_CAPABILITIES.md`](EXTENSION_CAPABILITIES.md).
+Adding a regression guard row (e.g. G10-G14) is a patch because it restores
+promised correctness rather than announcing a new capability.
 
 ### What a minor may ship unfinished
 
-**A minor release ships with no open, user-visible defect that has no
-`target:`.** Anything not fixed either names the release that will fix
-it, or becomes a `NOT YET` row — which says plainly that the extension
-is not claimed to do it.
+**A minor release ships with no open, user-visible defect lacking a `target:`.**
+Every open defect either names the release that will fix it or becomes a
+`NOT YET` row in the capability matrix (`024.153`). Planned capabilities name
+a specific minor release (`0.4.0`), never a range with `x`.
 
-This is the condition that makes the patch definition above coherent.
-That definition presupposes an earlier release claimed more than it did,
-and nothing constrained *how much* more — so the patch stream was
-structurally guaranteed rather than incidental, and each `0.N.0` was
-implicitly permitted to ship known-broken.
-
-Measured at 0.2.14, before the rule existed: **18 open, user-visible
-defects carried no target at all** (`024.153`). They were published as
-limitations with no release undertaking to fix them. That is the state
-this condition makes unreachable.
-
-It does not mean a minor is defect-free. Defects found *after* it ships
-are unavoidable, and section 0 is explicit that letting 1.0.0 recede in
-pursuit of accuracy is worse than the defects being pursued. What the
-condition rules out is shipping a capability while *knowingly* leaving
-an unscheduled, user-visible gap in it — the difference between a bug
-nobody had found and a bug nobody had assigned.
-
-It follows that a planned capability names a minor release exactly —
-`0.2.0`, not `0.2.x`. A range spelt with `x` puts the unknown in the
-patch position, which says the capability might arrive in a patch, and
-nothing ever does. Several capabilities may share one minor and ship
-together, as 0.1.6's five did.
-
-A row that records what the extension must **not** report is a regression
-guard, not a capability, and adding one is a patch. `docs/EXTENSION_CAPABILITIES.md`
-carries both kinds — G10 through G14 all read "nothing", because the way
-to state "this false positive does not come back" is to give it a row and
-an E2E example. Reading the rule mechanically as "any new row is a minor"
-would make every bug fix a minor release, which is the opposite of what
-the table above means by "a capability is added". The test is whether a
-user can do something they could not do before, not whether the document
-grew a line. (Written down after 0.1.7, whose whole content was removing
-one wrong report, needed the question settled.)
-
-The protocol version in the Extension/Core handshake is a separate
-integer and is not derived from this version string. Dropping an old
-protocol version from the accepted range is a major change; adding a new
-one is not.
+The protocol version in Extension/Core handshake is a separate integer;
+dropping an old version is major, adding one is minor.
 
 ### 0.x, and what 1.0.0 requires
 
@@ -286,59 +234,19 @@ vscode/scripts/release.sh
 ```
 
 The prompt at the end is deliberate and not skippable by a flag. What it
-protects is that **no publish happens without the project owner deciding
-that this release should ship** — every publish, not just the first. A
-standing approval baked into a script that runs unattended is what it
-exists to prevent.
+protects is that **no publish happens without authorized human decision**.
 
-It does *not* require the owner's own fingers on the keystroke. 0.2.3
-was published by an agent driving this script under the owner's explicit
-instruction, and that is within the rule as the owner restated it: the
-human gives the go-ahead, and the publish is then carried out reliably
-and safely; an agent in between is fine, and is better placed to read the
-build and smoke output for anomalies than a person scrolling it. What is
-*not* within the rule is a script — or an agent — reaching this prompt
-without a decision behind it, or reaching it and deciding for itself.
+### Publication authorization
 
-**A patch does not need the owner asked again.** Their standing position,
-given during 0.2.4: for a *patch* — no capability row moves, by the table
-above, and `ruby scripts/release.rb bump` refuses to cut one otherwise —
-the go-ahead is already granted, **provided the secret and privacy checks
-have actually been run and have passed**. Concretely that means
-`release.sh` reached its publish step, which refuses a `.vsce-pat.local`
-readable beyond its owner; the token appears nowhere in the run's output;
-gitleaks is clean — `gate` runs it over the whole history and the pre-push
-hook over the outgoing range; and `scripts/check_home_paths.rb` is clean in
-both modes, which `gate`'s preflight and the hook run between them. A minor
-or major release still asks, and so does a patch where any of those did
-not run.
+| Release type | Authorization requirement |
+|---|---|
+| Patch (`0.x.Y`) | **Standing delegation granted**, provided: (1) no capability row moves; (2) `vscode/.vsce-pat.local` permissions are owner-only; (3) gitleaks is clean over full history (`gate`) and outgoing commits (pre-push); (4) `scripts/check_home_paths.rb` passes on tree and messages; (5) `docs/RELEASE_CHECKLIST.md` gate is fully green. |
+| Minor / Major | Requires **explicit approval** from the project owner before answering `yes`. |
 
-That is the whole of the delegation; it is not a general licence. It
-exists because this class of change fixes what was already promised and
-adds nothing, so the decision can honestly be made in advance — and it is
-written here because a permission carried only in a conversation is one
-compaction away from being either forgotten or assumed larger than it is.
-
-So the obligation transfers rather than disappears. Whoever answers the
-prompt on the owner's behalf must have read what the script printed
-before it — the vendored-core check, the payload hash, `vsce ls --tree`,
-the semantic smoke, the SHA-256 — and must say what it found. 0.2.3's run
-is recorded in `docs/design/tasks/028-0.2.3-review-loop.md`, including
-the one thing worth reporting from it (nine `EBADENGINE` warnings, all
-`devDependencies` of `@vscode/vsce` and one of the test harness, none of
-them shipped). Whether run via this script or the bare `vsce
-publish` command directly, **this must not happen until all of the
-following are true:**
-
-- The Marketplace publisher ID has been confirmed by the project owner
-  (not guessed or assumed by whoever is preparing the release — a
-  publisher ID is a permanent Marketplace identifier), and the Extension
-  `name` in `package.json` (also permanent) likewise.
-- Marketplace publish credentials are available and configured (see
-  Credentials below).
-- The release candidate version has been confirmed by the project owner.
-- `docs/RELEASE_CHECKLIST.md`'s gate is fully green.
-- The project owner has explicitly said the release may be published.
+Whoever executes the prompt must review the output (`copy-core` vendoring,
+payload hash, `vsce ls --tree`, semantic smoke test, and SHA-256) and record
+it in the release task before proceeding. Initial publish and expanding platform
+targets follow the explicit approval path.
 
 Initial publish, and any later republishing under a new major scope
 (e.g. adding another platform target), follow this same approval

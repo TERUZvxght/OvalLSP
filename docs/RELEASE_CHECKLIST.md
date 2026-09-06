@@ -10,7 +10,7 @@ Task 022の受け入れ基準(「1.0 release checklistが全項目判定可能�
 
 | # | 項目 | 状態 | 根拠/備考 |
 |---|---|---|---|
-| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 3,437 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` / `test:integration`(source Core)/ `test:integration:packaged`(packaged Core)、いずれも0 failures — 後ろ2つは ci.yml の `vscode-integration` ジョブが両方実行し、どちらにも「examples が0件なら落とす」ガードが付いています。**core側の数は `core/spec/meta/documented_counts_spec.rb` が実行中のスイートと突き合わせます** — 890/895/1,776/1,833 と三度陳腐化し、「毎回測り直すこと」と書いた行自体がまた陳腐化したため、覚えておくのをやめて検査させることにした。vscode側の数はここから消した。増える数字を2箇所に書く理由がない |
+| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 3,438 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` / `test:integration`(source Core)/ `test:integration:packaged`(packaged Core)、いずれも0 failures — 後ろ2つは ci.yml の `vscode-integration` ジョブが両方実行し、どちらにも「examples が0件なら落とす」ガードが付いています。**core側の数は `core/spec/meta/documented_counts_spec.rb` が実行中のスイートと突き合わせます** — 890/895/1,776/1,833 と三度陳腐化し、「毎回測り直すこと」と書いた行自体がまた陳腐化したため、覚えておくのをやめて検査させることにした。vscode側の数はここから消した。増える数字を2箇所に書く理由がない |
 | 2 | compatibility matrix green or documented | ✅ 判定可能・文書化済み | `docs/SUPPORT_MATRIX.md`。実際に検証済みなのはmacOS(darwin-arm64) + Ruby 3.4(3.4.5/3.4.7/3.4.10) + Rails 8.1のみ — Ruby 3.3は`required_ruby_version >= 3.3`が拒否しないというだけで実際の動作確認実績ではないため、Task 023.1/023.4でsupported表から外した。VSIXのnative payloadはdarwin-arm64 + Ruby 3.4.x専用。それ以外では、0.2.1 以降は起動前に `prism`/`rbs` の有無を確認し、あればそちらで動かして Output に記録する。無ければ診断を出す(ADR-0005 と 0.2.1 の変更)。以前の版がRails 7.1を"supported"としていた誤りと、GitHub Actions未実行にもかかわらず"CIで実行"としていた誤りは修正済み |
 | 3 | benchmark regression within threshold | ✅ 判定可能・report-only | `docs/design/tasks/021-persistent-cache-notes.md`。1k/5kファイル規模での実測は未実施(既知のギャップとして記録済み) |
 | 4 | no known P0/P1 | ✅ 判定可能・green | Task 022.2(Bundler境界分離)は round 1-31 の独立レビューで収束、`docs/design/tasks/022.2-collector-tracepoint-state-machine.md`の最終release gateセクションに全不具合の重大度分類を記録。Packaging/Support Matrix整備(本ドキュメント更新の対象作業)自体の独立レビューは次アクション参照 |
@@ -126,41 +126,21 @@ Marketplace Preview公開)固有の22項目のゲートを設ける。各項目�
 
 ## Public distributionの状態
 
-**公開済み。** このリポジトリは https://github.com/TERUZvxght/OvalLSP
-として public(公開前に実メールアドレスの履歴除去とリポジトリ作り直しを
-実施 — 上の Task 023 ゲート #21)。`vscode/package.json` は repository
-URL を持ち(`private: true` フィールド自体は残っているが、これは npm
-への誤 publish を防ぐものであって Marketplace 公開とは無関係)、拡張
-機能は VS Code Marketplace の Pre-Release チャンネルへ公開済み — 公開の
-都度 `docs/RELEASE_ARTIFACTS.md` へ SHA-256 を記録する。GitHub Actions
-はすべての pull request と `main` への push で実行され、その初回実行と
-green は `docs/SUPPORT_MATRIX.md` の OS 行が記録している。
-
-この節は 0.2.2 まで「private のまま・git remote なし・公開未完了」と
-書いていた — 書かれた時点では真で、公開後に誰も読み直さなかった。
-0.2.3 のレビューループが SUPPORT_MATRIX との直接矛盾として検出し、
-現状へ書き直した。
+**公開済み。** リポジトリは https://github.com/TERUZvxght/OvalLSP として public。
+拡張機能は VS Code Marketplace の Pre-Release チャンネルへ公開済み。公開の
+都度 `docs/RELEASE_ARTIFACTS.md` へ SHA-256 を記録する。環境対応実績とCI検証状況は
+`docs/SUPPORT_MATRIX.md` を参照。
 
 ## 次のアクション(1.0リリース作業として別途必要)
 
-1. ~~SBOM生成~~ 完了、推移依存の完全化・VSIX実体との照合テストも完了
-2. ~~VSIXクリーンインストールの実機テスト~~ 完了、Semantic Hoverまで検証する
-   smokeへ拡張済み
-3. ~~Linux CI でのテストスイート実行~~ 完了 — `.github/workflows/ci.yml`
-   が `ubuntu-latest` で全 pull request と `main` への push のたびに実行され
-   green(`docs/SUPPORT_MATRIX.md` OS 行が記録)。残るのは Windows/Linux
-   **実機**での VSIX インストール検証(SUPPORT_MATRIX の既知のギャップ節の
-   まま)
-4. ~~Bundler境界分離(Task 022.2)の独立レビュー~~ 完了(round 1-31で収束)
-5. VS Code拡張の`deactivate()`が子プロセスを確実にkillすることを検証する
-   専用のE2Eテスト(CLI経由のアンインストールでは、ウィンドウリロードなしに
-   `deactivate()`自体が呼ばれないというVS Code側の制約が既知のため、
-   リリースノートでの案内を検討)
-6. 複数OS/CPU向けVSIX配布(ADR-0005で採用しなかった選択肢1/2)を将来
-   検討する場合は、`PLATFORM_MANIFEST.json`記録・起動前検証の仕組みを
-   そのまま拡張して使う
-7. `vscode-languageclient`の破壊的メジャーアップデート(9.x→10.x、npm audit
-   の残存3件を解消する)の計画的な追従
+未完了の1.0到達要件は、`docs/design/tasks/024-deferred-review-findings.md` の
+該当エントリ（`024.R1`〜`024.R10`）および `docs/SUPPORT_MATRIX.md` に集約・管理する:
+
+1. Windows / Linux 実機での VSIX インストール検証（`024.R4`、`SUPPORT_MATRIX`）
+2. 非 Rails（純粋 Ruby プロジェクト）の動作保証・テスト拡充（`024.R1`）
+3. VS Code 拡張の `deactivate()` による子プロセス終了保証の E2E 検証
+4. 複数 OS / CPU 向け VSIX 配布（ADR-0005 代替案、`PLATFORM_MANIFEST.json` 拡張）
+5. `vscode-languageclient` 破壊的アップデート（9.x → 10.x）への追従
 
 ## Workspace Trust の実機検証手順(0.2.4)
 

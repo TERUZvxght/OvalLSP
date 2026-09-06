@@ -32,6 +32,7 @@ module Ovallsp
     #   `Diagnostics::Engine` declines to judge argument counts against
     #   one of those, since the workspace did not state it).
     MethodCandidate = Data.define(:symbol_id, :declarations, :owner, :visibility, :lookup_rank, :conditional, :origin)
+    CompletionCandidate = Data.define(:name, :parameters)
 
     # Resolves method-call candidates and completion lists from a receiver
     # Types value, combining Semantic::HierarchyIndex (ancestor order) with
@@ -595,47 +596,45 @@ module Ovallsp
                 .sort_by(&:lookup_rank)
       end
 
+      OFFERABLE_PARAMETER_KINDS = %i[required optional keyword keyword_optional].freeze
+      KEYWORD_PARAMETER_KINDS = %i[keyword keyword_optional].freeze
+
+      def extract_parameters(declaration)
+        return [] unless declaration
+
+        Array(declaration.parameters).filter_map do |parameter|
+          next unless OFFERABLE_PARAMETER_KINDS.include?(parameter.kind)
+
+          [parameter.name, KEYWORD_PARAMETER_KINDS.include?(parameter.kind)]
+        end
+      end
+
       def names_for_type(nominal, prefix, context)
         singleton = context[:singleton] == true
         explicit_receiver = context[:implicit_self] != true
         entries = @hierarchy_index.ancestors(nominal.name, singleton: singleton)
 
-        seen = Set.new
-        entries.each_with_object([]) do |entry, names|
-          # The same refusal `#build_candidate` makes, for the same
-          # reason, and it was missing here. A nameless entry is a parent
-          # `HierarchyIndex` could not identify; `nil` is also the owner a
-          # *top-level* `def` is indexed under, so asking it for members
-          # answered with every top-level method in the workspace --
-          # offered as completions on a class that has none of them.
-          #
-          # Found by an external review reading the two consumers against
-          # each other: one had sealed this representation locally and the
-          # other had not. The durable answer is that an unresolved
-          # hierarchy edge should not be expressible as an owner at all
-          # (`024.80`); this is the guard until it is not.
+        seen = {}
+        entries.each do |entry|
           next unless entry.identified?
 
           kind = symbol_kind_for(entry, singleton)
           method_names_for_owner(entry.name, kind).each do |name|
             next unless name.start_with?(prefix)
-            next if seen.include?(name)
+            next if seen.key?(name)
 
-            visibility = visibility_of(entry.name, kind, name)
-            # **Protected as well as private.** `Prot.new.guarded` raises
-            # exactly as a private call does, and only private was
-            # excluded -- a 0.2.8 review round measured the cost by asking
-            # a booted application `respond_to?` for every label offered.
-            # Protected is the one visibility that depends on where the
-            # call is written rather than only on the declaration, which
-            # is why it is filtered on the explicit-receiver branch and
-            # left alone for an implicit self.
+            decl = declared_method(entry.name, kind, name)
+            visibility = decl&.visibility || alias_visibility_of(entry.name, kind, name)
             next if explicit_receiver && %i[private protected].include?(visibility)
 
-            seen << name
-            names << name
+            underlying = decl || alias_declaration_of(entry.name, kind, name)
+            seen[name] = CompletionCandidate.new(
+              name: name,
+              parameters: extract_parameters(underlying)
+            )
           end
         end
+        seen.values
       end
 
       # Declared names *and* the aliases that point at them. `#resolve`
@@ -654,10 +653,22 @@ module Ovallsp
         declared_visibility(owner, kind, name) || alias_visibility_of(owner, kind, name)
       end
 
-      def declared_visibility(owner, kind, name)
+      def declared_method(owner, kind, name)
         @workspace_index.declarations_with_uri(
           Index::SymbolId.new(kind: kind, owner: owner, name: name, discriminator: nil)
-        ).first&.last&.visibility
+        ).first&.last
+      end
+
+      def declared_visibility(owner, kind, name)
+        declared_method(owner, kind, name)&.visibility
+      end
+
+      def alias_declaration_of(owner, kind, name)
+        singleton = kind == :singleton_method
+        fact = @hierarchy_index.aliases(owner).find { |f| f.singleton == singleton && f.new_name == name }
+        return nil unless fact
+
+        declared_method(owner, kind, fact.old_name)
       end
 
       # The alias's own recorded visibility if `private :aka` gave it one,
@@ -692,10 +703,26 @@ module Ovallsp
 
       def merge_names(per_type_names)
         total = per_type_names.size
-        all_names = per_type_names.flatten.uniq
+        by_name = {}
+        per_type_names.each do |list|
+          list.each do |item|
+            name = item.respond_to?(:name) ? item.name : (item.is_a?(Hash) ? item[:name] : item)
+            params = item.respond_to?(:parameters) ? item.parameters : (item.is_a?(Hash) ? item[:parameters] : [])
+            by_name[name] ||= { name: name, parameters: params || [] }
+          end
+        end
 
-        all_names.map { |name| { name: name, conditional: per_type_names.count { |names| names.include?(name) } < total } }
-                 .sort_by { |result| [result[:conditional] ? 1 : 0, result[:name]] }
+        by_name.keys.map do |name|
+          info = by_name[name]
+          count = per_type_names.count do |list|
+            list.any? { |item| (item.respond_to?(:name) ? item.name : (item.is_a?(Hash) ? item[:name] : item)) == name }
+          end
+          {
+            name: name,
+            conditional: count < total,
+            parameters: info[:parameters]
+          }
+        end.sort_by { |result| [result[:conditional] ? 1 : 0, result[:name]] }
       end
     end
   end

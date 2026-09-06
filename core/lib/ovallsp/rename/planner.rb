@@ -495,7 +495,7 @@ module Ovallsp
         # `SymbolId#initialize` qualifies every owner, so the recorded
         # value is `::<uri>\0<owner>#<scope>` and the leading `::` comes
         # off before the uri is readable.
-        uri = symbol_id.owner.to_s.delete_prefix("::").split("\u0000", 2).first
+        uri = Index::SymbolId.bare_name(symbol_id.owner).split("\u0000", 2).first
         return [] if uri.to_s.empty?
 
         summary = @workspace_index.summary_for_uri(uri)

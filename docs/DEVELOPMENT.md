@@ -200,7 +200,7 @@ edit with a reason.
 entries, and it opens and closes them:
 
     ruby scripts/issues.rb intake                     # the untriaged list, numbered
-    ruby scripts/issues.rb promote <n> --kind K --target V \
+    ruby scripts/issues.rb promote <n> --expect-title "..." --kind K --target V \
         --area A --direction D --user-visible yes|no [--note "…"]
     ruby scripts/issues.rb close 024.N --released-in V [--drop-paragraphs]
 

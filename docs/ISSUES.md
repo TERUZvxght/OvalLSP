@@ -48,7 +48,7 @@ things, and the honest order is:
    them.
 
 **Those four decisions are the command's arguments.** Once they are
-made, `ruby scripts/issues.rb promote <n> --kind K --target V --area A
+made, `ruby scripts/issues.rb promote <n> --expect-title "..." --kind K --target V --area A
 --direction D --user-visible yes|no [--note "…"]` takes the n-th item
 out of intake — `ruby scripts/issues.rb intake` numbers them —
 allocates a number never used before, writes the entry in the legend's

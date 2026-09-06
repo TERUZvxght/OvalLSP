@@ -61,7 +61,7 @@ CHECKS = [
   Check.new(
     name: "full suite",
     why: "every example once, with an independent census and aggregate counts check",
-    dir: ROOT, command: %w[ruby scripts/test_runner.rb run --tier full]
+    dir: ROOT, command: %w[ruby scripts/test_runner.rb run --tier full --workers 2]
   ),
   Check.new(
     name: "full suite report verified",

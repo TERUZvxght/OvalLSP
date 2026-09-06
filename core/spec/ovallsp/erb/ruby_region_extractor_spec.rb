@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "prism"
 require_relative "../../unit_spec_helper"
 require_relative "../../../lib/ovallsp/erb/ruby_region_extractor"
 require_relative "../../../lib/ovallsp/index/source_location"
