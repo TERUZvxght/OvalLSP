@@ -1,5 +1,16 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/cache/key"
+require_relative "../../../lib/ovallsp/index/file_summary"
+require_relative "../../../lib/ovallsp/index/declaration"
+require_relative "../../../lib/ovallsp/index/symbol_id"
+require_relative "../../../lib/ovallsp/index/parameter"
+require_relative "../../../lib/ovallsp/index/ancestor_fact"
+require_relative "../../../lib/ovallsp/index/alias_fact"
+require_relative "../../../lib/ovallsp/index/reference_candidate"
+require_relative "../../../lib/ovallsp/index/generated_method_fact"
+
 # `Cache::Key::SCHEMA_VERSION`'s own doc says to bump it "whenever a
 # FileSummary-reachable shape changes in a way an old cached entry
 # couldn't safely be `Marshal.load`ed back as (a renamed/removed Data

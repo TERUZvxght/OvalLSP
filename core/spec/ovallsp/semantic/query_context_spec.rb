@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/semantic/query_context"
+
 RSpec.describe Ovallsp::Semantic::QueryContext do
   def context(**overrides)
     described_class.new(uri: "file:///a.rb", position: { line: 0, character: 0 }, **overrides)

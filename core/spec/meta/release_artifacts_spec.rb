@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "shellwords"
+require_relative "../../../scripts/repo_files"
 
 # `docs/RELEASE_ARTIFACTS.md` records the SHA-256 of every published VSIX.
 #
@@ -28,7 +29,7 @@ RSpec.describe "release artifacts" do
   def unpublished = document.scan(/^\| (\d+\.\d+\.\d+) \| (?!`)/).flatten
 
   def tags
-    `cd #{REPO_ROOT.shellescape} && git tag --list 'v*'`.split("\n").map { |tag| tag.delete_prefix("v") }
+    RepoFiles.capture(REPO_ROOT, %w[tag --list v*]).split("\n").map { |tag| tag.delete_prefix("v") }
   end
 
   # A checkout with no tags cannot answer either question, and answering

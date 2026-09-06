@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/erb/ruby_region_extractor"
+require_relative "../../../lib/ovallsp/index/source_location"
+require_relative "../../../lib/ovallsp/text_document"
+
 RSpec.describe Ovallsp::Erb::RubyRegionExtractor do
   describe ".extract_ruby_source" do
     it "keeps the same length and line count as the original template" do

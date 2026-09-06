@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/io/framed_reader"
+
 RSpec.describe Ovallsp::IO::FramedReader do
   # Simulates a real stdio pipe: each #read call may return fewer bytes
   # than requested, split at arbitrary byte boundaries (including inside

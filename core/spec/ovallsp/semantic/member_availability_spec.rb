@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/semantic/member_availability"
+
 # `MethodResolver#resolve` answers a list, and an empty list means two
 # different things: the method is not there, or the receiver's members
 # could not be enumerated at all. `resolve`'s own second line is

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
-require "spec_helper"
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/diagnostics/semantic_context"
+
 
 # Two readers of `context.method_resolver` each carried their own
 # `return unless` -- and 0.2.9 wrote one of them twice in a row, which is

@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../unit_spec_helper"
+require_relative "../../lib/ovallsp/uri_util"
+
 RSpec.describe Ovallsp::UriUtil do
   describe ".from_path / .to_path round-trip (Task 008.5)" do
     it "round-trips a plain ASCII path" do

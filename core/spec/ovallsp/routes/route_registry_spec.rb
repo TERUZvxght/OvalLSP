@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/routes/route_registry"
+
 RSpec.describe Ovallsp::Routes::RouteRegistry do
   def fact(name:, verb:, action:, controller: "posts", required: [], optional: ["format"], location: nil)
     {

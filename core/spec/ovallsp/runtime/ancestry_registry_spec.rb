@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/runtime/ancestry_registry"
+
 RSpec.describe Ovallsp::Runtime::AncestryRegistry do
   subject(:registry) { described_class.new }
 

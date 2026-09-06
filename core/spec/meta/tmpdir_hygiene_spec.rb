@@ -11,7 +11,7 @@
 # this project's own machine before the fix: 301 stale `ovallsp-*`
 # directories in TMPDIR, growing by roughly five per full suite run.
 #
-# `ExampleTmpdir#example_tmpdir` (spec/spec_helper.rb) is the fix -- the
+# `ExampleTmpdir#example_tmpdir` (spec/test_hygiene.rb) is the fix -- the
 # block form's guarantee, restored without the block, with RSpec's own
 # `after` hook as the `ensure`. This example is what stops it decaying
 # back: a blockless `Dir.mktmpdir` leaves no failing test behind, only a
@@ -57,10 +57,10 @@ RSpec.describe "spec suite tmpdir hygiene" do
     end
   end
 
-  it "never calls Dir.mktmpdir without a block (spec_helper's example_tmpdir instead)" do
-    # `spec_helper.rb` defines the replacement, so it is the one file that
+  it "never calls Dir.mktmpdir without a block (test_hygiene's example_tmpdir instead)" do
+    # `test_hygiene.rb` defines the replacement, so it is the one file that
     # legitimately makes the call.
-    exempt = [File.join(spec_root, "spec_helper.rb")]
+    exempt = [File.join(spec_root, "test_hygiene.rb")]
 
     offenders = Dir.glob(File.join(spec_root, "**", "*.rb")).sort.flat_map do |path|
       next [] if exempt.include?(path)
@@ -80,7 +80,7 @@ RSpec.describe "spec suite tmpdir hygiene" do
 
     expect(offenders).to be_empty, lambda {
       "Dir.mktmpdir without a block never removes the directory it creates. Use " \
-        "`example_tmpdir(\"prefix\")` (spec/spec_helper.rb), which is removed after the example.\n" +
+        "`example_tmpdir(\"prefix\")` (spec/test_hygiene.rb), which is removed after the example.\n" +
         offenders.join("\n")
     }
   end

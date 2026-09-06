@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../unit_spec_helper"
+require_relative "../../lib/ovallsp/documentation"
+
 RSpec.describe Ovallsp::Documentation do
   def above(text, line) = described_class.above(text, line)
 

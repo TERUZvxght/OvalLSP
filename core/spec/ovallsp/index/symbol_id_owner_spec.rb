@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/index/symbol_id"
+
 # `SymbolId` equality is exact, and its `owner` arrives in two forms
 # (0.1.11).
 #

@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/observation/call_stack_machine"
+
 # Pins CallStackMachine's own invariants (I1-I8 in
 # docs/design/tasks/022.2-collector-tracepoint-state-machine.md) against
 # synthetic event sequences -- no TracePoint, no real Ruby call shapes, no

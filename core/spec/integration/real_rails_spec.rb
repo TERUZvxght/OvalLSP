@@ -18,112 +18,39 @@ require "tmpdir"
 # already happen to be present. CI that can't afford real Rails boot time
 # can exclude it: `bundle exec rspec --tag ~real_rails`.
 RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
-  FIXTURE_ROOT = File.expand_path("../fixtures/rails_real", __dir__)
-  ROUTES_FILE = File.join(FIXTURE_ROOT, "config/routes.rb")
-  MODELS_DIR = File.join(FIXTURE_ROOT, "app/models")
-  DB_FILE = File.join(FIXTURE_ROOT, "db/rails_real.sqlite3")
+  extend RealRailsFixture
+
   BOOT_SCRIPT = File.expand_path("../../lib/ovallsp/runtime_agent/boot.rb", __dir__)
-
-  # Deliberately isolated from Core's own Bundler context via
-  # BundleEnvironment (see its own docs): this fixture is a genuinely
-  # separate Bundle graph from Core's, and Core's own BUNDLE_GEMFILE/
-  # BUNDLE_PATH/BUNDLE_APP_CONFIG must never leak into the fixture's own
-  # `bundle lock`/`bundle install` any more than they may leak into the
-  # Runtime Agent process #boot_manager below eventually spawns via
-  # RailsBootstrap.start (which applies the exact same isolation). Found
-  # necessary by a review-bundle script that runs Core's own test suite
-  # against a temporary, isolated BUNDLE_PATH to keep Core's own gem
-  # install self-contained: without this, that isolation leaked into
-  # *this* fixture's own bundle operations too (system() inherits the
-  # parent process' ENV by default, same trap Process.spawn has), making
-  # `bundle install --local` here fail to resolve rails/sqlite3/
-  # activerecord from the machine's actual system gem install and this
-  # entire suite spuriously report itself unavailable -- or, worse, only
-  # partially unavailable in a way that let stale/wrong gems resolve.
-  def self.fixture_bundle_env
-    Ovallsp::BundleEnvironment.for_workspace(FIXTURE_ROOT)
-  end
-
-  # Whether rails/sqlite3 are installed on this *machine* at all --
-  # answered WITHOUT going through BundleEnvironment, deliberately.
-  #
-  # Found by an independent review (round 3): #real_rails_available? below
-  # gates this entire suite on `bundle lock/install --local` succeeding
-  # *through BundleEnvironment* -- i.e. its precondition is the very code
-  # under test. A regression in BundleEnvironment.base therefore made the
-  # whole real-Rails suite report itself "unavailable" and silently SKIP
-  # (0 failures, everything pending) under exactly the isolated-BUNDLE_PATH
-  # invocation this Task 022.2 fix exists to make work -- turning a real
-  # regression into a green run, the same "silently provides no coverage"
-  # shape round 1 already caught for a different mechanism. Verified by
-  # neutering `BundleEnvironment.base` to return `{}`: under a plain
-  # `bundle exec rspec` the suite still failed loudly, but under
-  # `BUNDLE_PATH=<tmp> bundle exec rspec` all 15 examples went pending.
-  #
-  # The pre-Bundler environment is reconstructed from Bundler's own
-  # `BUNDLER_ORIG_*` snapshot (present whenever this suite runs under
-  # `bundle exec`, which is always) rather than from BundleEnvironment's
-  # heuristics, so this probe is genuinely independent of the module it
-  # guards. Restoring GEM_HOME/GEM_PATH from that snapshot rather than
-  # blindly nil'ing them also keeps the probe correct on chruby/RVM, whose
-  # own GEM_HOME is not bundle-exec-derived (the round-1 finding).
-  def self.machine_has_real_rails_gems?
-    return @machine_gems if defined?(@machine_gems)
-
-    intentionally_nil = "BUNDLER_ENVIRONMENT_PRESERVER_INTENTIONALLY_NIL"
-    env = {}
-    ENV.each_key do |key|
-      env[key] = nil if key.start_with?("BUNDLE_", "BUNDLER_") || %w[RUBYOPT RUBYLIB].include?(key)
-    end
-    %w[GEM_HOME GEM_PATH PATH].each do |key|
-      original = ENV["BUNDLER_ORIG_#{key}"]
-      env[key] = original == intentionally_nil ? nil : original if original
-    end
-
-    probe = 'exit(%w[rails sqlite3].all? { |g| !Gem::Specification.find_all_by_name(g).empty? } ? 0 : 1)'
-    @machine_gems = system(env, RbConfig.ruby, "-e", probe, out: File::NULL, err: File::NULL)
-  end
-
-  def self.real_rails_available?
-    unless defined?(@available)
-      @available = Dir.chdir(FIXTURE_ROOT) do
-        env = fixture_bundle_env
-        locked = system(env, "bundle", "lock", "--local", out: File::NULL, err: File::NULL)
-        locked && system(env, "bundle", "install", "--local", out: File::NULL, err: File::NULL)
-      end
-      # The machine genuinely has the gems, yet resolving them through
-      # BundleEnvironment's spawn env failed -- that is a BundleEnvironment
-      # (Task 022.2) regression, not an unavailable-fixture situation.
-      # Memoized as an error (rather than raised inline) so it is re-raised
-      # for *every* example rather than only whichever one happened to run
-      # first under `--order random`.
-      @availability_error =
-        if @available || !machine_has_real_rails_gems?
-          nil
-        else
-          "rails/sqlite3 ARE installed on this machine, but `bundle lock/install --local` failed for " \
-          "#{FIXTURE_ROOT} under BundleEnvironment.for_workspace's env -- Core's own Bundler context is " \
-          "leaking into the fixture's separate Bundle graph (Task 022.2 regression). Reproduce with: " \
-          "d=$(mktemp -d); BUNDLE_PATH=$d bundle install && BUNDLE_PATH=$d bundle exec rspec #{__FILE__} " \
-          "(the `bundle install` is required -- an empty BUNDLE_PATH would fail for the unrelated reason " \
-          "that Core's own gems aren't there yet)"
-        end
-    end
-
-    raise @availability_error if @availability_error
-
-    @available
-  end
+  def routes_file = File.join(self.class.workspace, "config/routes.rb")
+  def models_dir = File.join(self.class.workspace, "app/models")
+  def db_file = File.join(self.class.workspace, "db/rails_real.sqlite3")
 
   before do
-    skip "Rails/sqlite3 not available as local gems; skipping real-Rails integration suite" unless self.class.real_rails_available?
+    skip "Rails/sqlite3 not available as local gems; skipping real-Rails integration suite" unless self.class.available?
   end
 
   after do
-    File.delete(DB_FILE) if File.exist?(DB_FILE)
+    File.delete(db_file) if File.exist?(db_file)
   end
 
   let(:logger_messages) { [] }
+
+  it "confines the schema to the disposable database despite inherited database URLs" do
+    Dir.mktmpdir("ovallsp-database-control") do |dir|
+      outside = File.join(dir, "outside.sqlite3")
+      env = self.class.fixture_bundle_env.merge(
+        "DATABASE_URL" => "sqlite3:#{outside}", "PRIMARY_DATABASE_URL" => "sqlite3:#{outside}",
+        "RAILS_ENV" => "production", "RACK_ENV" => "production"
+      )
+      program = 'require_relative "config/environment"; puts ActiveRecord::Base.connection_db_config.database'
+      out, _err, status = Open3.capture3(env, "bundle", "exec", "ruby", "-e", program,
+                                       chdir: self.class.workspace)
+      expect(status.success?).to be(true)
+      expect(out.lines.last.strip).to eq(db_file)
+      expect(File.exist?(outside)).to be(false)
+    end
+  end
+
   let(:logger) do
     double = Object.new
     messages = logger_messages
@@ -144,7 +71,7 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
     route_registry = Ovallsp::Routes::RouteRegistry.new
     model_registry = Ovallsp::Models::ModelRegistry.new
     Ovallsp::RailsBootstrap.start(
-      root: FIXTURE_ROOT, logger: logger, route_registry: route_registry, model_registry: model_registry,
+      root: self.class.workspace, logger: logger, route_registry: route_registry, model_registry: model_registry,
       hello_timeout: hello_timeout
     )
   end
@@ -331,7 +258,7 @@ end
     expect(post_index).not_to be_nil
 
     location = post_index[:sourceLocation]
-    expect(location[:path]).to eq(ROUTES_FILE)
+    expect(location[:path]).to eq(routes_file)
     expect(location[:path]).to start_with("/") # absolute
     expect(location[:line]).to be_a(Integer)
     expect(location[:line]).to be >= 0 # normalized from Rails' 1-based line to LSP's 0-based
@@ -340,7 +267,7 @@ end
     # doesn't necessarily land on the `resources :posts` line itself) --
     # what Core actually depends on is that it's *some* valid 0-based
     # line inside routes.rb, not any specific number.
-    routes_lines = File.readlines(ROUTES_FILE)
+    routes_lines = File.readlines(routes_file)
     expect(location[:line]).to be < routes_lines.size
   ensure
     @manager&.stop
@@ -357,7 +284,7 @@ end
     url_helper = registry.find_by_method_name("post_url")
 
     expect(path_helper).to equal(url_helper)
-    expect(path_helper.source_location[:path]).to eq(ROUTES_FILE)
+    expect(path_helper.source_location[:path]).to eq(routes_file)
   ensure
     @manager&.stop
   end
@@ -409,7 +336,7 @@ end
   # reloader unloading/reloading autoloaded app/models constants.
   it "picks up a new model and drops a removed one after agent/reload (models)" do
     @manager = boot_manager
-    tag_file = File.join(MODELS_DIR, "tag.rb")
+    tag_file = File.join(models_dir, "tag.rb")
 
     begin
       File.write(tag_file, "class Tag < ApplicationRecord\nend\n")
@@ -434,24 +361,24 @@ end
   # 10. A route added after boot becomes visible after agent/reload
   # (routes), and one removed disappears -- real Rails' reload_routes!.
   it "picks up a new route and drops a removed one after agent/reload (routes)" do
-    original_routes = File.read(ROUTES_FILE)
+    original_routes = File.read(routes_file)
     @manager = boot_manager
 
     begin
-      File.write(ROUTES_FILE, "Rails.application.routes.draw do\n  resources :posts\n  resources :companies\nend\n")
+      File.write(routes_file, "Rails.application.routes.draw do\n  resources :posts\n  resources :companies\nend\n")
       reload_result = @manager.reload(sections: ["routes"])
       expect(reload_result[:changedSections]).to eq(["routes"])
 
       routes_after_add = @manager.fetch_snapshot(sections: ["routes"])[:routes]
       expect(routes_after_add.map { |r| r[:name] }).to include("companies")
 
-      File.write(ROUTES_FILE, original_routes)
+      File.write(routes_file, original_routes)
       @manager.reload(sections: ["routes"])
 
       routes_after_remove = @manager.fetch_snapshot(sections: ["routes"])[:routes]
       expect(routes_after_remove.map { |r| r[:name] }).not_to include("companies")
     ensure
-      File.write(ROUTES_FILE, original_routes)
+      File.write(routes_file, original_routes)
     end
   ensure
     @manager&.stop
@@ -597,7 +524,7 @@ end
         logger.define_singleton_method(:error) { |*| }
 
         manager = Ovallsp::RailsBootstrap.start(
-          root: #{FIXTURE_ROOT.inspect}, logger: logger,
+          root: #{workspace.inspect}, logger: logger,
           route_registry: Ovallsp::Routes::RouteRegistry.new,
           model_registry: Ovallsp::Models::ModelRegistry.new,
           hello_timeout: 30
@@ -726,7 +653,7 @@ end
     # with Ruby, only ever pulled in by Core's own Gemfile as a
     # development dependency).
     it "resolves a workspace-only gem the Agent needs (sqlite3) but not a Core-only gem (rspec-core) (regression D/E)" do
-      env = Ovallsp::BundleEnvironment.for_workspace(FIXTURE_ROOT)
+      env = Ovallsp::BundleEnvironment.for_workspace(self.class.workspace)
       probe = <<~RUBY
         begin
           require "sqlite3"
@@ -744,7 +671,7 @@ end
       RUBY
 
       stdout, _stderr, status = Open3.capture3(
-        env, "bundle", "exec", "ruby", "-e", probe, chdir: FIXTURE_ROOT
+        env, "bundle", "exec", "ruby", "-e", probe, chdir: self.class.workspace
       )
 
       expect(status).to be_success

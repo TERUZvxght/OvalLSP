@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../unit_spec_helper"
+require_relative "../../lib/ovallsp/redactor"
+
 RSpec.describe Ovallsp::Redactor do
   describe ".redact" do
     it "redacts a password= assignment" do

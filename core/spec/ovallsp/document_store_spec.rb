@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "../unit_spec_helper"
+require_relative "../../lib/ovallsp/text_document"
+require_relative "../../lib/ovallsp/document_store"
+
 RSpec.describe Ovallsp::DocumentStore do
   subject(:store) { described_class.new }
 

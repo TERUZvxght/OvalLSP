@@ -1,0 +1,1766 @@
+{
+  "spec/e2e/capabilities_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "rails",
+      "sqlite3"
+    ],
+    "parallel": false
+  },
+  "spec/e2e/capability_coverage_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/e2e/plain_ruby_workspace_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process"
+    ],
+    "parallel": true
+  },
+  "spec/integration/agent_lifecycle_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process",
+      "shared rails_minimal fixture"
+    ],
+    "parallel": false
+  },
+  "spec/integration/real_rails_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "rails",
+      "sqlite3"
+    ],
+    "parallel": false
+  },
+  "spec/integration/stdio_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process"
+    ],
+    "parallel": true
+  },
+  "spec/meta/agents_card_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/analysis_stack_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/arity_recall_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/bodyless_headings_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/cache_isolation_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/cache_removal_containment_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/changelog_parity_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/changelog_shape_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/ci_skip_guard_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/ci_status_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/client_behaviour_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "node_modules"
+    ],
+    "parallel": false
+  },
+  "spec/meta/corpus_diagnostics_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/deferred_findings_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/design_doc_drift_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/doc_links_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/doc_triggers_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/documented_counts_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/duplicate_headings_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/extension_identity_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/file_uri_construction_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/home_path_guard_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/interpreter_sessions_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/issue_index_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/issues_tool_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/measured_claims_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/no_wall_clock_thresholds_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/pinned_mutations_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/prepush_hook_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/privacy_parity_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/protocol_doc_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/readme_parity_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/record_corrections_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/register_split_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/release_artifacts_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/release_flow_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/release_gate_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/release_pointers_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/release_script_guard_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/review_round_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/roadmap_parity_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/sbom_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/script_encoding_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/security_parity_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/site_version_guard_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/spawning_test_timeouts_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/spec_constants_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/suites_ran_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/supported_versions_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/swallowed_failures_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/task_findings_section_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/test_runner_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/tmpdir_hygiene_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/untracked_visibility_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/watched_extensions_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/meta/workspace_index_cost_spec.rb": {
+    "tier": "meta",
+    "resources": [
+      "repository"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/agent_process_manager_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process",
+      "shared rails_minimal fixture"
+    ],
+    "parallel": false
+  },
+  "spec/ovallsp/agent_supervisor_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/attr_accessor_declarations_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/background_tasks_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/benchmark/cold_index_benchmark_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/bin_vendor_bootstrap_wiring_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/build_manifest_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/bundle_environment_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/cache/key_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/cache/schema_version_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/cache/store_containment_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/cache/store_permissions_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/cache/store_retrofit_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/cache/store_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/cache/sweep_cost_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/child_process_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/class_body_ivar_side_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/class_by_assignment_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/cold_indexer_read_order_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/cold_indexer_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/argument_count_wording_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/argument_type_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/arity_message_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/attr_in_singleton_def_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/bare_name_argument_type_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/class_body_macro_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/class_creating_block_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/constant_value_type_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/def_on_constant_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/define_method_arity_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/define_method_names_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/dynamic_ancestor_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/engine_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/eval_on_constant_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/failing_enumeration_declines_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/forward_alias_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/included_hook_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/mid_edit_call_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/namespaced_argument_type_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/nested_alias_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/nested_bare_name_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/object_receiver_decline_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/object_signature_gap_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/object_singleton_chain_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/open_surface_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/project_signature_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/reopened_foreign_class_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/rooted_receiver_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/self_receiver_bound_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/semantic_context_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/shadowed_literal_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/unbuildable_signature_chain_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/unidentified_ancestor_argument_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/union_receiver_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/unread_include_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/unreadable_ancestor_ivars_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/unreadable_macro_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/view_ivar_receiver_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/visibility_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/workspace_constant_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/document_store_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/documentation_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/erb/ruby_region_extractor_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/index/document_symbol_builder_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/index/parameter_label_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/index/source_location_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/index/symbol_id_memo_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/index/symbol_id_owner_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/index/top_level_def_owner_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/index/type_name_resolution_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/io/framed_reader_malformed_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/io/framed_reader_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/io/framed_writer_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/local_inferencer_constant_ladder_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/local_inferencer_or_write_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/local_inferencer_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/logger_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/macro_declaration_ranges_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/models/model_registry_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/models/root_scoped_model_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/observation/call_stack_machine_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/observation/collector_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/observation/fingerprint_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/observation/harness_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/observation/overhead_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/observation/runner_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/observation/store_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/observation/type_normalizer_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/observation/wire_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/parser_concern_class_methods_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/parser_cref_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/parser_def_frame_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/parser_module_function_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/parser_scope_frames_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/parser_service_scope_owner_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/parser_service_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/parser_write_flag_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/rails_bootstrap_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process",
+      "shared rails_minimal fixture"
+    ],
+    "parallel": false
+  },
+  "spec/ovallsp/redactor_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/rename/planner_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/rename/rename_oracle_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/routes/controller_naming_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/routes/route_registry_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/runtime/ancestry_registry_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/runtime_agent/agent_spec.rb": {
+    "tier": "e2e",
+    "resources": [
+      "process"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/runtime_agent/gem_index_visibility_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/self_receiver_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/alias_through_module_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/ambiguous_ancestor_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/ancestor_entry_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/ancestor_lexical_lookup_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/class_object_ancestors_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/class_object_signatures_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/explicit_receiver_visibility_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/gem_backed_closure_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/gem_index_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/gem_simple_name_capture_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/hierarchy_index_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/inherited_rbs_signatures_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/member_availability_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/method_analyzer_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/method_resolver_availability_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/method_resolver_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/method_summary_store_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/nameless_ancestor_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/prefix_completion_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/query_context_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/query_service_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/reference_index_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/reference_resolver_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/relation_chain_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/reopened_object_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic/union_branch_members_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/semantic_tokens_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_ancestry_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_cache_sweep_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_call_hierarchy_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_code_action_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_cold_index_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_declaration_position_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_dependent_refresh_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_diagnostics_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_did_close_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_document_highlight_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_documentation_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_gem_index_retry_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_hover_null_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_identity_report_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_inlay_hint_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_non_ascii_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_observation_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_prefix_completion_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_publish_identity_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_publish_invariant_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_publish_ordering_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_rails_dsl_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_rails_invalidation_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_receiverless_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_references_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_rename_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_routes_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_semantic_query_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_semantic_tokens_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_settled_analysis_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_status_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_trust_execution_gates_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_unassigned_ivar_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_views_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_watcher_boundary_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_word_at_cursor_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_workspace_diagnostics_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_workspace_identity_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_workspace_trust_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/definition_memo_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/environment_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/nested_rbs_names_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/overload_narrowing_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/overload_resolver_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/rbi_parser_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/return_label_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/stdlib_libraries_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/type_converter_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/unbuildable_ancestry_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/signatures/untyped_function_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/struct_members_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/text_document_snapshot_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/text_document_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/types/literal_types_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/types_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/underscore_binding_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/uri_util_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
+  "spec/ovallsp/vendor_bootstrap_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/vendor_compatibility_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/visibility_through_block_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/workspace_diagnostics_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/workspace_index_benchmark_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/workspace_index_buffer_identity_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/workspace_index_owner_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/workspace_index_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  }
+}

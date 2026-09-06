@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/models/model_registry"
+
 RSpec.describe Ovallsp::Models::ModelRegistry do
   subject(:registry) { described_class.new }
 

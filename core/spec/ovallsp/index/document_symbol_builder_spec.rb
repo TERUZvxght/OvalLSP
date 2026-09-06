@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/index/declaration"
+require_relative "../../../lib/ovallsp/index/symbol_id"
+require_relative "../../../lib/ovallsp/index/document_symbol_builder"
+
 RSpec.describe Ovallsp::Index::DocumentSymbolBuilder do
   def declaration(kind:, owner:, name:, location: nil, name_location: nil)
     Ovallsp::Index::Declaration.new(

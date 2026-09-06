@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/index/source_location"
+
 RSpec.describe Ovallsp::Index::SourceLocation do
   describe ".byte_offset_to_utf16" do
     it "counts ASCII characters 1:1" do
