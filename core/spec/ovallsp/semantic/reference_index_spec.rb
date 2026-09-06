@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/index/symbol_id"
+require_relative "../../../lib/ovallsp/index/reference"
+require_relative "../../../lib/ovallsp/semantic/reference_index"
+
 RSpec.describe Ovallsp::Semantic::ReferenceIndex do
   subject(:index) { described_class.new }
 

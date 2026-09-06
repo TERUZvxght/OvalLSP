@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/types"
+require_relative "../../../lib/ovallsp/index/symbol_id"
+require_relative "../../../lib/ovallsp/semantic/method_summary_store"
+
 RSpec.describe Ovallsp::Semantic::MethodSummaryStore do
   subject(:store) { described_class.new }
 

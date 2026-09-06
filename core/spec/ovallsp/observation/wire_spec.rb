@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/types"
+require_relative "../../../lib/ovallsp/index/symbol_id"
+require_relative "../../../lib/ovallsp/observation/observed_signature"
+require_relative "../../../lib/ovallsp/observation/wire"
+
 # The observation channel's half of `024.73`, recorded separately as
 # `024.135`: `Runner` spawns the workspace's own test command and read its
 # results back with `Marshal.load`, which instantiates whatever classes

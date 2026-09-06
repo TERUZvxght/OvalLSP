@@ -98,7 +98,7 @@ module Release
   # passing.
   def delegate(*command, chdir: ROOT, why:)
     begin
-      out, status = Open3.capture2e(*command, chdir: chdir)
+      out, status = Open3.capture2e(RepoFiles.clean_env, *command, chdir: chdir)
     rescue Errno::ENOENT
       raise Refused, "`#{command.first}` is not installed, so this step cannot run #{command.join(' ')}.\n" \
                      "  #{INSTALL.fetch(command.first, "Install #{command.first}")}, then run this again.\n" \

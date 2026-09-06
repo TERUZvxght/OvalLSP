@@ -36,6 +36,9 @@ set -euo pipefail
 # not exist. 024.157, and the same scrub RepoFiles applies in Ruby.
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY \
       GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE
+export GIT_CONFIG_GLOBAL="${GIT_CONFIG_GLOBAL:-/dev/null}"
+export GIT_CONFIG_SYSTEM="${GIT_CONFIG_SYSTEM:-/dev/null}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/dev/null}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VSCODE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"

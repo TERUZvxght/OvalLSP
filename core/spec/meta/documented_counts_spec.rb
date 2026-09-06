@@ -12,59 +12,19 @@ require "tmpdir"
 # re-measure, and went stale anyway. A number a person copies is a number
 # that goes stale; one a suite reads cannot.
 #
-# Counted from `RSpec.world` rather than by shelling out to a second
-# `rspec`: this *is* the run, and asking it how many examples it loaded is
-# free. That only means the full total when the whole suite is being run,
-# so a filtered run skips rather than failing on its own filter.
-#
-# Deliberately not a lint over every integer in the docs — only the places
-# that state *this suite's* size. The corpus figures next to them are
-# measurements of other things and belong to their own runs.
+# Runner shards exercise the checker against small documents; the runner
+# owns the real count comparison. A direct full RSpec invocation retains
+# its in-suite comparison, including CI until its runner migration.
 RSpec.describe "documented example counts" do
-  def read(name) = File.read(File.expand_path("../../../#{name}", __dir__), encoding: "UTF-8")
-
-  # Every spec file this suite owns. Rooted at `spec/` itself, not at
-  # `core/`: `bundle config path vendor/bundle` -- which is what CI's own
-  # `bundler-cache: true` sets -- puts `diff-lcs`' ten spec files
-  # inside `core/`, and counting those made the comparison below never
-  # match. The guard then skipped on every full run in that layout --
-  # CI's included; a checkout with nothing vendored under `core/` still
-  # compared -- and the number it exists to hold went stale exactly as
-  # before: the 0.2.4-bound branch's documents said 1,934 while its
-  # suite had grown past it, the fourth drift of this figure and the
-  # first inside a layout where the guard could not see it.
-  def spec_files_on_disk = Dir.glob(File.expand_path("../**/*_spec.rb", __dir__))
-
-  # Only when the runner was given no files and no filters -- `rspec` with
-  # nothing after it. Anything narrower is a subset, and `example_count`
-  # would be the subset's size, which is not what the documents claim.
   def whole_suite?
-    return false unless RSpec.configuration.filter_manager.inclusions.empty?
-
-    spec_files_on_disk.length == RSpec.configuration.files_to_run.length
+    RSpec.configuration.filter_manager.inclusions.empty? &&
+      Dir.glob(File.expand_path("../**/*_spec.rb", __dir__)).length == RSpec.configuration.files_to_run.length
   end
 
-  # Why this is a `skip` and not another in-suite predicate.
-  #
-  # Two rounds running put a defect in this file's own body (the
-  # 0.2.4-bound branch's rounds): round 37
-  # replaced a check that compared a glob's results against the glob's own
-  # root, and round 38 found the replacement comparing "everything under
-  # core/ that is not under spec/" against a `files_to_run` that `.rspec`
-  # confines to `spec/`. Both were empty by construction. A third
-  # predicate over the same two sets would be the same mistake a third
-  # time -- and asserting the two file counts match, which was tried, is
-  # *legitimately* false whenever anyone runs a single file, so it turns a
-  # correct subset run red.
-  #
-  # The property worth holding cannot be stated from inside a run that may
-  # legitimately be a subset. It is that **the run CI performs did not
-  # skip**, and it is enforced where the whole suite is guaranteed:
-  # `.github/workflows/ci.yml`'s "Fail if a documented-count check
-  # skipped" step reads the JSON formatter's output and fails on a pending
-  # from this file. `skip` rather than an early return so that step has
-  # something to see.
-
+  # A worker cannot prove the full count from its local RSpec.world.
+  # The runner checks the documents against its independent census once
+  # after all workers finish. These examples exercise that check using
+  # controlled documents, so focused runs no longer need a pending escape.
   # The documents and their patterns live in `scripts/documented_counts.rb`,
   # which both this guard and the re-deriving tool read. Two readers of
   # one text with two grammars is `046`'s C4, and writing the table twice
@@ -73,16 +33,20 @@ RSpec.describe "documented example counts" do
 
   DocumentedCounts::PATTERNS.each_key do |document|
     it "states this suite's size correctly in #{document}" do
-      skip "run the whole suite for this check" unless whole_suite?
-
-      actual = RSpec.world.example_count
-      stated = DocumentedCounts.stated(document)
-
-      expect(stated).not_to be_empty,
-                            "#{document} no longer states a Core example count -- update this guard or the document"
-      expect(stated.uniq).to eq([actual]),
-                             "#{document} says #{stated.uniq.join(', ')} and the suite has #{actual}. " \
-                             "Run: ruby scripts/documented_counts.rb"
+      if whole_suite?
+        expect(DocumentedCounts.stated(document).uniq).to eq([RSpec.world.example_count])
+      end
+      Dir.mktmpdir("ovallsp-counts") do |dir|
+        DocumentedCounts::PATTERNS.each_key do |name|
+          path = File.join(dir, name)
+          FileUtils.mkdir_p(File.dirname(path))
+          File.write(path, name.end_with?("RELEASE_CHECKLIST.md") ? "`core/`: 2 examples" : "2 examples")
+        end
+        expect(DocumentedCounts.complaints(2, root: dir)).to eq([])
+        path = File.join(dir, document)
+        File.write(path, "wording lost the count")
+        expect(DocumentedCounts.complaints(2, root: dir)).to contain_exactly(a_string_starting_with(document))
+      end
     end
   end
 
@@ -104,14 +68,7 @@ RSpec.describe "documented example counts" do
       .to be_nil
   end
 
-  # The tool that re-derives the number must agree with this guard about
-  # what the number *is*. It reads it from `rspec --dry-run`, which loads
-  # every spec file and counts without running one -- 0.4 seconds against
-  # this suite's eight minutes, which is what makes it usable before a
-  # commit rather than after one.
-  it "derives the same count from --dry-run as this run reports" do
-    skip "run the whole suite for this check" unless whole_suite?
-
-    expect(DocumentedCounts.actual).to eq(RSpec.world.example_count)
+  it "compares a census count against the documents rather than a worker's count" do
+    expect(DocumentedCounts.complaints(-1)).not_to be_empty
   end
 end

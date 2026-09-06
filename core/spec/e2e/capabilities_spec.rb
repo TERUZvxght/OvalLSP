@@ -20,44 +20,7 @@ require_relative "lsp_client"
 # Example names carry their capability id (C5, G4, ...) so a failure names
 # the row of the document it breaks.
 RSpec.describe "Extension capabilities", :e2e do
-  # Named for this file. A constant declared inside `RSpec.describe` is
-  # defined at top level, so a generic name (FIXTURE_SOURCE, FIXTURE_ROOT)
-  # silently collides with another spec file's -- which is exactly what
-  # happened: this suite passed alone and copied another file's fixture
-  # when the whole suite ran.
-  E2E_RAILS_FIXTURE = File.expand_path("../fixtures/rails_real", __dir__)
-
-  # Copied per-run so an example may edit a file (introducing a syntax
-  # error, adding a bad call) without mutating the fixture the rest of the
-  # suite shares. Created and removed explicitly rather than through
-  # `example_tmpdir`, which is per-example: this workspace has to outlive
-  # every example in the file, and #remove_workspace is its `ensure`.
-  def self.workspace
-    @workspace ||= begin
-      dir = File.join(Dir.tmpdir, "ovallsp-e2e-#{Process.pid}-#{object_id}")
-      FileUtils.mkdir_p(dir)
-      FileUtils.cp_r("#{E2E_RAILS_FIXTURE}/.", dir)
-      dir
-    end
-  end
-
-  def self.remove_workspace
-    FileUtils.remove_entry(@workspace) if @workspace && Dir.exist?(@workspace)
-  rescue StandardError
-    nil
-  ensure
-    @workspace = nil
-  end
-
-  def self.available?
-    return @available if defined?(@available)
-
-    @available = Dir.chdir(workspace) do
-      env = Ovallsp::BundleEnvironment.for_workspace(workspace)
-      system(env, "bundle", "lock", "--local", out: File::NULL, err: File::NULL) &&
-        system(env, "bundle", "install", "--local", out: File::NULL, err: File::NULL)
-    end
-  end
+  extend RealRailsFixture
 
   before(:all) do
     skip "rails/sqlite3 not installed locally; capability suite needs a real Rails app" unless self.class.available?
@@ -70,7 +33,6 @@ RSpec.describe "Extension capabilities", :e2e do
 
   after(:all) do
     @client&.stop
-    self.class.remove_workspace
   end
 
   def descendant_pids(root_pid)
@@ -80,6 +42,8 @@ RSpec.describe "Extension capabilities", :e2e do
     end
     children = rows.select { |_pid, ppid| ppid == root_pid }.map(&:first)
     children + children.flat_map { |child| rows.select { |_pid, ppid| ppid == child }.map(&:first) }
+  rescue Errno::EPERM
+    []
   end
 
   def process_alive?(pid)

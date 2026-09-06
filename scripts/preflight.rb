@@ -51,66 +51,22 @@ module Preflight
 
   Check = Struct.new(:name, :why, :dir, :command, :expect, keyword_init: true)
 
-# `expect` is an optional lambda over the combined output; it returns a
-# string when the check passed its exit status but failed on what it
-# said. That is the "green because it did not run" case, and an exit
-# status cannot see it.
-NON_EMPTY_SUITE = lambda do |out|
-  count = out[/^(\d+) examples?,/, 1]
-  return "rspec reported no example count" if count.nil?
-  return "0 examples ran -- the suite skipped rather than executed" if count == "0"
-
-  nil
-end
-
-# `024.148`. The count above is not enough on its own and this is the
-# check that needs more: a **skipped example is still an example**, so a
-# suite that skipped in full reports every one of its examples as
-# pending, zero failures, and exit 0 -- which satisfies any count-based
-# rule. The first version of this file had only the count, and therefore
-# could not fail in the one case it existed for -- found by review round
-# 1.
-#
-# No example figure is quoted here. `024.196`: one was, in three places,
-# attributed to a different file each time and matching none of them by
-# the release that found it -- this comment named `real_rails_spec.rb`
-# for a figure belonging to the e2e suite, while the entry it cites as
-# its authority gives that file's real count. A suite's size is a number
-# about this tree; the shape is what the argument rests on.
-#
-# `scripts/check_suites_ran.rb` reads the JSON formatter's per-example
-# status, and is the same script ci.yml runs.
-SUITES_RAN = lambda do |_out|
-  report_path = File.join(CORE, "tmp", "rspec.json")
-  return "no #{report_path} -- the run did not produce a JSON report" unless File.file?(report_path)
-
-  complaints = CheckSuitesRan.complaints(JSON.parse(File.read(report_path, encoding: "UTF-8")))
-  complaints.empty? ? nil : complaints.join("\n    ")
-end
-
+# A skipped example is still an example; the runner checks IDs and statuses.
 CHECKS = [
-  # First, and it takes under a second: `--dry-run` loads every spec file
-  # and counts without running one. This is the check that went stale
-  # four times in a single 0.2.14 session -- every commit adding an
-  # example makes it false -- and discovering that eight minutes into a
-  # suite run is the whole reason it is at the top.
   Check.new(
-    name: "documented example counts current",
-    why: "three documents state the count; a stale one is caught here instead of at the end of the suite",
-    dir: ROOT, command: %w[ruby scripts/documented_counts.rb --check]
+    name: "test environment prepared",
+    why: "resolve fixture dependencies before examples, in an isolated directory",
+    dir: ROOT, command: %w[ruby scripts/test_environment.rb prepare --profile full --offline]
   ),
   Check.new(
     name: "full suite",
-    why: "the whole thing, not the directory you were working in",
-    dir: CORE, command: %w[bundle exec rspec --order random], expect: NON_EMPTY_SUITE
+    why: "every example once, with an independent census and aggregate counts check",
+    dir: ROOT, command: %w[ruby scripts/test_runner.rb run --tier full --workers 2]
   ),
   Check.new(
-    name: "environment-dependent suites actually ran",
-    why: "without local rails/sqlite3/node_modules these skip in full and rspec still exits 0",
-    dir: CORE,
-    command: %w[bundle exec rspec spec/integration/real_rails_spec.rb spec/e2e/capabilities_spec.rb
-                spec/meta/client_behaviour_spec.rb --format json --out tmp/rspec.json --format progress],
-    expect: SUITES_RAN
+    name: "full suite report verified",
+    why: "missing, duplicate, failed, skipped or stale results cannot pass",
+    dir: ROOT, command: %w[ruby scripts/test_runner.rb verify --report core/tmp/tests/full.json]
   ),
   Check.new(
     name: "no real home path in tracked content",

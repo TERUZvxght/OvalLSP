@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/types"
+require_relative "../../../lib/ovallsp/signatures/signature_method"
+require_relative "../../../lib/ovallsp/signatures/overload_resolver"
+
 RSpec.describe Ovallsp::Signatures::OverloadResolver do
   let(:string_type) { Ovallsp::Types::Nominal.new(name: "String") }
   let(:integer_type) { Ovallsp::Types::Nominal.new(name: "Integer") }

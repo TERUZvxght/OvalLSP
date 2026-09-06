@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/types"
+require_relative "../../../lib/ovallsp/signatures/type_converter"
+require "rbs"
+
 require "tmpdir"
 
 # RBS type names arrive fully qualified (`::File::Stat`) and were reduced

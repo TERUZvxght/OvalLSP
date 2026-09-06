@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../unit_spec_helper"
+require_relative "../../lib/ovallsp/text_document"
+
 # `TextDocument` was mutated in place on the dispatch thread while
 # background threads read it. `#apply_incremental_change` wrote `@text`
 # and then `@version`; `text=` assigned `@text` *before* recomputing the

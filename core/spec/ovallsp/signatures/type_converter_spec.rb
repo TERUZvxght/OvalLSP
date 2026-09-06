@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/types"
+require_relative "../../../lib/ovallsp/signatures/type_converter"
+require "rbs"
+
 RSpec.describe Ovallsp::Signatures::TypeConverter do
   def rbs_type(source)
     RBS::Parser.parse_type(source)

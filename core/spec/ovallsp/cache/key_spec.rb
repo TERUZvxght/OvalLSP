@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/version"
+require_relative "../../../lib/ovallsp/cache/key"
+
 require "tmpdir"
 
 RSpec.describe Ovallsp::Cache::Key do

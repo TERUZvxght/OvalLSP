@@ -182,8 +182,10 @@ RSpec.describe "scripts/issues.rb" do
     end
 
     def promote(position, *extra)
+      title = intake_titles[position - 1] if position.is_a?(Integer) && position.positive? && position <= intake_titles.length
+      title_arg = title && extra.none? { |x| x.start_with?("--expect-title") } ? ["--expect-title=#{title}"] : []
       Issues.run(["promote", position.to_s, "--kind=friction", "--target=0.4.0",
-                  "--area=`scripts/issues.rb`", "--direction=Give it a command.", *extra])
+                  "--area=`scripts/issues.rb`", "--direction=Give it a command.", *title_arg, *extra])
     end
 
     # `docs/ISSUES.md` is copied whole, items and all, so a planted one
@@ -330,7 +332,7 @@ RSpec.describe "scripts/issues.rb" do
         before_refusal = Issues.next_number
 
         expect(Issues.run(["promote", at.to_s, "--kind=defect", "--target=0.4.0",
-                           "--area=`scripts/issues.rb`", "--direction=Fix it."])).to eq(2)
+                           "--area=`scripts/issues.rb`", "--direction=Fix it.", "--expect-title=A wrong answer"])).to eq(2)
         expect(Issues.next_number).to eq(before_refusal), "a refused promote still spent a number"
         expect(intake_titles).to include("A wrong answer")
       end
@@ -350,6 +352,29 @@ RSpec.describe "scripts/issues.rb" do
         past_the_end = intake_titles.length + 1
 
         expect(promote(past_the_end, "--user-visible=no", "--note=Internal to this repository.")).to eq(2)
+      end
+
+      it "refuses promote when --expect-title is omitted on a position" do
+        at = plant_intake("A thing that was noticed")
+        before = Issues.next_number
+
+        expect(Issues.run(["promote", at.to_s, "--kind=friction", "--target=0.4.0",
+                           "--area=`scripts/issues.rb`", "--direction=Give it a command.",
+                           "--user-visible=no", "--note=Internal to this repository."])).to eq(2)
+        expect(Issues.next_number).to eq(before)
+        expect(intake_titles).to include("A thing that was noticed")
+      end
+
+      it "refuses promote when --expect-title does not match the item at that position" do
+        at = plant_intake("A thing that was noticed")
+        before = Issues.next_number
+
+        expect(Issues.run(["promote", at.to_s, "--kind=friction", "--target=0.4.0",
+                           "--area=`scripts/issues.rb`", "--direction=Give it a command.",
+                           "--user-visible=no", "--note=Internal to this repository.",
+                           "--expect-title=Something completely different"])).to eq(2)
+        expect(Issues.next_number).to eq(before)
+        expect(intake_titles).to include("A thing that was noticed")
       end
 
       # **The control.** Every example above asserts a refusal, and a

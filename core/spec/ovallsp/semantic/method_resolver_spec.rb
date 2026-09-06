@@ -185,6 +185,20 @@ RSpec.describe Ovallsp::Semantic::MethodResolver do
     expect(names.map { |r| r[:name] }).to eq(["find_config"])
   end
 
+  it "returns declared parameters alongside completion candidate names" do
+    index_source(<<~RUBY)
+      class Widget
+        def configure(name, mode: :fast)
+        end
+      end
+    RUBY
+
+    results = resolver.complete(receiver_type: nominal("Widget"), prefix: "conf")
+    expect(results).to contain_exactly(
+      include(name: "configure", parameters: [["name", false], ["mode", true]])
+    )
+  end
+
   # "private methodを不正な明示receiver候補として上位表示しない"
   it "excludes a private method from completion when the receiver is explicit" do
     index_source(<<~RUBY)

@@ -75,6 +75,11 @@ module RepoFiles
   # all treat a nil value as "remove this from the child's environment".
   def clean_env
     LOCATION_ENV.to_h { |name| [name, nil] }
+      .merge(
+        "GIT_CONFIG_GLOBAL" => (ENV["GIT_CONFIG_GLOBAL"] || "/dev/null"),
+        "GIT_CONFIG_SYSTEM" => (ENV["GIT_CONFIG_SYSTEM"] || "/dev/null"),
+        "XDG_CONFIG_HOME" => (ENV["XDG_CONFIG_HOME"] || "/dev/null")
+      )
   end
 
   # The leading arguments for any git subprocess: the scrubbed env, then

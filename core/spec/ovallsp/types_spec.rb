@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../unit_spec_helper"
+require_relative "../../lib/ovallsp/types"
+
 RSpec.describe Ovallsp::Types do
   describe ".normalize_union" do
     it "unwraps a single distinct member instead of wrapping it in a Union" do

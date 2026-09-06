@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/routes/controller_naming"
+
 RSpec.describe Ovallsp::Routes::ControllerNaming do
   describe ".owner_name" do
     it "converts a simple controller path to its fully-qualified class name" do

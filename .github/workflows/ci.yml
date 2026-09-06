@@ -95,6 +95,12 @@ jobs:
         working-directory: vscode
         run: npm ci --omit=dev
 
+      - name: Prepare isolated Core test fixtures
+        run: ruby scripts/test_environment.rb prepare --profile full --offline
+
+      - name: Validate Core test tiers
+        run: ruby scripts/test_runner.rb list --format json
+
       - name: Ruby syntax check
         working-directory: core
         run: find lib spec -name '*.rb' -print0 | xargs -0 -n1 ruby -c

@@ -30,20 +30,53 @@ and `sqlite3` resolvable as **local** gems. The fixture is bundled with
 
     gem install rails -v "~> 8.1" && gem install sqlite3
 
-Without them, `spec/e2e/capabilities_spec.rb` and
-`spec/integration/real_rails_spec.rb` skip in full and `rspec` still exits
-0; so does `spec/meta/client_behaviour_spec.rb` without
-`vscode/node_modules`. A skipped example is still an example, so a count
-cannot see this, which is why `preflight` and CI read each example's
-status instead (`scripts/check_suites_ran.rb`). A pending example whose
-message does not say `NOT YET` is this.
+`scripts/test_environment.rb` checks Ruby, the locked Bundler and Core
+bundle, local Rails/sqlite3, Node/client dependencies, process inspection and release tags.
+Dependency installation is a separate bootstrap step; `prepare` resolves
+only local gems, copies the fixture lock into `core/tmp/test_environment/`,
+and refuses unavailable dependencies. The source Rails fixture is never
+used as a mutable application.
 
 ## Running tests
 
-    cd core && bundle exec rspec
+    ruby scripts/test_environment.rb check --profile unit
+    ruby scripts/test_environment.rb prepare --profile full --offline
+    ruby scripts/test_runner.rb list --format json
+    ruby scripts/test_runner.rb run --tier unit
+    ruby scripts/test_runner.rb run --tier integration
+    ruby scripts/test_runner.rb run --tier e2e
+    ruby scripts/test_runner.rb run --tier full --workers 2 --seed 3501
+    ruby scripts/test_runner.rb verify --report core/tmp/tests/full.json
     cd vscode && npm run test:unit
-    cd vscode && npm run test:integration            # a real Extension Development Host, monorepo Core
-    cd vscode && npm run test:integration:packaged   # the same, against a copy-core layout
+    cd vscode && npm run test:integration
+    cd vscode && npm run test:integration:packaged
+
+The runner defaults to one worker until the release's serial/parallel
+performance comparison establishes a default. Prior file durations balance the next run without skipping any examples.
+Each worker is a separate
+Ruby process with its own cache and Rails application/DB. Files marked
+serial in `core/spec/tiers.json` run after concurrent workers finish.
+Every spec file must have exactly one manifest entry, a resource list and
+an explicit parallel permission. Classify by responsibility: a slow pure
+calculation remains Unit, and a mixed file stays outside Unit until split.
+Unit files explicitly require their subject and `unit_spec_helper`; the
+common hygiene layer precedes every Core load. For a focused Unit run:
+
+    cd core && bundle exec rspec --options /dev/null --require unit_spec_helper spec/ovallsp/types_spec.rb
+
+Plain `bundle exec rspec` remains available and uses the full helper.
+The runner writes `core/tmp/tests/<tier>.json`; `--report` selects another
+output file. A skipped example is still an example. Full compares exact example IDs with an independent dry-run
+census, checks documented counts centrally, and rejects missing/duplicate
+examples, load errors, failed workers, failures and pending examples.
+There are currently no approved pending example/reason pairs; a `NOT YET`
+substring alone grants no permission. A later run invalidates older
+reports of that tier, even if its census fails. Verification also refuses
+changed source or runtime/lock inputs. A focused report is labelled with
+its tier and cannot serve as full-release evidence.
+
+The aggregate retains sanitized RSpec details; raw child stdout/stderr is
+not saved. Core full is separate from VS Code host/packaged validation.
 
 ## Before committing
 
@@ -167,7 +200,7 @@ edit with a reason.
 entries, and it opens and closes them:
 
     ruby scripts/issues.rb intake                     # the untriaged list, numbered
-    ruby scripts/issues.rb promote <n> --kind K --target V \
+    ruby scripts/issues.rb promote <n> --expect-title "..." --kind K --target V \
         --area A --direction D --user-visible yes|no [--note "…"]
     ruby scripts/issues.rb close 024.N --released-in V [--drop-paragraphs]
 

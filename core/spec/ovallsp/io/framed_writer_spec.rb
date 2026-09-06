@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/io/framed_reader"
+require_relative "../../../lib/ovallsp/io/framed_writer"
+
 require "stringio"
 
 RSpec.describe Ovallsp::IO::FramedWriter do

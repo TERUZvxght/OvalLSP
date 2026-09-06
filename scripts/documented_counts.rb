@@ -52,6 +52,14 @@ module DocumentedCounts
     Integer(count)
   end
 
+  def complaints(count, root: ROOT)
+    PATTERNS.filter_map do |document, pattern|
+      path = File.join(root, document)
+      stated = File.file?(path) ? File.read(path, encoding: "UTF-8").scan(pattern).flatten.map { |n| Integer(n.delete(",")) }.uniq : []
+      "#{document}: documented count differs from census (#{count})" unless stated == [count]
+    end
+  end
+
   def grouped(count) = count.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
 
   # The substitution itself, as a pure function: text in, text out, and

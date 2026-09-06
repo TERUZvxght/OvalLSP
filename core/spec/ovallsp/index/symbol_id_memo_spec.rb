@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/index/symbol_id"
+
 # 024.45: one `analyze` of `net/http.rb` is 2.8 s against a stated 300 ms
 # p95, and the profile attributes roughly half of it to constructing and
 # hashing `Index::SymbolId`s -- `SymbolId#initialize`, `qualify_owner`,

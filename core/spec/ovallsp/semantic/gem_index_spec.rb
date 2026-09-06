@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/semantic/gem_index"
+
 # 024.R7. What the gems define, held Core-side.
 #
 # The undefined-method check fires only on a *closed* receiver, and

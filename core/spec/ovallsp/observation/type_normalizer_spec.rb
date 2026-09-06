@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/types"
+require_relative "../../../lib/ovallsp/observation/type_normalizer"
+
 RSpec.describe Ovallsp::Observation::TypeNormalizer do
   it "normalizes nil to Types::NIL" do
     expect(described_class.normalize(nil)).to eq(Ovallsp::Types::NIL)

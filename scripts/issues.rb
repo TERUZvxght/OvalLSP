@@ -219,6 +219,7 @@ module Issues
       o.on("--note=N") { |v| opts[:note] = v }
       o.on("--released-in=V") { |v| opts[:released_in] = v }
       o.on("--drop-paragraphs") { opts[:drop_paragraphs] = true }
+      o.on("--expect-title=T") { |v| opts[:expect_title] = v }
       o.on("--root=PATH") { |v| opts[:root] = v }
     end
     rest = parser.parse(argv)
@@ -513,6 +514,9 @@ def promote(position, opts)
   index = Integer(position, exception: false)
   raise RefusedWrite, "the position is a number; `ruby scripts/issues.rb intake` lists them" if index.nil?
 
+  expected_title = opts[:expect_title]
+  raise RefusedWrite, "--expect-title is required: specify expected item title to prevent index drift" if expected_title.nil?
+
   issues_path = File.join(ROOT, ISSUES_DOC)
   source = File.readlines(issues_path, encoding: "UTF-8")
   items = intake_items(source)
@@ -520,6 +524,9 @@ def promote(position, opts)
   raise RefusedWrite, "intake has no item #{index}. `ruby scripts/issues.rb intake` lists what there is" if item.nil?
 
   _, title, body, = item
+  if title != expected_title
+    raise RefusedWrite, "intake item #{index} title #{title.inspect} does not match expected #{expected_title.inspect}"
+  end
   number = next_number
   entry = entry_lines(number, title, kind, target, area, direction, visible, opts[:note], body)
 

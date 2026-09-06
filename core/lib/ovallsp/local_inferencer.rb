@@ -656,7 +656,7 @@ module Ovallsp
     def nesting_frame_for(written, parent)
       # `class ::Widget` opens the top level whatever encloses it, and
       # the type model's names are bare.
-      return written.delete_prefix("::") if written.start_with?("::")
+      return Index::SymbolId.bare_name(written) if written.start_with?("::")
       return parent ? "#{parent}::#{written}" : written unless written.include?("::")
 
       head, rest = written.split("::", 2)

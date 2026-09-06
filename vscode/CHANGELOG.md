@@ -6,6 +6,16 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.3.5 — unreleased
+
+- Add isolated test preparation and explicit Core test tiers, with lightweight Unit loading and verified parallel reports; preflight executes each example once.
+
+- Identify intake items by stable handles and require the selected title when promoting an issue.
+
+### Details
+
+Development tooling changes; release verification is still in progress.
+
 ## 0.3.4 — twenty-three defects, most of them found by review rather than by use
 
 No capability is added, and that fact decided this release's number: the

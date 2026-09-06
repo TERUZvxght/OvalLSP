@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../unit_spec_helper"
+require_relative "../../lib/ovallsp/text_document"
+
 RSpec.describe Ovallsp::TextDocument do
   def document(text)
     described_class.new(uri: "file:///a.rb", text: text, version: 1, language_id: "ruby")

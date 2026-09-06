@@ -48,7 +48,7 @@ things, and the honest order is:
    them.
 
 **Those four decisions are the command's arguments.** Once they are
-made, `ruby scripts/issues.rb promote <n> --kind K --target V --area A
+made, `ruby scripts/issues.rb promote <n> --expect-title "..." --kind K --target V --area A
 --direction D --user-visible yes|no [--note "…"]` takes the n-th item
 out of intake — `ruby scripts/issues.rb intake` numbers them —
 allocates a number never used before, writes the entry in the legend's
@@ -132,8 +132,12 @@ because a number is a claim that the thing exists.
   - found by: core/lib/ovallsp/semantic/hierarchy_index.rb
   - #aliases calls canonical_name before entering @mutex.synchronize, and canonical_name reads @gem_index and @signatures. Every other reader of those takes the mutex first. Pre-existing and adjacent to the memo work rather than caused by it; no wrong answer demonstrated. Noticed by the memo-staleness cold review of f7bb22e, which otherwise found the memos strictly mutex-disciplined with no lock-order cycle.
   - unverified: not yet driven against the tree
+- **Server concentrates transport, analysis publication, invalidation and runtime lifecycle**
+  - found by: 0.3.5 plan review (C2); core/lib/ovallsp/server.rb
+  - Reading the current tree finds dispatch, publish_diagnostics/publish_findings, apply_file_summary, ensure_reference_index_current, reload_signatures and maybe_start_agent managing shared Server state in the same class. This is a responsibility and ownership concern, not a demonstrated new wrong answer or a request for mechanical file splitting. Before promotion, map callers, mutable fields and lock ownership at a fixed revision; drive the existing callee/caller invalidation intake with a control, and identify the smallest independently owned boundary. Reuse 024.45 for latency and 024.39 for inferencer request state rather than duplicating them. The 0.3.5 plan limits changes to boundaries needed by a reproduced repair; broader restructuring needs its own disposition after the drive.
+  - unverified: not yet driven against the tree
 
-**Ten items above; the rest was emptied deliberately.** The twenty-one items that had
+**Eleven items above; the rest was emptied deliberately.** The twenty-one items that had
 accumulated by 0.3.1 were driven and dispositioned in one pass:
 fourteen became `024.306` through `024.319`, and seven left without a
 number. The seven, and why:

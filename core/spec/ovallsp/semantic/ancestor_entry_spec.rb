@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "../../unit_spec_helper"
+require_relative "../../../lib/ovallsp/semantic/hierarchy_index"
+
 # `024.80`. An ancestor this index could not identify was expressed as an
 # entry whose `name` is `nil` -- and `nil` is also the owner a *top-level*
 # `def` is indexed under. So asking an unidentified ancestor for its

@@ -77,7 +77,7 @@ RSpec.describe "the pre-push hook" do
   # ref, remote sha. All zeros on the remote side is a branch the remote
   # does not have yet.
   def push(local: head, remote: "0" * 40, path: "#{bin}#{File::PATH_SEPARATOR}#{ENV.fetch('PATH')}")
-    Open3.capture3({ "PATH" => path }, hook,
+    Open3.capture3(RepoFiles.clean_env.merge("PATH" => path), hook,
                    stdin_data: "refs/heads/x #{local} refs/heads/x #{remote}\n", chdir: root)
   end
 

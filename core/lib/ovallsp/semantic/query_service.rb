@@ -351,7 +351,7 @@ module Ovallsp
           candidates[result[:name]] ||= Member.new(
             name: result[:name], origin: :source,
             visibility: nil, detail: nil,
-            parameters: source_parameter_names(receiver_type, result[:name], context)
+            parameters: result[:parameters] || []
           )
         end
       end

@@ -51,15 +51,10 @@ the release is recorded.
 finding to record. A round reviews a fixed thing, and every addition
 between rounds resets it.
 
-*Why this and not "repeat until clean":* `028` declares merge round 8
-clean, and the next entry is an external reviewer finding two defects.
-Around sixty rounds are recorded across 0.2.x.
-
 ## The same place twice: mechanise, then roll back
 
 A finding about the previous round's changes is the loop working. What
-matters is the **same place** found in two consecutive rounds, so track,
-per round, which code each finding is about.
+matters is the **same place** found in two consecutive rounds:
 
 - **The first time**, put in a mechanical countermeasure — something that
   makes the class of defect fail a check rather than wait for a reviewer:
@@ -67,17 +62,13 @@ per round, which code each finding is about.
   read; a table two readers diverged on, replaced by one both read; a
   guard given the input it could not see. A regression test for the one
   instance is *not* a countermeasure.
-- **The second time**, the countermeasure was aimed at the symptom too.
-  Stop the loop, roll back the whole thread of changes those rounds
-  produced, write the root cause and the direction actually needed as a
-  register entry, and re-scope the problem to its own release or task.
-  The entry is the deliverable.
+- **The second time**, stop the loop, roll back the whole thread of
+  changes those rounds produced, record the root cause and the direction
+  actually needed as an issue/register entry, and re-scope to its own
+  release or task (`024.15`).
 
-`024.15`: four rounds each bolted a sort onto one more reader of a
-collection whose storage had no order — zero net progress, and a release
-larger than the three before it combined. Two corollaries: do not tell a
-reviewer to assume the previous round broke something, because that
-manufactures the self-referential findings this rule detects; and
+Two corollaries: do not tell a reviewer to assume the previous round
+broke something (which manufactures self-referential findings); and
 centralising a rule into a constructor is not free (`024.47`).
 
 ## Asking for an independent review
