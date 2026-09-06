@@ -63,7 +63,7 @@ module TestEnvironment
     raise Error, "profile must be unit or full" unless %w[unit full].include?(profile)
     checks = []
     add = ->(name, ok, remedy) { checks << { "name" => name, "ok" => ok, "remedy" => ok ? nil : remedy } }
-    add.call("Ruby", Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("3.4"), "use a supported Ruby (docs/DEVELOPMENT.md)")
+    add.call("Ruby", Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("3.3"), "use a supported Ruby (docs/DEVELOPMENT.md)")
     core = File.join(root, "core")
     lock = File.join(core, "Gemfile.lock")
     locked_bundler = File.file?(lock) && File.read(lock)[/BUNDLED WITH\s+([\d.]+)/, 1]

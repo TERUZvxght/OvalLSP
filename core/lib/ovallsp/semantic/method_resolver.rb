@@ -623,9 +623,10 @@ module Ovallsp
             next unless name.start_with?(prefix)
             next if seen.key?(name)
 
-            decl = declared_method(entry.name, kind, name)
-            visibility = decl&.visibility || alias_visibility_of(entry.name, kind, name)
+            visibility = visibility_of(entry.name, kind, name)
             next if explicit_receiver && %i[private protected].include?(visibility)
+
+            decl = declared_method(entry.name, kind, name)
 
             underlying = decl || alias_declaration_of(entry.name, kind, name)
             seen[name] = CompletionCandidate.new(
