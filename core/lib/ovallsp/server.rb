@@ -3574,12 +3574,14 @@ module Ovallsp
       help = route_signature_help(method_name) || method_signature_help(document, position, method_name)
       return help if help.fetch(:signatures).empty?
 
-      # `activeParameter` -- which parameter the cursor is on -- was built
-      # here during 0.2.1's review loop and is deferred to 0.4.0 with the
-      # capability row that named it (S4; the roadmap's "Signature help
-      # highlights the argument the cursor is in"). It is on the roadmap,
-      # not a correction to something this release already claimed.
-      help
+      active_param = active_parameter_index(document, position, name_range)
+      signatures = help.fetch(:signatures)
+      active_sig = signatures.find_index { |s| (s[:parameters]&.length || 0) > active_param } || 0
+
+      help.merge(
+        activeSignature: active_sig,
+        activeParameter: active_param
+      )
     end
 
     def route_signature_help(method_name)
@@ -3629,6 +3631,29 @@ module Ovallsp
 
       signatures = @query_service.signatures_of(receiver_type, method_name)
       { signatures: signatures }
+    end
+
+    def active_parameter_index(document, position, name_range)
+      tokens = structural_tokens(document)
+      cursor = document.position_to_char_offset(position)
+      open_paren_offset = name_range.end
+
+      param_index = 0
+      depth = 0
+      tokens.each do |offset, kind|
+        next if offset <= open_paren_offset
+        break if offset >= cursor
+
+        case kind
+        when :paren_open, :nest_open
+          depth += 1
+        when :paren_close, :nest_close
+          depth -= 1 if depth.positive?
+        when :comma
+          param_index += 1 if depth.zero?
+        end
+      end
+      param_index
     end
 
     def enclosing_call_name(document, position)
@@ -4685,7 +4710,7 @@ module Ovallsp
             legend: { tokenTypes: SemanticTokens::LEGEND, tokenModifiers: SemanticTokens::MODIFIERS },
             full: true
           },
-          signatureHelpProvider: { triggerCharacters: ["("] }
+          signatureHelpProvider: { triggerCharacters: ["(", ","] }
         },
         serverInfo: {
           name: "ovallsp",

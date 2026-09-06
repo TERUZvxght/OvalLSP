@@ -1801,6 +1801,27 @@ end
         expect(@client.signature_labels(uri, 2, 14).join(" ")).to include("post_path")
       end
     end
+
+    it "S4: highlights the argument the cursor is in" do
+      with_file("app/models/active_param_probe.rb", <<~RUBY) do |uri|
+        class ActiveParamProbe
+          def greet(first, second, third); end
+
+          def run
+            greet(1, 2, 3)
+          end
+        end
+      RUBY
+        help1 = @client.signature_help(uri, 4, 10)
+        expect(help1[:activeParameter]).to eq(0)
+
+        help2 = @client.signature_help(uri, 4, 13)
+        expect(help2[:activeParameter]).to eq(1)
+
+        help3 = @client.signature_help(uri, 4, 16)
+        expect(help3[:activeParameter]).to eq(2)
+      end
+    end
   end
 
   describe "workspace-wide" do

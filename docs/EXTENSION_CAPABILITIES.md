@@ -199,6 +199,7 @@ settle. Everything it declines is listed under the non-goals below.
 | S1 | Types `(` after a workspace method | its parameter list | PASS |
 | S2 | Types `(` after a stdlib method | the RBS overload label | PASS |
 | S3 | Types `(` after a route helper | the helper's required parts | PASS |
+| S4 | Moves cursor between arguments in a call | activeParameter highlights the argument the cursor is in | PASS |
 
 ## Semantic highlighting
 

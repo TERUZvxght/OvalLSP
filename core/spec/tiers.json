@@ -1525,6 +1525,13 @@
     ],
     "parallel": true
   },
+  "spec/ovallsp/server_signature_help_active_parameter_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
   "spec/ovallsp/server_spec.rb": {
     "tier": "integration",
     "resources": [

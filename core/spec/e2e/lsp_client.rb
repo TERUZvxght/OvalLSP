@@ -127,6 +127,10 @@ module E2E
       Array(request("textDocument/definition", { textDocument: { uri: uri }, position: { line: line, character: character } }))
     end
 
+    def signature_help(uri, line, character)
+      request("textDocument/signatureHelp", { textDocument: { uri: uri }, position: { line: line, character: character } })
+    end
+
     def signature_labels(uri, line, character)
       result = request("textDocument/signatureHelp", { textDocument: { uri: uri }, position: { line: line, character: character } })
       Array(result && result[:signatures]).map { |signature| signature[:label] }
