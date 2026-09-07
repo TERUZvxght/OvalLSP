@@ -7,7 +7,8 @@ import {
   CoreStartRejectedError,
   isCoreStartRejected,
   KeyedTransitionQueue,
-  ShutdownBarrier
+  ShutdownBarrier,
+  shouldNotifyRunningClient
 } from '../../clientLifecycle';
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
@@ -654,5 +655,22 @@ describe('KeyedTransitionQueue', () => {
     await second;
 
     assert.strictEqual(secondRan, true);
+  });
+});
+
+describe('shouldNotifyRunningClient', () => {
+  it('refuses while the compatibility probe has not resolved yet', () => {
+    assert.strictEqual(shouldNotifyRunningClient('pending'), false);
+    assert.strictEqual(shouldNotifyRunningClient('starting'), false);
+  });
+
+  it('permits a running client', () => {
+    assert.strictEqual(shouldNotifyRunningClient('running'), true);
+  });
+
+  it('refuses a client that is stopping, stopped, or untracked', () => {
+    assert.strictEqual(shouldNotifyRunningClient('stopping'), false);
+    assert.strictEqual(shouldNotifyRunningClient('stopped'), false);
+    assert.strictEqual(shouldNotifyRunningClient(undefined), false);
   });
 });

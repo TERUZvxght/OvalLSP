@@ -552,6 +552,11 @@
     ],
     "parallel": true
   },
+  "spec/ovallsp/code_actions/require_insertion_spec.rb": {
+    "tier": "unit",
+    "resources": [],
+    "parallel": true
+  },
   "spec/ovallsp/cold_indexer_read_order_spec.rb": {
     "tier": "integration",
     "resources": [
@@ -610,6 +615,13 @@
   },
   "spec/ovallsp/diagnostics/class_creating_block_spec.rb": {
     "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/diagnostics/configuration_spec.rb": {
+    "tier": "unit",
     "resources": [
       "core"
     ],
@@ -1358,6 +1370,13 @@
     "parallel": true
   },
   "spec/ovallsp/server_dependent_refresh_spec.rb": {
+    "tier": "integration",
+    "resources": [
+      "core"
+    ],
+    "parallel": true
+  },
+  "spec/ovallsp/server_diagnostics_configuration_spec.rb": {
     "tier": "integration",
     "resources": [
       "core"

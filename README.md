@@ -87,9 +87,15 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Call hierarchy (callers and callees) | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Document highlight (occurrences within a file) | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion of `@ivar` names after typing `@` | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
-| Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
-| Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+| Per-check diagnostic severity settings [^severity] | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+| Auto-`require` insertion [^autorequire] | — | 0.4.0 | ⚠️ 1.0.0 |
+| Signature help: active parameter highlighting [^activeparam] | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+
+[^severity]: Overrides downgrade or suppress checks already enabled in safe mode; they do not enable unresolved-constant or raise severity. Open and closed files refresh after a setting changes; removing overrides restores defaults.
+
+[^autorequire]: JSON, URI and Pathname only, in a plain Ruby file with a top-level or explicit root reference and no workspace conflict. No diagnostic is needed. Rails, bundle/Ruby selector environments and uncertain syntax or insertion positions are declined. Obtain a fresh action after editing: stale CodeAction application is not protected by the current client. See [the capability table](docs/EXTENSION_CAPABILITIES.md).
+
+[^activeparam]: Named keywords match independently of argument order. Excess, unknown and ambiguous arguments have no highlighted range; the signature text stays visible.
 
 [^argcount]: Verified by tests that fail if it breaks, and it does fire —
     but every one of the 14 reports it produces over Ruby's standard

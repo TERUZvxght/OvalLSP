@@ -7,6 +7,14 @@
 supported/unsupportedの一覧は
 [docs/SUPPORT_MATRIX.ja.md](SUPPORT_MATRIX.ja.md)を参照してください。
 
+## 0.4.0 の調整機能の対応範囲
+
+severity 設定は有効な検査の格下げ・抑制だけを行います。unresolved-constant の有効化、公開診断モードの追加、重大度の引き上げはしません。キーワード引数の強調は名前で対応させますが、過剰引数や rest の後に位置引数がある場合など、対応を確定できないときは強調しません。
+
+auto-require は、検証した plain Ruby の JSON・URI・Pathname に限定します。Rails ではロード済み定数、Agent 不在・起動中、古い snapshot を含め常に辞退します。bundle / Ruby 選択ファイル、workspace の名前衝突、索引未完了、構文や挿入位置の不確実性がある場合も辞退します。要求中に workspace の Ruby を実行せず、autoload や gem 探索も行いません。
+
+ファイルを編集した後は、改めてクイックフィックスを取得してください。Core は文書版を送りますが、現在の client は CodeAction 編集の変換時にその版を保持しないため、古い編集の拒否は保証しません。client の根拠は [CLIENT_BEHAVIOUR](CLIENT_BEHAVIOUR.md)、詳細な範囲は [S4・G20・Q4](EXTENSION_CAPABILITIES.ja.md)にあります。
+
 ## 0.3.0 の新しい答えが、まだ届いていない範囲
 
 0.3.0 で8つの機能が入り、公開前のレビューがそれぞれを実コードに対して駆動

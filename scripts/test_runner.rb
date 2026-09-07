@@ -217,15 +217,22 @@ module TestRunner
       { "documented_counts" => DocumentedCounts.complaints(count, root: @root) }
     end
 
+    # ID and the exact recorded reason: a permitted example that goes pending
+    # for any other cause (missing gems, a new defect) must fail verify.
     PERMITTED_PENDINGS = {
-      "./spec/ovallsp/diagnostics/bare_name_argument_type_spec.rb[1:1]" => "024.19",
-      "./spec/ovallsp/diagnostics/namespaced_argument_type_spec.rb[1:1]" => "024.224",
-      "./spec/ovallsp/diagnostics/reopened_foreign_class_spec.rb[1:1]" => "024.13",
-      "./spec/ovallsp/diagnostics/shadowed_literal_spec.rb[1:1]" => "024.47"
+      "./spec/ovallsp/diagnostics/bare_name_argument_type_spec.rb[1:1]" =>
+        "correct for the workspace it can see; needs Module.nesting respected for a bare name — 024.19",
+      "./spec/ovallsp/diagnostics/namespaced_argument_type_spec.rb[1:1]" =>
+        "Key is declared only in sig/, with no Ruby class of that name to qualify it — 024.224",
+      "./spec/ovallsp/diagnostics/reopened_foreign_class_spec.rb[1:1]" =>
+        "the only fix found silences real typos; see 024.13",
+      "./spec/ovallsp/diagnostics/shadowed_literal_spec.rb[1:1]" =>
+        "rooting the name breaks 11 examples in 7 files; the identity belongs beside it — 024.47"
     }.freeze
 
     def permitted_pending?(example)
-      PERMITTED_PENDINGS.key?(example.fetch("id"))
+      PERMITTED_PENDINGS.key?(example.fetch("id")) &&
+        PERMITTED_PENDINGS.fetch(example.fetch("id")) == example["pending_message"]
     end
 
     def verify(report)

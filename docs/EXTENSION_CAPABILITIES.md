@@ -11,7 +11,8 @@ when I type a dot*.
 
 So this is the list of things that must actually work, phrased as what a
 user does and what they must see. Each row is verified end to end against
-a real Rails application by `core/spec/e2e/capabilities_spec.rb`, driving
+a real Rails application, or the isolated plain Ruby fixtures for G20/Q4,
+by `core/spec/e2e/capabilities_spec.rb`, driving
 the real Core over stdio the way the extension does — waiting for the
 Runtime Agent and the cold index, then asking.
 
@@ -20,9 +21,11 @@ row is skipped is not shipped.** If a row cannot pass yet, it stays in
 this document marked `NOT YET` with the reason, so the gap is visible
 rather than merely absent.
 
+G20 and Q4 additionally drive isolated plain Ruby workspaces. Q4 is supported only in that limited plain Ruby scope and declines in Rails. These source-level Core checks do not replace the packaged extension-host release gate.
+
 ## The environment this guarantee covers
 
-Every row below is a promise about one environment, and only that one:
+Except for Q4's explicit plain Ruby scope, the rows below describe this environment:
 
 - a **Rails application** (`bin/rails` and `config/environment.rb`
   present), opened as a **trusted** workspace, on **darwin-arm64**, with
@@ -30,11 +33,8 @@ Every row below is a promise about one environment, and only that one:
 
 That is what the rows describe. It is not, today, where CI runs them --
 see "How these are verified" below, which states exactly what runs where. A
-plain Ruby project is explicitly *not* covered by these rows yet: much of
-the engine works there, but nothing here has been specified or verified
-for it, and half-supporting it would make both stories worse. Giving the
-Rails conventions an explicit boundary and specifying the plain-Ruby
-experience is roadmap item 024.R1, for 1.0.0.
+complete plain Ruby project is not covered by the limited G20/Q4 fixtures.
+The full plain Ruby experience remains roadmap item 024.R1 for 1.0.0.
 
 Untrusted workspaces stay as described at the end of this document: the
 Runtime Agent does not start, and every Rails-derived capability degrades
@@ -173,6 +173,7 @@ which is what it is for.
 | G17 | Has a mistake in a file present before the server started and never opened | it is reported anyway | PASS |
 | G18 | Calls a method that does not exist on a class inheriting from a gem | it is reported — the running application's own class list is what makes the receiver knowable | PASS |
 | G19 | Calls a method that does not exist on a chained relation | **nothing is reported** — a relation reaches `ActiveRecord::AttributeMethods`, which answers at call time, so a report there would be a wrong answer | PASS |
+| G20 | Changes `ovallsp.diagnostics.severities` | enabled checks can be downgraded or suppressed with `none`; open and closed diagnostics refresh without editing files; removing overrides restores defaults | PASS |
 
 G4 used to follow from the same missing-ancestor problem as C4 and is now
 closed: the Runtime Agent reports what each model actually responds to,
@@ -199,7 +200,7 @@ settle. Everything it declines is listed under the non-goals below.
 | S1 | Types `(` after a workspace method | its parameter list | PASS |
 | S2 | Types `(` after a stdlib method | the RBS overload label | PASS |
 | S3 | Types `(` after a route helper | the helper's required parts | PASS |
-| S4 | Moves cursor between arguments in a call | activeParameter highlights the argument the cursor is in | PASS |
+| S4 | Moves the cursor within a parenthesized call | highlights the matching positional/rest or named keyword parameter; no parameter range for excess, unknown or ambiguous arguments | PASS |
 
 ## Semantic highlighting
 
@@ -250,6 +251,9 @@ defined** — a fix that guesses is a wrong edit applied with one click.
 | Q1 | Invokes the quick fix on an unknown method | a `def` for it is inserted into the class the call was made on | PASS |
 | Q2 | Invokes it on an unknown route helper | the name is replaced with the closest helper the application actually has | PASS |
 | Q3 | Invokes it on a call with too many arguments | the surplus arguments are removed; with too *few*, nothing is offered, because there is no value to write | PASS |
+| Q4 | Requests a quick fix on JSON, URI or Pathname in a supported plain Ruby file | offers a finite, versioned `Add require` edit without diagnostics; declines in Rails or when safety cannot be established; no duplicate import after applying it | PASS |
+
+G20 preserves safe mode: overrides only lower the severity of a check already enabled in that mode, or suppress it; they cannot enable unresolved-constant. Q4 supports top-level bare constants or explicit root names, with no workspace name conflict. It declines for Rails, bundle/Ruby selector files (Gemfile, gems.rb, .ruby-version, .tool-versions, mise.toml), unknown or incomplete state, and unsafe syntax or insertion positions. CodeAction performs no Ruby execution, autoload or gem discovery. Versioned edits require client support; the current VS Code client drops the supplied version during conversion, so stale-edit refusal is not guaranteed.
 
 ## What this document deliberately does not promise
 

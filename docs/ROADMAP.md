@@ -18,10 +18,9 @@ planned, are in
 
 ## 0.4.0 — Refinements
 
-- **Per-check severity settings**, so a check you disagree with can be a
-  hint rather than a warning, or off.
-- **Auto-`require` insertion.**
-- **Signature help highlights the argument the cursor is in.**
+- **Per-check severity settings.** `ovallsp.diagnostics.severities` lowers enabled checks to warning, information or hint, or suppresses them with none. Syntax errors can retain error. Removing overrides restores defaults; open and closed files refresh. Safe mode remains the default, with no public mode or unresolved-constant opt-in.
+- **Auto-`require` insertion.** Explicit quick fixes for JSON, URI and Pathname in a supported plain Ruby file, including requests with no diagnostics. Rails, bundle/Ruby selector environments, name conflicts and uncertain syntax are declined. Stale CodeAction application is not guaranteed safe; obtain a fresh action after editing.
+- **Signature help highlights the matching parameter.** Keywords match by name regardless of order; excess, unknown and ambiguous arguments have no highlighted range. See the [capability table](EXTENSION_CAPABILITIES.md) for S4, G20 and Q4.
 
 ## 1.0.0 — Guarantees, not features
 
@@ -30,9 +29,8 @@ asterisks in README's matrix instead:
 
 - **Every platform we publish for is verified**, not just Apple Silicon —
   `darwin-x64`, `win32-x64`, `linux-x64` (024.R4).
-- **A plain Ruby project is guaranteed**, not only a Rails one. Most of
-  the engine almost certainly works there today; nothing specifies or
-  verifies it (024.R1).
+- **A plain Ruby project is guaranteed**, not only a Rails one. Individual fixtures, including finite auto-require, verify parts of
+  it; complete plain Ruby workspace coverage is still unverified (024.R1).
 
 Until then, every ✅ in README's matrix means "verified on macOS Apple
 Silicon, in a Rails project, with the bundled Core" — and nothing else is

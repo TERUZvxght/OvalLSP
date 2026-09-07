@@ -136,8 +136,12 @@ because a number is a claim that the thing exists.
   - found by: 0.3.5 plan review (C2); core/lib/ovallsp/server.rb
   - Reading the current tree finds dispatch, publish_diagnostics/publish_findings, apply_file_summary, ensure_reference_index_current, reload_signatures and maybe_start_agent managing shared Server state in the same class. This is a responsibility and ownership concern, not a demonstrated new wrong answer or a request for mechanical file splitting. Before promotion, map callers, mutable fields and lock ownership at a fixed revision; drive the existing callee/caller invalidation intake with a control, and identify the smallest independently owned boundary. Reuse 024.45 for latency and 024.39 for inferencer request state rather than duplicating them. The 0.3.5 plan limits changes to boundaries needed by a reproduced repair; broader restructuring needs its own disposition after the drive.
   - unverified: not yet driven against the tree
+- **CodeAction conversion drops the document version in a versioned edit**
+  - found by: Task 064 W5a: vscode-languageclient protocolConverter.js asCodeAction/asWorkspaceEdit
+  - A TextDocumentEdit is converted with result.replace(uri, range, newText), without retaining textDocument.version. The version check in client.js belongs to workspace/applyEdit, not this CodeAction path. W7 must drive obtaining an action, changing the buffer, then applying that old action in the real extension host before P3 stale-edit protection is claimed; server identity and serialized version tests do not prove it.
+  - unverified: not yet driven against the tree
 
-**Eleven items above; the rest was emptied deliberately.** The twenty-one items that had
+**Twelve items above; the rest was emptied deliberately.** The twenty-one items that had
 accumulated by 0.3.1 were driven and dispositioned in one pass:
 fourteen became `024.306` through `024.319`, and seven left without a
 number. The seven, and why:
@@ -165,37 +169,30 @@ edit the register and run the script.*
 
 ### Open, by the release they are assigned to
 
-**0.4.0 — 46**
+**1.0.0 — 34**
 
 | # | kind | user-visible | published | what |
 |---|---|---|---|---|
-| [`024.13`](design/tasks/024-deferred-review-findings.md#02413-a-reopened-core-class-looks-closed-in-both-directions) | defect | yes | yes | A reopened core class looks closed, in both directions |
 | [`024.18`](design/tasks/024-deferred-review-findings.md#02418-the-unassigned-ivar-check-cannot-enumerate-what-it-needs-to) | defect | yes | yes | The unassigned-`@ivar` check cannot enumerate what it needs to |
-| [`024.19`](design/tasks/024-deferred-review-findings.md#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | defect | yes | yes | The argument-type check judges against a class the receiver is not |
 | [`024.20`](design/tasks/024-deferred-review-findings.md#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | defect | yes | yes | `contains?` treats an exclusive end offset as inclusive |
 | [`024.22`](design/tasks/024-deferred-review-findings.md#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | defect | yes | yes | The unassigned-`@ivar` check is silent in an application `rails new` produces |
 | [`024.28`](design/tasks/024-deferred-review-findings.md#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | defect | yes | yes | Rename refuses on a macro-declared method rather than editing it |
 | [`024.37`](design/tasks/024-deferred-review-findings.md#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | defect | yes | yes | The argument-type check reports nothing on measured real Ruby |
-| [`024.38`](design/tasks/024-deferred-review-findings.md#02438-scopeat-copies-the-whole-environment-once-per-descent-step) | defect | no | — | `scope_at` copies the whole environment once per descent step |
-| [`024.39`](design/tasks/024-deferred-review-findings.md#02439-localinferencer-keeps-per-request-state-and-020-gave-it-a-second-thread) | defect | no | — | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread |
-| [`024.42`](design/tasks/024-deferred-review-findings.md#02442-a-signature-label-leaks-the-methods-own-type-variable) | defect | yes | yes | A signature label leaks the method's own type variable |
 | [`024.44`](design/tasks/024-deferred-review-findings.md#02444-a-partials-local-is-not-resolved-and-c11s-stated-basis-names-it) | defect | yes | yes | A partial's local is not resolved, and C11's stated basis names it |
 | [`024.45`](design/tasks/024-deferred-review-findings.md#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | defect | yes | yes | Re-analysis after a keystroke is seconds on a large file, against a stated 300 ms |
-| [`024.47`](design/tasks/024-deferred-review-findings.md#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | defect | yes | yes | A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal |
 | [`024.62`](design/tasks/024-deferred-review-findings.md#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | defect | no | — | Two per-file stores are separated by nothing but their payload |
-| [`024.71`](design/tasks/024-deferred-review-findings.md#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | defect | no | — | One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised |
 | [`024.76`](design/tasks/024-deferred-review-findings.md#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | defect | yes | yes | Fifty-four `unknown-method` reports over real gem source, and all of them false |
 | [`024.83`](design/tasks/024-deferred-review-findings.md#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | defect | yes | yes | The undefined-method check is loudest exactly where no Runtime Agent can answer |
-| [`024.88`](design/tasks/024-deferred-review-findings.md#02488-completion-unions-a-unions-members-the-diagnostic-intersects-them) | defect | yes | yes | Completion unions a union's members; the diagnostic intersects them |
+| [`024.R1`](design/tasks/024-deferred-review-findings.md#024r1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-100) | roadmap |  | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
+| [`024.R3`](design/tasks/024-deferred-review-findings.md#024r3-feature-parity-roadmap-measured-against-pylance) | roadmap |  | — | Feature parity roadmap, measured against Pylance |
+| [`024.R4`](design/tasks/024-deferred-review-findings.md#024r4-only-one-platform-is-published-or-verified-roadmap-100) | roadmap |  | — | Only one platform is published or verified (roadmap, 1.0.0) |
 | [`024.100`](design/tasks/024-deferred-review-findings.md#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | defect | yes | yes | The four features answer from different code paths and disagree at one position |
 | [`024.106`](design/tasks/024-deferred-review-findings.md#024106-a-modules-singleton-calls-go-unchecked-modulefunction-and-extend-self-producing-nothing-is-withdrawn) | defect | yes | yes | A module's singleton calls go unchecked — `module_function` and `extend self` producing nothing is withdrawn |
 | [`024.121`](design/tasks/024-deferred-review-findings.md#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | defect | no | — | Nothing measures how much of this tree no test would notice changing |
 | [`024.129`](design/tasks/024-deferred-review-findings.md#024129-no-undefined-method-report-on-a-core-library-receiver) | defect | yes | yes | No undefined-method report on a core-library receiver |
 | [`024.132`](design/tasks/024-deferred-review-findings.md#024132-a-scope-defined-in-a-concerns-included-do-has-no-type) | defect | yes | yes | A scope defined in a concern's `included do` has no type |
 | [`024.137`](design/tasks/024-deferred-review-findings.md#024137-workspaceindexsearch-holds-the-index-lock-for-the-whole-walk) | defect | yes | yes | `WorkspaceIndex#search` holds the index lock for the whole walk |
-| [`024.151`](design/tasks/024-deferred-review-findings.md#024151-a-check-can-be-disabled-and-no-check-notices-closed-on-one-instalment-in-032-reopened) | defect | no | — | A check can be disabled, and no check notices — closed on one instalment in 0.3.2, reopened |
 | [`024.221`](design/tasks/024-deferred-review-findings.md#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | defect | yes | yes | A block whose receiver cannot be vouched for contains a `private` that Ruby would let through |
-| [`024.224`](design/tasks/024-deferred-review-findings.md#024224-a-type-declared-only-in-sig-is-reported-incompatible-with-itself-the-half-032-did-not-fix) | defect | yes | yes | A type declared only in `sig/` is reported incompatible with itself — the half 0.3.2 did not fix |
 | [`024.237`](design/tasks/024-deferred-review-findings.md#024237-four-shapes-stopped-reporting-by-declining-on-the-body-not-by-reading-it) | defect | no | yes | Four shapes stopped reporting by declining on the body, not by reading it |
 | [`024.243`](design/tasks/024-deferred-review-findings.md#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | defect | yes | yes | Signature help says nothing for a receiverless call inside a module body |
 | [`024.289`](design/tasks/024-deferred-review-findings.md#024289-a-class-that-includes-an-unread-module-is-not-checked-at-class-level-so-a-typo-there-is-silent) | friction | yes | yes | A class that includes an unread module is not checked at class level, so a typo there is silent |
@@ -203,27 +200,34 @@ edit the register and run the script.*
 | [`024.294`](design/tasks/024-deferred-review-findings.md#024294-a-templates-ivar-receiver-is-not-checked-and-its-type-is-one-actions) | defect | yes | yes | A template's `@ivar` receiver is not checked, and its type is one action's |
 | [`024.295`](design/tasks/024-deferred-review-findings.md#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | defect | yes | yes | The gem index is fetched on every boot and persisted nowhere |
 | [`024.297`](design/tasks/024-deferred-review-findings.md#024297-call-hierarchy-lists-no-callee-reached-through-send-super-or-a-macro) | defect | yes | yes | Call hierarchy lists no callee reached through `send`, `super` or a macro |
-| [`024.298`](design/tasks/024-deferred-review-findings.md#024298-an-inlay-hint-on-foonew-names-news-parameters-not-initializes) | defect | yes | yes | An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initialize`'s |
 | [`024.299`](design/tasks/024-deferred-review-findings.md#024299-completion-on-a-relation-offers-none-of-the-models-own-scopes-or-class-methods) | friction | yes | yes | Completion on a relation offers none of the model's own scopes or class methods |
 | [`024.300`](design/tasks/024-deferred-review-findings.md#024300-ivar-completion-offers-nothing-from-a-superclass-or-an-included-concern) | friction | yes | yes | `@ivar` completion offers nothing from a superclass or an included concern |
-| [`024.301`](design/tasks/024-deferred-review-findings.md#024301-the-route-helper-quick-fix-ignores-the-pathurl-split-and-the-helpers-arity) | defect | yes | yes | The route-helper quick fix ignores the `_path`/`_url` split and the helper's arity |
 | [`024.302`](design/tasks/024-deferred-review-findings.md#024302-the-def-quick-fix-is-offered-for-one-receiver-shape-of-three) | friction | yes | yes | The `def` quick fix is offered for one receiver shape of three |
 | [`024.303`](design/tasks/024-deferred-review-findings.md#024303-a-multiple-assignments-targets-get-no-inlay-hint) | friction | yes | yes | A multiple assignment's targets get no inlay hint |
 | [`024.304`](design/tasks/024-deferred-review-findings.md#024304-the-gem-backed-check-is-silenced-by-any-class-body-call-the-parser-cannot-read) | friction | yes | yes | The gem-backed check is silenced by any class-body call the parser cannot read |
-| [`024.318`](design/tasks/024-deferred-review-findings.md#024318-a-workspace-directory-shaped-like-a-gem-path-would-be-attributed-to-a-gem) | defect | no | — | A workspace directory shaped like a gem path would be attributed to a gem |
-| [`024.319`](design/tasks/024-deferred-review-findings.md#024319-a-bare-name-no-signature-declares-is-still-read-as-the-one-gem-class-sharing-its-last-segment) | defect | yes | yes | A bare name no signature declares is still read as the one gem class sharing its last segment |
 | [`024.320`](design/tasks/024-deferred-review-findings.md#024320-no-check-knows-which-lock-guards-what) | friction | no | — | No check knows which lock guards what |
-| [`024.321`](design/tasks/024-deferred-review-findings.md#024321-a-stdlib-class-can-be-answered-about-but-not-judged-against-the-half-040-left) | defect | yes | yes | A stdlib class can be answered about but not judged against — the half 0.4.0 left |
-| [`024.322`](design/tasks/024-deferred-review-findings.md#024322-the-server-never-passes-bundlecontext-so-gem-rbs-is-never-loaded----while-the-cache-fingerprint-hashes-the-lockfile-that-decides-it) | defect | yes | yes | The server never passes bundle_context, so gem RBS is never loaded -- while the cache fingerprint hashes the lockfile that decides it |
+| [`024.R10`](design/tasks/024-deferred-review-findings.md#024r10-the-repository-is-closed-to-external-contributions-until-100-roadmap-100) | roadmap |  | — | The repository is closed to external contributions until 1.0.0 (roadmap, 1.0.0) |
 
-**1.0.0 — 4**
+**0.4.0 — 16**
 
 | # | kind | user-visible | published | what |
 |---|---|---|---|---|
-| [`024.R1`](design/tasks/024-deferred-review-findings.md#024r1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-100) | roadmap |  | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
-| [`024.R3`](design/tasks/024-deferred-review-findings.md#024r3-feature-parity-roadmap-measured-against-pylance) | roadmap |  | — | Feature parity roadmap, measured against Pylance |
-| [`024.R4`](design/tasks/024-deferred-review-findings.md#024r4-only-one-platform-is-published-or-verified-roadmap-100) | roadmap |  | — | Only one platform is published or verified (roadmap, 1.0.0) |
-| [`024.R10`](design/tasks/024-deferred-review-findings.md#024r10-the-repository-is-closed-to-external-contributions-until-100-roadmap-100) | roadmap |  | — | The repository is closed to external contributions until 1.0.0 (roadmap, 1.0.0) |
+| [`024.13`](design/tasks/024-deferred-review-findings.md#02413-a-reopened-core-class-looks-closed-in-both-directions) | defect | yes | yes | A reopened core class looks closed, in both directions |
+| [`024.19`](design/tasks/024-deferred-review-findings.md#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | defect | yes | yes | The argument-type check judges against a class the receiver is not |
+| [`024.38`](design/tasks/024-deferred-review-findings.md#02438-scopeat-copies-the-whole-environment-once-per-descent-step) | defect | no | — | `scope_at` copies the whole environment once per descent step |
+| [`024.39`](design/tasks/024-deferred-review-findings.md#02439-localinferencer-keeps-per-request-state-and-020-gave-it-a-second-thread) | defect | no | — | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread |
+| [`024.42`](design/tasks/024-deferred-review-findings.md#02442-a-signature-label-leaks-the-methods-own-type-variable) | defect | yes | yes | A signature label leaks the method's own type variable |
+| [`024.47`](design/tasks/024-deferred-review-findings.md#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | defect | yes | yes | A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal |
+| [`024.71`](design/tasks/024-deferred-review-findings.md#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | defect | no | — | One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised |
+| [`024.88`](design/tasks/024-deferred-review-findings.md#02488-completion-unions-a-unions-members-the-diagnostic-intersects-them) | defect | yes | yes | Completion unions a union's members; the diagnostic intersects them |
+| [`024.151`](design/tasks/024-deferred-review-findings.md#024151-a-check-can-be-disabled-and-no-check-notices-closed-on-one-instalment-in-032-reopened) | defect | no | — | A check can be disabled, and no check notices — closed on one instalment in 0.3.2, reopened |
+| [`024.224`](design/tasks/024-deferred-review-findings.md#024224-a-type-declared-only-in-sig-is-reported-incompatible-with-itself-the-half-032-did-not-fix) | defect | yes | yes | A type declared only in `sig/` is reported incompatible with itself — the half 0.3.2 did not fix |
+| [`024.298`](design/tasks/024-deferred-review-findings.md#024298-an-inlay-hint-on-foonew-names-news-parameters-not-initializes) | defect | yes | yes | An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initialize`'s |
+| [`024.301`](design/tasks/024-deferred-review-findings.md#024301-the-route-helper-quick-fix-ignores-the-pathurl-split-and-the-helpers-arity) | defect | yes | yes | The route-helper quick fix ignores the `_path`/`_url` split and the helper's arity |
+| [`024.318`](design/tasks/024-deferred-review-findings.md#024318-a-workspace-directory-shaped-like-a-gem-path-would-be-attributed-to-a-gem) | defect | no | — | A workspace directory shaped like a gem path would be attributed to a gem |
+| [`024.319`](design/tasks/024-deferred-review-findings.md#024319-a-bare-name-no-signature-declares-is-still-read-as-the-one-gem-class-sharing-its-last-segment) | defect | yes | yes | A bare name no signature declares is still read as the one gem class sharing its last segment |
+| [`024.321`](design/tasks/024-deferred-review-findings.md#024321-a-stdlib-class-can-be-answered-about-but-not-judged-against-the-half-040-left) | defect | yes | yes | A stdlib class can be answered about but not judged against — the half 0.4.0 left |
+| [`024.322`](design/tasks/024-deferred-review-findings.md#024322-the-server-never-passes-bundlecontext-so-gem-rbs-is-never-loaded----while-the-cache-fingerprint-hashes-the-lockfile-that-decides-it) | defect | yes | yes | The server never passes bundle_context, so gem RBS is never loaded -- while the cache fingerprint hashes the lockfile that decides it |
 
 ### Open, user-visible, and not published
 

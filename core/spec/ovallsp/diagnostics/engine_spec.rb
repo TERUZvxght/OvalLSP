@@ -35,6 +35,59 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
     expect { engine.analyze(document: document, semantic_context: context, mode: :bogus) }.to raise_error(ArgumentError)
   end
 
+  describe "per-check severity boundaries (Task 064)" do
+    let(:document) do
+      index("class Widget\n  def accepts(one); end\n  def show\n    bogus\n    accepts\n    MissingConstant.new\n  end\nend\n")
+    end
+
+    it "does not enable unresolved constants through severity in safe mode" do
+      findings = engine.analyze(document: document, semantic_context: context,
+                                severities: { "unresolved-constant" => "hint" })
+      expect(findings.map(&:code)).to include("unknown-method", "argument-count")
+      expect(findings.map(&:code)).not_to include("unresolved-constant")
+    end
+
+    it "demotes a warning without changing other checks" do
+      findings = engine.analyze(document: document, semantic_context: context,
+                                severities: { "unknown-method" => "information" })
+      expect(findings.find { |f| f.code == "unknown-method" }.severity).to eq(:information)
+      expect(findings.find { |f| f.code == "argument-count" }.severity).to eq(:warning)
+    end
+
+    it "ignores escalation and noncanonical severity names" do
+      %w[error info off HINT].each do |value|
+        findings = engine.analyze(document: document, semantic_context: context,
+                                  severities: { "unknown-method" => value })
+        expect(findings.find { |f| f.code == "unknown-method" }.severity).to eq(:warning)
+      end
+    end
+
+    it "applies the budget after suppression and keeps a real argument-count finding" do
+      findings = engine.analyze(document: document, semantic_context: context, budget: 1,
+                                severities: { "unknown-method" => "none" })
+      expect(findings.map(&:code)).to eq(["argument-count"])
+    end
+
+    it "keeps the syntax guard even when syntax findings are suppressed" do
+      broken = index("class Widget\n  def show\n    bogus\n  end\n")
+      baseline = engine.analyze(document: broken, semantic_context: context)
+      expect(baseline.map(&:code)).to include("syntax-error")
+      expect(engine.analyze(document: broken, semantic_context: context,
+                            severities: { "syntax-error" => "none" })).to eq([])
+    end
+
+    it "demotes syntax errors and preserves the existing standard mode check" do
+      broken = index("def broken(\n")
+      findings = engine.analyze(document: broken, semantic_context: context,
+                                severities: { "syntax-error" => "warning" })
+      expect(findings).not_to be_empty
+      expect(findings.map(&:severity).uniq).to eq([:warning])
+      standard = engine.analyze(document: document, semantic_context: context, mode: :standard,
+                                severities: { "unresolved-constant" => "none" })
+      expect(standard.map(&:code)).to include("unresolved-constant")
+    end
+  end
+
   describe "syntax findings" do
     it "surfaces a Prism syntax error as a high-confidence finding" do
       document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: "def foo(\nend\n", version: 1, language_id: "ruby")

@@ -16,10 +16,14 @@ RSpec.describe "roadmap parity" do
 
   def read_utf8(path) = File.read(path, encoding: "UTF-8")
 
-  # A matrix row whose first column is a version is a planned capability;
-  # `| … | 0.3.0 | …`.
+  # A capability can be planned for plain Ruby while Rails declines it.
+  # Count the row once, regardless of which environment carries the plan.
   def planned_rows
-    read_utf8(README_EN).scan(/^\| (.+?) \| (\d+\.\d+\.\d+) \|/).map(&:last)
+    read_utf8(README_EN).lines.filter_map do |line|
+      next unless line.start_with?("| ")
+
+      line.split("|")[2, 3].to_a.filter_map { |cell| cell.strip[/\A\d+\.\d+\.\d+\z/] }.first
+    end
   end
 
   # `## 0.2.0 — …` followed by its top-level bullets.

@@ -195,17 +195,17 @@ nobody can search is the recording habit without the benefit.
 | [`024.15`](024-deferred-review-findings-resolved.md#02415-the-index-s-answers-depend-on-which-file-was-edited-last) | fixed | 0.1.13 | The index's answers depend on which file was edited last |
 | [`024.16`](024-deferred-review-findings-resolved.md#02416-the-capability-e2e-suite-can-skip-in-full-while-ci-stays-green) | fixed | 0.1.13 | The capability E2E suite can skip in full while CI stays green |
 | [`024.17`](024-deferred-review-findings-resolved.md#02417-vscode-src-extension-ts-is-covered-by-no-test-that-runs-anywhere) | fixed | 0.1.13 | `vscode/src/extension.ts` is covered by no test that runs anywhere |
-| [`024.18`](#02418-the-unassigned-ivar-check-cannot-enumerate-what-it-needs-to) | open | 0.4.0 | The unassigned-`@ivar` check cannot enumerate what it needs to |
+| [`024.18`](#02418-the-unassigned-ivar-check-cannot-enumerate-what-it-needs-to) | open | 1.0.0 | The unassigned-`@ivar` check cannot enumerate what it needs to |
 | [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.4.0 | The argument-type check judges against a class the receiver is not |
-| [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 0.4.0 | `contains?` treats an exclusive end offset as inclusive |
+| [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 1.0.0 | `contains?` treats an exclusive end offset as inclusive |
 | [`024.21`](024-deferred-review-findings-resolved.md#02421-a-qualified-constant-is-coloured-half-one-way-half-the-other) | fixed | 0.2.15 | A qualified constant is coloured half one way, half the other |
-| [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | 0.4.0 | The unassigned-`@ivar` check is silent in an application `rails new`… |
+| [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | 1.0.0 | The unassigned-`@ivar` check is silent in an application `rails new`… |
 | [`024.23`](024-deferred-review-findings-resolved.md#02423-the-singleton-chain-did-not-model-class-module) | fixed | 0.1.14 | The singleton chain did not model `Class`/`Module` |
 | [`024.24`](024-deferred-review-findings-resolved.md#02424-every-path-url-call-is-a-missing-route-when-no-routes-are-loaded) | fixed | 0.2.0 | Every `*_path`/`*_url` call is a missing route when no routes are lo… |
 | [`024.25`](024-deferred-review-findings-resolved.md#02425-a-markdown-parsing-spec-is-the-wrong-shape-for-these-two-documents-must-agree) | fixed | 0.2.12 | A Markdown-parsing spec is the wrong shape for "these two documents … |
 | [`024.26`](024-deferred-review-findings-resolved.md#02426-a-workspace-def-object-foo-is-reachable-from-every-class-in-ruby-and-from-none-here) | fixed | 0.2.12 | A workspace `def Object.foo` is reachable from every class in Ruby a… |
 | [`024.27`](024-deferred-review-findings-resolved.md#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | fixed | 0.2.16 | `documentSymbol` lists one outline entry per name a macro declares |
-| [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | 0.4.0 | Rename refuses on a macro-declared method rather than editing it |
+| [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | 1.0.0 | Rename refuses on a macro-declared method rather than editing it |
 | [`024.29`](024-deferred-review-findings-resolved.md#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | done | 0.2.16 | Two features were written for 0.1.15 and cut from it |
 | [`024.30`](024-deferred-review-findings-resolved.md#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
 | [`024.31`](024-deferred-review-findings-resolved.md#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | fixed | 0.2.13 | A declaration written inside a block has no owner this parser can na… |
@@ -214,15 +214,15 @@ nobody can search is the recording habit without the benefit.
 | [`024.34`](024-deferred-review-findings-resolved.md#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
 | [`024.35`](024-deferred-review-findings-resolved.md#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | done | 0.2.18 | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](024-deferred-review-findings-resolved.md#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
-| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.4.0 | The argument-type check reports nothing on measured real Ruby |
+| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 1.0.0 | The argument-type check reports nothing on measured real Ruby |
 | [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.4.0 | `scope_at` copies the whole environment once per descent step |
 | [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.4.0 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](024-deferred-review-findings-resolved.md#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
 | [`024.41`](024-deferred-review-findings-resolved.md#02441-typing-a-reports-a-method-on-the-next-line) | fixed | 0.2.18 | Typing a `.` reports a method on the *next* line |
 | [`024.42`](#02442-a-signature-label-leaks-the-method-s-own-type-variable) | open | 0.4.0 | A signature label leaks the method's own type variable |
 | [`024.43`](024-deferred-review-findings-resolved.md#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | fixed | 0.2.16 | Signature help answers nothing for a receiverless stdlib call |
-| [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.4.0 | A partial's local is not resolved, and C11's stated basis names it |
-| [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.4.0 | Re-analysis after a keystroke is seconds on a large file, against a … |
+| [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 1.0.0 | A partial's local is not resolved, and C11's stated basis names it |
+| [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 1.0.0 | Re-analysis after a keystroke is seconds on a large file, against a … |
 | [`024.46`](024-deferred-review-findings-resolved.md#02446-typing-self-cost-55-false-diagnostics-and-was-rolled-back) | fixed | 0.2.1 | Typing `self` cost 55 false diagnostics and was rolled back |
 | [`024.47`](#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | open | 0.4.0 | A namespaced class named after a core class loses its diagnostics, a… |
 | [`024.48`](024-deferred-review-findings-resolved.md#02448-the-measurement-tool-ran-an-engine-the-server-never-runs) | fixed | 0.2.1 | The measurement tool ran an engine the server never runs |
@@ -238,7 +238,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.58`](024-deferred-review-findings-resolved.md#02458-bin-ovallsp-loaded-every-abi-s-vendored-gems-not-the-running-one-s) | fixed | 0.2.2 | `bin/ovallsp` loaded every ABI's vendored gems, not the running one's |
 | [`024.59`](024-deferred-review-findings-resolved.md#02459-the-guard-against-a-stale-example-count-could-not-run) | fixed | 0.2.3 | The guard against a stale example count could not run |
 | [`024.60`](024-deferred-review-findings-resolved.md#02460-four-test-fixtures-raced-macos-first-execution-scan) | fixed | 0.2.3 | Four test fixtures raced macOS' first-execution scan |
-| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.4.0 | Two per-file stores are separated by nothing but their payload |
+| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 1.0.0 | Two per-file stores are separated by nothing but their payload |
 | [`024.63`](024-deferred-review-findings-resolved.md#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | fixed | 0.2.16 | The dispatch layer owns view inference, and it has broken the query … |
 | [`024.64`](024-deferred-review-findings-resolved.md#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | fixed | 0.2.12 | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
 | [`024.65`](024-deferred-review-findings-resolved.md#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
@@ -251,14 +251,14 @@ nobody can search is the recording habit without the benefit.
 | [`024.73`](024-deferred-review-findings-resolved.md#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](024-deferred-review-findings-resolved.md#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | fixed | 0.2.16 | The trust gate stands in front of callers, not in front of what exec… |
 | [`024.75`](024-deferred-review-findings-resolved.md#02475-a-documented-field-selects-nothing) | fixed | 0.2.12 | A documented field selects nothing |
-| [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.4.0 | Fifty-four `unknown-method` reports over real gem source, and all of… |
+| [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 1.0.0 | Fifty-four `unknown-method` reports over real gem source, and all of… |
 | [`024.77`](024-deferred-review-findings-resolved.md#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | fixed | 0.2.15 | A call to a method that does not exist is missed through a relation |
 | [`024.78`](024-deferred-review-findings-resolved.md#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | fixed | 0.2.6 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](024-deferred-review-findings-resolved.md#02479-model-first-completes-to-nothing) | fixed | 0.2.6 | `Model.first` completes to nothing |
 | [`024.80`](024-deferred-review-findings-resolved.md#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | fixed | 0.2.12 | An unresolved hierarchy edge is expressible as a method owner |
 | [`024.81`](024-deferred-review-findings-resolved.md#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | fixed | 0.2.12 | An ancestor reference carries no lexical context, so an ambiguous na… |
 | [`024.82`](024-deferred-review-findings-resolved.md#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | fixed | 0.2.15 | `Foo = Class.new(Bar)` is not a type the index knows |
-| [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.4.0 | The undefined-method check is loudest exactly where no Runtime Agent… |
+| [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 1.0.0 | The undefined-method check is loudest exactly where no Runtime Agent… |
 | [`024.84`](024-deferred-review-findings-resolved.md#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | fixed | 0.2.18 | A constant is typed as a class object whatever it holds |
 | [`024.85`](024-deferred-review-findings-resolved.md#02485-self-completes-nothing) | fixed | 0.2.16 | `self.` completes nothing |
 | [`024.86`](024-deferred-review-findings-resolved.md#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | fixed | 0.3.0 | An ivar assigned in another method has no type, except in the view |
@@ -275,13 +275,13 @@ nobody can search is the recording habit without the benefit.
 | [`024.97`](024-deferred-review-findings-resolved.md#02497-a-later-pass-at-the-same-version-overwrites-a-corrected-answer) | fixed | 0.2.12 | A later pass at the same version overwrites a corrected answer |
 | [`024.98`](024-deferred-review-findings-resolved.md#02498-a-workspace-opened-through-a-symlink-shows-every-file-twice-and-one-copy-can-never-be-cleared) | fixed | 0.2.8 | A workspace opened through a symlink shows every file twice, and one… |
 | [`024.99`](024-deferred-review-findings-resolved.md#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | fixed | 0.3.0 | Completion offers members that cannot be called from where it was as… |
-| [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.4.0 | The four features answer from different code paths and disagree at o… |
+| [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 1.0.0 | The four features answer from different code paths and disagree at o… |
 | [`024.101`](024-deferred-review-findings-resolved.md#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | fixed | 0.2.10 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
 | [`024.102`](024-deferred-review-findings-resolved.md#024102-eight-classes-and-the-logic-each-one-could-not-have-happened-under) | fixed | 0.2.16 | Eight classes, and the logic each one could not have happened under |
 | [`024.103`](024-deferred-review-findings-resolved.md#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | fixed | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
 | [`024.104`](024-deferred-review-findings-resolved.md#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | fixed | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
 | [`024.105`](024-deferred-review-findings-resolved.md#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
-| [`024.106`](#024106-a-module-s-singleton-calls-go-unchecked-module-function-and-extend-self-producing-nothing-is-withdrawn) | open | 0.4.0 | A module's singleton calls go unchecked — `module_function` and `ext… |
+| [`024.106`](#024106-a-module-s-singleton-calls-go-unchecked-module-function-and-extend-self-producing-nothing-is-withdrawn) | open | 1.0.0 | A module's singleton calls go unchecked — `module_function` and `ext… |
 | [`024.107`](024-deferred-review-findings-resolved.md#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](024-deferred-review-findings-resolved.md#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](024-deferred-review-findings-resolved.md#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | fixed | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
@@ -296,7 +296,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.118`](024-deferred-review-findings-resolved.md#024118-workspaceindex-stale-compares-versions-across-buffers) | fixed | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](024-deferred-review-findings-resolved.md#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](024-deferred-review-findings-resolved.md#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
-| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.4.0 | Nothing measures how much of this tree no test would notice changing |
+| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 1.0.0 | Nothing measures how much of this tree no test would notice changing |
 | [`024.122`](024-deferred-review-findings-resolved.md#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | fixed | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.123`](024-deferred-review-findings-resolved.md#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.124`](024-deferred-review-findings-resolved.md#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
@@ -304,15 +304,15 @@ nobody can search is the recording habit without the benefit.
 | [`024.126`](024-deferred-review-findings-resolved.md#024126-a-text-scanner-matches-its-own-prose-exempts-itself-and-stops-checking-a-file-that-can-hold-the-real-thing) | fixed | 0.2.14 | A text scanner matches its own prose, exempts itself, and stops chec… |
 | [`024.127`](024-deferred-review-findings-resolved.md#024127-hover-answers-an-empty-string-where-lsp-expects-null) | fixed | 0.2.15 | Hover answers an empty string where LSP expects null |
 | [`024.128`](024-deferred-review-findings-resolved.md#024128-integer-arithmetic-answers-a-four-way-union) | fixed | 0.2.15 | Integer arithmetic answers a four-way union |
-| [`024.129`](#024129-no-undefined-method-report-on-a-core-library-receiver) | open | 0.4.0 | No undefined-method report on a core-library receiver |
+| [`024.129`](#024129-no-undefined-method-report-on-a-core-library-receiver) | open | 1.0.0 | No undefined-method report on a core-library receiver |
 | [`024.130`](024-deferred-review-findings-resolved.md#024130-a-hover-label-drops-the-namespace-when-the-name-was-written-bare-withdrawn-it-does-not-reproduce) | fixed | 0.2.14 | A hover label drops the namespace when the name was written bare — w… |
 | [`024.131`](024-deferred-review-findings-resolved.md#024131-after-on-a-nil-local-hover-answers-nil-a-wrong-answer-not-an-absent-one) | fixed | 0.2.15 | After `||=` on a nil local, hover answers `nil` — a wrong answer, no… |
-| [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.4.0 | A scope defined in a concern's `included do` has no type |
+| [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 1.0.0 | A scope defined in a concern's `included do` has no type |
 | [`024.133`](024-deferred-review-findings-resolved.md#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | fixed | 0.2.15 | A positional argument to a keyword-only method reads as nonsense |
 | [`024.134`](024-deferred-review-findings-resolved.md#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | fixed | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
 | [`024.135`](024-deferred-review-findings-resolved.md#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | fixed | 0.2.16 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
 | [`024.136`](024-deferred-review-findings-resolved.md#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | fixed | 0.2.16 | A route's optional segments are detected by matching the literal `(.… |
-| [`024.137`](#024137-workspaceindex-search-holds-the-index-lock-for-the-whole-walk) | open | 0.4.0 | `WorkspaceIndex#search` holds the index lock for the whole walk |
+| [`024.137`](#024137-workspaceindex-search-holds-the-index-lock-for-the-whole-walk) | open | 1.0.0 | `WorkspaceIndex#search` holds the index lock for the whole walk |
 | [`024.138`](024-deferred-review-findings-resolved.md#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | fixed | 0.2.16 | No test mixes a schema change and a model-file change in one batch |
 | [`024.139`](024-deferred-review-findings-resolved.md#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
 | [`024.140`](024-deferred-review-findings-resolved.md#024140-a-scripted-edit-doubled-a-register-entry-and-every-check-stayed-green) | fixed | 0.2.14 | A scripted edit doubled a register entry, and every check stayed gre… |
@@ -396,7 +396,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.218`](024-deferred-review-findings-resolved.md#024218-six-isolated-agents-branched-from-the-wrong-commit-and-the-evidence-was-deleted-before-it-was-checked) | fixed | 0.2.15 | Six isolated agents branched from the wrong commit, and the evidence… |
 | [`024.219`](024-deferred-review-findings-resolved.md#024219-a-three-part-claim-shipped-with-one-part-pinned-and-the-other-two-were-false) | fixed | 0.2.15 | A three-part claim shipped with one part pinned, and the other two w… |
 | [`024.220`](024-deferred-review-findings-resolved.md#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | fixed | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
-| [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.4.0 | A block whose receiver cannot be vouched for contains a `private` th… |
+| [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 1.0.0 | A block whose receiver cannot be vouched for contains a `private` th… |
 | [`024.223`](024-deferred-review-findings-resolved.md#024223-one-unresolvable-include-in-a-project-s-own-rbs-turns-its-whole-class-into-false-reports) | fixed | 0.2.15 | One unresolvable `include` in a project's own RBS turns its whole cl… |
 | [`024.224`](#024224-a-type-declared-only-in-sig-is-reported-incompatible-with-itself-the-half-0-3-2-did-not-fix) | open | 0.4.0 | A type declared only in `sig/` is reported incompatible with itself … |
 | [`024.225`](024-deferred-review-findings-resolved.md#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | fixed | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
@@ -409,13 +409,13 @@ nobody can search is the recording habit without the benefit.
 | [`024.232`](024-deferred-review-findings-resolved.md#024232-the-fixture-proving-a-check-has-teeth-lost-its-own-teeth-when-a-version-shipped) | fixed | 0.2.15 | The fixture proving a check has teeth lost its own teeth when a vers… |
 | [`024.233`](024-deferred-review-findings-resolved.md#024233-the-guard-against-naming-a-shipped-release-could-not-fire-until-the-release-had-shipped) | fixed | 0.2.16 | The guard against naming a shipped release could not fire until the … |
 | [`024.234`](024-deferred-review-findings-resolved.md#024234-the-plugin-subsystem-was-unreachable-from-the-shipped-product-and-eight-documents-said-otherwise) | fixed | 0.2.16 | The plugin subsystem was unreachable from the shipped product, and e… |
-| [`024.237`](#024237-four-shapes-stopped-reporting-by-declining-on-the-body-not-by-reading-it) | open | 0.4.0 | Four shapes stopped reporting by declining on the body, not by readi… |
+| [`024.237`](#024237-four-shapes-stopped-reporting-by-declining-on-the-body-not-by-reading-it) | open | 1.0.0 | Four shapes stopped reporting by declining on the body, not by readi… |
 | [`024.238`](024-deferred-review-findings-resolved.md#024238-alias-to-a-method-an-included-module-declares-is-reported-as-unknown) | fixed | 0.3.0 | `alias` to a method an included module declares is reported as unkno… |
 | [`024.239`](024-deferred-review-findings-resolved.md#024239-a-name-ruby-gives-every-object-reported-missing-because-rbs-omits-it) | fixed | 0.2.16 | A name Ruby gives every object, reported missing because RBS omits it |
 | [`024.240`](024-deferred-review-findings-resolved.md#024240-hover-answers-nothing-in-a-view-where-completion-and-go-to-definition-both-answer) | fixed | 0.2.16 | Hover answers nothing in a view where completion and go-to-definitio… |
 | [`024.241`](024-deferred-review-findings-resolved.md#024241-find-references-answers-from-a-comment-a-bare-literal-and-end) | fixed | 0.2.16 | Find References answers from a comment, a bare literal, and `end` |
 | [`024.242`](024-deferred-review-findings-resolved.md#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | fixed | 0.2.16 | A class held in a local variable loses an RBS overload |
-| [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.4.0 | Signature help says nothing for a receiverless call inside a module … |
+| [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 1.0.0 | Signature help says nothing for a receiverless call inside a module … |
 | [`024.244`](024-deferred-review-findings-resolved.md#024244-preparerename-is-refused-on-any-class-or-module-written-inside-a-module-class-body-while-th) | fixed | 0.2.17 | prepareRename is refused on any class or module written inside a `mo… |
 | [`024.245`](024-deferred-review-findings-resolved.md#024245-server-prepare-rename-result-does-not-call-ensure-reference-index-current-while-referenc) | fixed | 0.3.0 | `Server#prepare_rename_result` does not call `#ensure_reference_inde… |
 | [`024.246`](024-deferred-review-findings-resolved.md#024246-one-unresolvable-include-in-a-project-s-own-rbs-makes-the-engine-report-a-method-the-same-file) | fixed | 0.2.17 | One unresolvable `include` in a project's own RBS makes the engine r… |
@@ -461,22 +461,22 @@ nobody can search is the recording habit without the benefit.
 | [`024.286`](024-deferred-review-findings-resolved.md#024286-a-session-recorded-on-one-ruby-was-compared-against-another-so-the-3-3-job-called-true-answers-wrong) | fixed | 0.2.17 | A session recorded on one Ruby was compared against another, so the … |
 | [`024.287`](024-deferred-review-findings-resolved.md#024287-the-informational-ruby-4-0-job-reported-five-checkout-failures-and-one-real-difference) | fixed | 0.2.18 | The informational Ruby 4.0 job reported five checkout failures and o… |
 | [`024.288`](024-deferred-review-findings-resolved.md#024288-ruby-4-0-puts-a-fourth-name-on-object-that-rbs-does-not-declare) | fixed | 0.3.2 | Ruby 4.0 puts a fourth name on Object that RBS does not declare |
-| [`024.289`](#024289-a-class-that-includes-an-unread-module-is-not-checked-at-class-level-so-a-typo-there-is-silent) | open | 0.4.0 | A class that includes an unread module is not checked at class level… |
-| [`024.290`](#024290-nothing-is-reported-about-a-call-whose-receiver-is-object) | open | 0.4.0 | Nothing is reported about a call whose receiver is `Object` |
+| [`024.289`](#024289-a-class-that-includes-an-unread-module-is-not-checked-at-class-level-so-a-typo-there-is-silent) | open | 1.0.0 | A class that includes an unread module is not checked at class level… |
+| [`024.290`](#024290-nothing-is-reported-about-a-call-whose-receiver-is-object) | open | 1.0.0 | Nothing is reported about a call whose receiver is `Object` |
 | [`024.291`](024-deferred-review-findings-resolved.md#024291-a-repeated-key-in-a-metadata-block-is-resolved-silently-and-one-of-them-discarded-a-withdrawal) | fixed | 0.2.18 | A repeated key in a metadata block is resolved silently, and one of … |
 | [`024.292`](024-deferred-review-findings-resolved.md#024292-045-disagrees-with-its-own-table-about-what-0-3-0-is-blocked-on) | fixed | 0.3.0 | `045` disagrees with its own table about what 0.3.0 is blocked on |
 | [`024.293`](024-deferred-review-findings-resolved.md#024293-check-pinned-mutations-rb-reads-a-skipped-example-as-a-mutation-that-escaped) | fixed | 0.3.0 | `check_pinned_mutations.rb` reads a skipped example as a mutation th… |
-| [`024.294`](#024294-a-template-s-ivar-receiver-is-not-checked-and-its-type-is-one-action-s) | open | 0.4.0 | A template's `@ivar` receiver is not checked, and its type is one ac… |
-| [`024.295`](#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | open | 0.4.0 | The gem index is fetched on every boot and persisted nowhere |
+| [`024.294`](#024294-a-template-s-ivar-receiver-is-not-checked-and-its-type-is-one-action-s) | open | 1.0.0 | A template's `@ivar` receiver is not checked, and its type is one ac… |
+| [`024.295`](#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | open | 1.0.0 | The gem index is fetched on every boot and persisted nowhere |
 | [`024.296`](024-deferred-review-findings-resolved.md#024296-renaming-a-local-a-pattern-also-binds-rewrites-the-rest-and-leaves-the-pattern) | fixed | 0.3.2 | Renaming a local a pattern also binds rewrites the rest and leaves t… |
-| [`024.297`](#024297-call-hierarchy-lists-no-callee-reached-through-send-super-or-a-macro) | open | 0.4.0 | Call hierarchy lists no callee reached through `send`, `super` or a … |
+| [`024.297`](#024297-call-hierarchy-lists-no-callee-reached-through-send-super-or-a-macro) | open | 1.0.0 | Call hierarchy lists no callee reached through `send`, `super` or a … |
 | [`024.298`](#024298-an-inlay-hint-on-foo-new-names-new-s-parameters-not-initialize-s) | open | 0.4.0 | An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initi… |
-| [`024.299`](#024299-completion-on-a-relation-offers-none-of-the-model-s-own-scopes-or-class-methods) | open | 0.4.0 | Completion on a relation offers none of the model's own scopes or cl… |
-| [`024.300`](#024300-ivar-completion-offers-nothing-from-a-superclass-or-an-included-concern) | open | 0.4.0 | `@ivar` completion offers nothing from a superclass or an included c… |
+| [`024.299`](#024299-completion-on-a-relation-offers-none-of-the-model-s-own-scopes-or-class-methods) | open | 1.0.0 | Completion on a relation offers none of the model's own scopes or cl… |
+| [`024.300`](#024300-ivar-completion-offers-nothing-from-a-superclass-or-an-included-concern) | open | 1.0.0 | `@ivar` completion offers nothing from a superclass or an included c… |
 | [`024.301`](#024301-the-route-helper-quick-fix-ignores-the-path-url-split-and-the-helper-s-arity) | open | 0.4.0 | The route-helper quick fix ignores the `_path`/`_url` split and the … |
-| [`024.302`](#024302-the-def-quick-fix-is-offered-for-one-receiver-shape-of-three) | open | 0.4.0 | The `def` quick fix is offered for one receiver shape of three |
-| [`024.303`](#024303-a-multiple-assignment-s-targets-get-no-inlay-hint) | open | 0.4.0 | A multiple assignment's targets get no inlay hint |
-| [`024.304`](#024304-the-gem-backed-check-is-silenced-by-any-class-body-call-the-parser-cannot-read) | open | 0.4.0 | The gem-backed check is silenced by any class-body call the parser c… |
+| [`024.302`](#024302-the-def-quick-fix-is-offered-for-one-receiver-shape-of-three) | open | 1.0.0 | The `def` quick fix is offered for one receiver shape of three |
+| [`024.303`](#024303-a-multiple-assignment-s-targets-get-no-inlay-hint) | open | 1.0.0 | A multiple assignment's targets get no inlay hint |
+| [`024.304`](#024304-the-gem-backed-check-is-silenced-by-any-class-body-call-the-parser-cannot-read) | open | 1.0.0 | The gem-backed check is silenced by any class-body call the parser c… |
 | [`024.305`](024-deferred-review-findings-resolved.md#024305-one-name-six-modules-and-the-index-keeps-the-empty-one) | fixed | 0.3.2 | One name, six modules, and the index keeps the empty one |
 | [`024.306`](024-deferred-review-findings-resolved.md#024306-the-0-3-0-record-states-as-measured-that-a-method-call-candidate-never-resolves-to-a-constant) | fixed | 0.3.2 | The 0.3.0 record states as measured that a `:method_call` candidate … |
 | [`024.307`](024-deferred-review-findings-resolved.md#024307-the-capability-suite-s-own-fixtures-cannot-reach-six-shapes-the-release-found) | fixed | 0.3.2 | The capability suite's own fixtures cannot reach six shapes the rele… |
@@ -492,7 +492,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.317`](024-deferred-review-findings-resolved.md#024317-six-of-the-documentation-map-s-trigger-rows-have-nothing-enforcing-them) | fixed | 0.3.2 | Six of the documentation map's trigger rows have nothing enforcing t… |
 | [`024.318`](#024318-a-workspace-directory-shaped-like-a-gem-path-would-be-attributed-to-a-gem) | open | 0.4.0 | A workspace directory shaped like a gem path would be attributed to … |
 | [`024.319`](#024319-a-bare-name-no-signature-declares-is-still-read-as-the-one-gem-class-sharing-its-last-segment) | open | 0.4.0 | A bare name no signature declares is still read as the one gem class… |
-| [`024.320`](#024320-no-check-knows-which-lock-guards-what) | open | 0.4.0 | No check knows which lock guards what |
+| [`024.320`](#024320-no-check-knows-which-lock-guards-what) | open | 1.0.0 | No check knows which lock guards what |
 | [`024.321`](#024321-a-stdlib-class-can-be-answered-about-but-not-judged-against-the-half-0-4-0-left) | open | 0.4.0 | A stdlib class can be answered about but not judged against — the ha… |
 | [`024.322`](#024322-the-server-never-passes-bundle-context-so-gem-rbs-is-never-loaded-while-the-cache-fingerprint-hashes-the-lockfile-that-decides-it) | open | 0.4.0 | The server never passes bundle_context, so gem RBS is never loaded -… |
 | [`024.323`](024-deferred-review-findings-resolved.md#024323-the-define-quick-fix-writes-a-file-that-does-not-parse-on-a-class-made-by-assignment) | fixed | 0.4.0 | The Define quick fix writes a file that does not parse, on a class m… |
@@ -749,7 +749,7 @@ never reached a user.
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 and **blocked on 024.R7** for the part that needs it. Three of the five shapes are closed in 0.2.0 by staying silent rather than guessing: a class-body call this analysis does not model (which covers every gem macro), a view that renders anything, and everything rounds 3 and 4 fixed. What is left is *precision* -- turning those two silences back into answers -- and one shape that is still wrong rather than silent, and one that is wrong only at depth two or more:
@@ -873,6 +873,8 @@ path to every action that renders it. The index already holds every
 literal render target, so this is a lookup rather than new evidence —
 and until it exists, no consumer of `#ivars_for_view` should be given
 more authority than it has.
+
+**Retargeted to 1.0.0.** コントローラ間の render 追跡とビュー解析基盤の再設計を要し、日常的編集の誤答ではなく安全側の沈黙であるため、1.0.0 静的解析基盤再設計で扱う。
 ## 024.19 The argument-type check judges against a class the receiver is not
 
 ```yaml
@@ -1127,7 +1129,7 @@ user-visible-note: >
   block, hover, completion and signature help answer nothing for a
   receiver the inferencer can type. The wrong-answer half is `024.226`,
   fixed in 0.2.15.
-target: 0.4.0
+target: 1.0.0
 ```
 
 **The half that reached users is fixed in 0.2.1**, and it was the
@@ -1250,13 +1252,15 @@ can descend and hover becomes right inside every block.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** The `.` after a
 block offers nothing; making it offer something is capability, and
 `048` measured the obvious fix at 114 broken examples.
+
+**Retargeted to 1.0.0.** 境界値1文字での微小なオフセット不整合であり、通常のカーソル移動や診断に重大な誤答を生じさせないため、1.0.0 の字句・範囲境界モデル整理で扱う。
 ## 024.22 The unassigned-`@ivar` check is silent in an application `rails new` produces
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`MODELLED_CLASS_BODY_CALLS`,
@@ -1301,13 +1305,15 @@ not have by promoting an entry nobody ran.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** A check silent in
 an application `rails new` produces starts answering there, which is
 a new row rather than a repair.
+
+**Retargeted to 1.0.0.** 安全側の沈黙（偽陽性防止）の挙動であり誤答ではないため、1.0.0 の Rails アプリケーション境界モデル検証で扱う。
 ## 024.28 Rename refuses on a macro-declared method rather than editing it
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/rename/planner.rb`
@@ -1461,6 +1467,8 @@ Retargeted from 0.2.16 to 0.3.0 for that reason.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** Refusing is already
 the right answer; what this entry wants is the *reason* reaching the
 user, and nothing here sends `window/showMessage` yet.
+
+**Retargeted to 1.0.0.** 誤ったコード書き換えを防ぐ安全側の拒否動作（仕様通りの沈黙）であり、マクロ展開とメタプログラミング対応基盤を整える 1.0.0 で扱う。
 ## 024.37 The argument-type check reports nothing on measured real Ruby
 
 ```yaml
@@ -1477,7 +1485,7 @@ user-visible-note: >
   unresolved-constant at 369 as the control. The entry stays open for
   the different reason that section gives -- a check that has never
   produced a true report has not been shown capable of one.
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_type_findings`,
@@ -1652,6 +1660,8 @@ of one. Producing a deliberate mismatch a real corpus contains, and
 watching it be reported, is what would settle that — and no measurement
 here has done it.
 
+
+**Retargeted to 1.0.0.** 偽陽性を防ぐための厳格な安全側沈黙であり、型推論器と型制約ソルバーを抜本再設計する 1.0.0 で網羅率向上を扱う。
 ## 024.38 `scope_at` copies the whole environment once per descent step
 
 ```yaml
@@ -2056,7 +2066,7 @@ than rendering. That is why it moves rather than closing.
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`ivars_for_view`,
@@ -2091,13 +2101,15 @@ unverified.
 
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** A partial's local
 gaining a type is an answer where there is none.
+
+**Retargeted to 1.0.0.** パーシャルのローカル変数受け渡しはテンプレート解析基盤の拡張を要し、誤答ではなく沈黙であるため、1.0.0 ERB 解析基盤で扱う。
 ## 024.45 Re-analysis after a keystroke is seconds on a large file, against a stated 300 ms
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#publish_diagnostics`,
@@ -2368,6 +2380,8 @@ against a stated budget. 0.2.18 moved the same measurement 5% and
 shipped as a patch.
 
 **Retargeted to 0.4.0.** Re-measured twice on a quiet machine, and the number is far worse than the entry carried: 10 keystrokes into a 4,662-line file take 525.9s to go quiet (521.6s on the first run, with a stray process pinning a core -- so that was not the cause), 51 publishes for 10 edits, hover median 0.124s and max 16.1s. The entry's own profile says why a patch cannot hold it: roughly half the time is constructing and hashing Index::SymbolId across the two indexes, with no single hotspot to remove, and the direction it names -- an identity computed once rather than per query -- is 024.230's neighbourhood and a release of its own. docs/PUBLISHING.md puts a change of that size outside the patch line. Moved with the measurement rather than with an estimate.
+
+**Retargeted to 1.0.0.** 解析の正答性に関わる誤答ではなく性能課題であり、インデックス差分更新と非同期ワーカー再設計を行う 1.0.0 で扱う。
 ## 024.47 A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal
 
 ```yaml
@@ -2626,7 +2640,7 @@ user-visible-note: >
   affected. What is recorded is that the correctness rests on four
   call sites each remembering a different subset, rather than on the
   structure — a hazard for the fifth, not a fault in the fourth.
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
@@ -2757,6 +2771,8 @@ simplification of working code carries an ordinary change's
 obligations, and a patch release whose measurement is already spent
 is the wrong place to take them on. Moved to 0.4.0.
 
+
+**Retargeted to 1.0.0.** ユーザー向けの機能誤答ではなく内部データ構造のクリーンアップ負債であるため、1.0.0 のアーキテクチャ整理で扱う。
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 
 ```yaml
@@ -2895,7 +2911,7 @@ from inside each root, or the paths are what is being compared.
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -3135,13 +3151,15 @@ third and fourth are `024.13`'s and `024.19`'s territory. So the count
 is carried forward rather than reduced, and the entry moves to where
 the shapes are fixed.
 
+
+**Retargeted to 1.0.0.** ユーザーの通常アプリケーションコードではなく Gem 単体の解析コンテキスト欠落によるものであり、1.0.0 のプレーン Ruby / 外部ライブラリ解析基盤で扱う。
 ## 024.83 The undefined-method check is loudest exactly where no Runtime Agent can answer
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`#closed_nominal?`,
@@ -3193,6 +3211,8 @@ which is worth knowing before this entry is worked on.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** Its premise moved
 under it: with an Agent connected the check is still all-false, so
 this is about what it can newly say rather than a repair.
+
+**Retargeted to 1.0.0.** 実行時情報がない孤立コンテキストの静的補完であり、素の Ruby 保証（024.R1）と静的解析モデルを強化する 1.0.0 で扱う。
 ## 024.88 Completion unions a union's members; the diagnostic intersects them
 
 ```yaml
@@ -3285,7 +3305,7 @@ change to what an item says.
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb`,
@@ -3331,13 +3351,15 @@ in a Rails index view. It needs the E2E harness.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** Four surfaces
 agreeing at one position means three of them answering where they now
 do not.
+
+**Retargeted to 1.0.0.** 4機能の共通クエリパイプライン統合という基盤再設計が必要であり、1.0.0 セマンティック統合クエリ基盤で扱う。
 ## 024.106 A module's singleton calls go unchecked — `module_function` and `extend self` producing nothing is withdrawn
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/semantic/method_resolver.rb`
@@ -3418,6 +3440,8 @@ still open.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** The completion half
 does not reproduce; the diagnostic half is a module's singleton
 surface becoming judgeable, which is capability.
+
+**Retargeted to 1.0.0.** メソッド探索パスの安全側の沈黙であり誤ったエラーを出すものではないため、1.0.0 のモジュール特異クラスモデル再設計で扱う。
 ## 024.121 Nothing measures how much of this tree no test would notice changing
 
 ```yaml
@@ -3428,7 +3452,7 @@ user-visible-note: >
   Nothing an editor user meets directly. What it costs is that a
   behaviour can be broken silently, which every user-visible entry in
   this register that began "and no test noticed" was downstream of.
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `scripts/check_pinned_mutations.rb`, `scripts/hunk_sweep.rb`,
@@ -3571,13 +3595,15 @@ worse of the two gaps this entry names.
 
 Moved to 0.4.0.
 
+
+**Retargeted to 1.0.0.** 製品のランタイム挙動ではなくテスト基盤・計測パイプラインの品質課題であるため、1.0.0 の品質保証体制整備で扱う。
 ## 024.129 No undefined-method report on a core-library receiver
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -3601,13 +3627,15 @@ entry names.
 receiver becoming judgeable needs `024.R7` to carry core classes,
 which is a scope change to the walk and a new answer at the end of
 it.
+
+**Retargeted to 1.0.0.** 組み込みクラスへの monkey-patching やオープンクラスを誤ってエラーにしないための安全側沈黙であり、1.0.0 の組み込み型階層確定で扱う。
 ## 024.132 A scope defined in a concern's `included do` has no type
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb`, `core/lib/ovallsp/models/model_registry.rb`
@@ -3632,13 +3660,15 @@ which is the E2E harness rather than a probe.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** A scope from a
 concern's `included do` gaining a type is an answer where the chain
 currently has none.
+
+**Retargeted to 1.0.0.** 動的ブロック内 DSL の型伝播であり、誤診ではなく補完の欠損（沈黙）であるため、1.0.0 の Rails DSL 解析拡張で扱う。
 ## 024.137 `WorkspaceIndex#search` holds the index lock for the whole walk
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/workspace_index.rb` (`#search`, `#rank`)
@@ -3900,6 +3930,8 @@ that was struck out rather than left to be quoted forward. Moved to
 0.4.0: what is left needs a workspace big enough to show it, which is
 an experiment to set up rather than a fix to write.
 
+
+**Retargeted to 1.0.0.** シンボル検索の並行性最適化であり誤答を生じるものではないため、1.0.0 のマルチスレッド・スナップショット再設計で扱う。
 ## 024.151 A check can be disabled, and no check notices — closed on one instalment in 0.3.2, reopened
 
 ```yaml
@@ -4137,7 +4169,7 @@ two mechanisms, and 0.3.2 spent an instalment on the first of them.
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (`#iterates_a_literal?`,
@@ -4241,6 +4273,8 @@ Adding a fourth such sentinel to `visibility`, which every
 declaration carries and many readers branch on, is not a patch's
 change. Moved to 0.4.0.
 
+
+**Retargeted to 1.0.0.** ブロックコンテキストのレシーバ推論限界による境界ケースであり、1.0.0 のブロック評価コンテキスト推論基盤で扱う。
 ## 024.224 A type declared only in `sig/` is reported incompatible with itself — the half 0.3.2 did not fix
 
 ```yaml
@@ -4610,7 +4644,7 @@ user-visible-note: >
   no limitation to state. It stays open because a genuine typo in the
   same body is unreported too, which is a missed report rather than a
   wrong one -- the direction section 0 prefers, and still a gap.
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -4658,13 +4692,15 @@ reading `define_method` inside `Class.new do … end` and a literal
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** The syntactic half
 shipped in 0.3.0; what remains is reading `define_method` inside a
 class-creating block, which is the enumeration question.
+
+**Retargeted to 1.0.0.** 現状は安全側の辞退により偽陽性を完全に防止しており、回答範囲を安全に広げる作業は 1.0.0 のメソッド本体解析器で扱う。
 ## 024.243 Signature help says nothing for a receiverless call inside a module body
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`
@@ -4815,13 +4851,15 @@ rather than a hunk in a review round, so this stays open and moves off
 measured in 0.3.0 and none shippable. The direction needs a change to
 how ancestors are read, and it ends in members a module did not offer
 before.
+
+**Retargeted to 1.0.0.** モジュール本体スコープの implicit self 解決の欠如による沈黙であり、1.0.0 のモジュール名前空間型モデルで扱う。
 ## 024.289 A class that includes an unread module is not checked at class level, so a typo there is silent
 
 ```yaml
 status: open
 kind: friction
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`closed_nominal?`)
@@ -4866,13 +4904,15 @@ entry names.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** Checking a class
 that includes an unread module means enumerating what the module
 installs -- the same scope change `024.290` records.
+
+**Retargeted to 1.0.0.** 未読込祖先による誤診断を防ぐ安全側の沈黙（friction）であり、1.0.0 の完全モジュール解決基盤で扱う。
 ## 024.290 Nothing is reported about a call whose receiver is `Object`
 
 ```yaml
 status: open
 kind: friction
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`closed_nominal?`)
@@ -4940,13 +4980,15 @@ earns its cheapness from that filter.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** An `Object`
 receiver becoming judgeable is the largest of the enumeration
 answers, and `024.R7` as shipped does not carry it.
+
+**Retargeted to 1.0.0.** トップレベル定義や動的メソッドとの衝突を避けるための意図的沈黙であり、1.0.0 の型階層トップレベル再設計で扱う。
 ## 024.294 A template's `@ivar` receiver is not checked, and its type is one action's
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/receiver_resolution.rb`,
@@ -4988,13 +5030,15 @@ completable rather than irreducible, and `024.18` owns the index that
 would complete it. Turning this decline into an answer is what `045`
 calls capability, which is why the target moved off the patch line.
 
+
+**Retargeted to 1.0.0.** コントローラ・アクションとビュー間のフロー解析拡張を要する沈黙であり、1.0.0 の Rails フロー解析で扱う。
 ## 024.295 The gem index is fetched on every boot and persisted nowhere
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb`, `core/lib/ovallsp/cache/`
@@ -5060,13 +5104,15 @@ clause left standing. The attribution to 0.3.1 is the correct one, and
 `core/spec/ovallsp/server_gem_index_retry_spec.rb` are where it is
 recorded and pinned.
 
+
+**Retargeted to 1.0.0.** 起動時パフォーマンスの最適化課題であり誤答ではないため、1.0.0 の永続キャッシュ基盤強化で扱う。
 ## 024.297 Call hierarchy lists no callee reached through `send`, `super` or a macro
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`outgoing_calls_result`)
@@ -5090,6 +5136,8 @@ hunk.
 Recorded per `CLAUDE.md`'s rule that a release ships with its open
 findings written down.
 
+
+**Retargeted to 1.0.0.** 動的ディスパッチに対する安全側の列挙制限であり、1.0.0 のコールグラフ解析拡張で扱う。
 ## 024.298 An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initialize`'s
 
 ```yaml
@@ -5124,7 +5172,7 @@ findings written down.
 status: open
 kind: friction
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb` (`receiver_members`)
@@ -5147,13 +5195,15 @@ member lookup is allowed to ask.
 Recorded per `CLAUDE.md`'s rule that a release ships with its open
 findings written down.
 
+
+**Retargeted to 1.0.0.** Relation への委譲解決の不足（沈黙・friction）であり、誤診ではないため、1.0.0 の ActiveRecord メソッド委譲推論で扱う。
 ## 024.300 `@ivar` completion offers nothing from a superclass or an included concern
 
 ```yaml
 status: open
 kind: friction
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`sibling_ivar_env`)
@@ -5175,6 +5225,8 @@ measurement budget left to drive that.
 Recorded per `CLAUDE.md`'s rule that a release ships with its open
 findings written down.
 
+
+**Retargeted to 1.0.0.** インスタンス変数の継承探索の欠如（friction）であり、1.0.0 のインスタンス変数スコープ伝播で扱う。
 ## 024.301 The route-helper quick fix ignores the `_path`/`_url` split and the helper's arity
 
 ```yaml
@@ -5208,7 +5260,7 @@ findings written down.
 status: open
 kind: friction
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`define_method_action`)
@@ -5229,13 +5281,15 @@ one.
 Recorded per `CLAUDE.md`'s rule that a release ships with its open
 findings written down.
 
+
+**Retargeted to 1.0.0.** クイックフィックスの対応範囲（friction）であり、誤った編集を防ぐため、1.0.0 のコードアクション生成拡張で扱う。
 ## 024.303 A multiple assignment's targets get no inlay hint
 
 ```yaml
 status: open
 kind: friction
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`locate`, `eval_type`)
@@ -5255,13 +5309,15 @@ than a guard.
 Recorded per `CLAUDE.md`'s rule that a release ships with its open
 findings written down.
 
+
+**Retargeted to 1.0.0.** 型インレイヒントの提供範囲（friction）であり、タプル型・配列分解推論を再設計する 1.0.0 で扱う。
 ## 024.304 The gem-backed check is silenced by any class-body call the parser cannot read
 
 ```yaml
 status: open
 kind: friction
 user-visible: yes
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `core/lib/ovallsp/workspace_index.rb` (`open_surface?`)
@@ -5295,6 +5351,8 @@ entries from `DeferredFindings.open_defects`, which filters
 green with the path broken. Reported to whoever owns that spec rather
 than fixed here.
 
+
+**Retargeted to 1.0.0.** 不完全な解析による誤答を防ぐフェイルセーフな沈黙（friction）であり、1.0.0 のパーシャル AST 耐性向上で扱う。
 ## 024.318 A workspace directory shaped like a gem path would be attributed to a gem
 
 ```yaml
@@ -5356,7 +5414,7 @@ user-visible-note: >-
   mutex covers which state, and in what order they may be taken -- is
   stated in one document and enforced by nobody, and a wrong answer
   there is a data race rather than a stale sentence.
-target: 0.4.0
+target: 1.0.0
 ```
 
 **Area:** `docs/design/docs/02-architecture.md`'s threading section,
@@ -5385,6 +5443,8 @@ mutex needs its guarded state written down and argued, which is what
 ---
 
 
+
+**Retargeted to 1.0.0.** アーキテクチャの並行性検証・内部品質課題であり、1.0.0 のスレッドモデル再構築（Task 037）で扱う。
 ## 024.321 A stdlib class can be answered about but not judged against — the half 0.4.0 left
 
 ```yaml

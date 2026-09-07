@@ -63,6 +63,21 @@ export function canSpawnCoreProcess(
 }
 
 /**
+ * Whether it is safe to call `client.sendNotification` for `key` right
+ * now. `LanguageClient#sendNotification` awaits its own internal
+ * `$start()`, which calls `client.start()` itself when the client has
+ * never been started -- so sending to a `pending`/`starting` client (the
+ * ADR-0005 compatibility probe has not resolved yet) starts it early,
+ * bypassing that probe and racing `canSpawnCoreProcess`'s generation
+ * check. `startClientForFolder` sends the current settings snapshot
+ * itself right after `markRunning` succeeds, so a change that arrives
+ * during that window is deferred, not lost.
+ */
+export function shouldNotifyRunningClient(state: LifecycleState | undefined): boolean {
+  return state === 'running';
+}
+
+/**
  * Marks the rejection `ServerOptions` returns when the shutdown barrier
  * (or a superseded generation) deliberately declines to spawn Core.
  *

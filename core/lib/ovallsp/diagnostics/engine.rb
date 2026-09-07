@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "finding"
+require_relative "configuration"
 require_relative "semantic_context"
 require_relative "../parser_service"
 require_relative "../semantic/reference_resolver"
@@ -33,13 +34,12 @@ module Ovallsp
       # `024.230`.
       OPEN_BY_CONSTRUCTION = %w[Object Kernel BasicObject].freeze
 
-      MODES = %i[safe standard strict].freeze
+      MODES = Configuration::MODES
       MODE_RANK = { safe: 0, standard: 1, strict: 2 }.freeze
       ROUTE_HELPER_PATTERN = /\A(?<base>.+)_(?:path|url)\z/
 
-      def analyze(document:, semantic_context:, mode: :safe, budget: nil)
-        raise ArgumentError, "unknown mode: #{mode.inspect}" unless MODES.include?(mode)
-
+      def analyze(document:, semantic_context:, mode: :safe, severities: {}, budget: nil,
+                  configuration: Configuration.new(mode: mode, severities: severities))
         summary = ParserService.new.summarize(document)
         # Everything below asks the type engine about positions in
         # `summary`'s coordinates, and for an .erb file those are the
@@ -64,10 +64,10 @@ module Ovallsp
         #
         # Gated here rather than in each check, so a check added later
         # cannot assert about a node nobody wrote.
-        return budget ? findings.first(budget) : findings unless findings.empty?
+        return configuration.apply(findings, budget: budget) unless findings.empty?
 
         findings.concat(unknown_method_findings(document, summary, resolved_locations, semantic_context))
-        if MODE_RANK.fetch(mode) >= MODE_RANK.fetch(:standard)
+        if MODE_RANK.fetch(configuration.mode) >= MODE_RANK.fetch(:standard)
           findings.concat(unresolved_constant_findings(summary, semantic_context))
         end
         findings.concat(unknown_route_helper_findings(summary, resolved_locations, semantic_context))
@@ -75,7 +75,7 @@ module Ovallsp
         findings.concat(argument_type_findings(document, summary, semantic_context))
         findings.concat(unassigned_ivar_findings(document, summary, semantic_context))
 
-        budget ? findings.first(budget) : findings
+        configuration.apply(findings, budget: budget)
       end
 
       private

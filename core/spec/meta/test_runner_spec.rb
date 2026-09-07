@@ -120,6 +120,32 @@ RSpec.describe "test runner" do
     expect { runner.run(tier: "unit", workers: 1, seed: 3501) }.to raise_error(TestRunner::Error, /census/)
   end
 
+  it "accepts a permitted pending only when its recorded reason matches exactly" do
+    file = "spec/ovallsp/diagnostics/bare_name_argument_type_spec.rb"
+    id = "./#{file}[1:1]"
+    reason = TestRunner::Runner::PERMITTED_PENDINGS.fetch(id)
+    FileUtils.mkdir_p(File.join(root, "core/spec/ovallsp/diagnostics"))
+    File.write(File.join(root, "core", file),
+               "RSpec.describe(\"bare name\") { it(\"waits\") { pending(#{reason.inspect}); raise \"not yet\" } }")
+    rows = JSON.parse(File.read(File.join(root, "core/spec/tiers.json")))
+    rows[file] = { "tier" => "unit", "resources" => [], "parallel" => true }
+    File.write(File.join(root, "core/spec/tiers.json"), JSON.generate(rows))
+    report = runner.run(tier: "unit", workers: 1, seed: 3501)
+    example = report.fetch("examples").find { |ex| ex.fetch("id") == id }
+    expect(example.fetch("status")).to eq("pending")
+    expect(runner.verify(report)).to eq([])
+    example["pending_message"] = "NOT YET a different excuse — 024.19"
+    expect(runner.verify(report)).to include("non-passing example: #{id}")
+  end
+
+  it "rejects a permitted reason recorded under an unpermitted ID" do
+    reason = TestRunner::Runner::PERMITTED_PENDINGS.fetch("./spec/ovallsp/diagnostics/bare_name_argument_type_spec.rb[1:1]")
+    File.write(File.join(root, "core/spec/a_spec.rb"),
+               "RSpec.describe(\"a\") { it(\"one\") { pending(#{reason.inspect}); raise \"not yet\" } }")
+    report = runner.run(tier: "unit", workers: 1, seed: 3501)
+    expect(runner.verify(report)).to include("non-passing example: ./spec/a_spec.rb[1:1]")
+  end
+
   it "reclaims a crashed worker's cache even when at_exit cannot run" do
     File.write(File.join(root, "core/spec/a_spec.rb"), <<~'RUBY')
       RSpec.describe "abrupt exit" do

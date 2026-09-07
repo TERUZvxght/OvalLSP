@@ -125,9 +125,21 @@ ovallsp.observation.showEvidence
   "ovallsp.ruby.command": null,
   "ovallsp.rubyExecutablePath": null,
   "ovallsp.server.path": null,
-  "ovallsp.observation.testCommand": null
+  "ovallsp.observation.testCommand": null,
+  "ovallsp.diagnostics.severities": {}
 }
 ```
+
+0.4.0 の診断設定は既存 check の格下げ・抑制のみ。`syntax-error` は
+`error` / `warning` / `information` / `hint` / `none`、それ以外の対象 check
+(`unknown-method`、`unknown-route-helper`、`argument-count`、`argument-type`、
+`unassigned-ivar`) は `warning` 以下を受け付ける。削除/空 map は既定へ戻す。
+`unresolved-constant` の opt-in と mode の公開設定は提供しない。
+folder URI を指定して severity map を読み、初期化の `diagnosticSeverities` と
+変更通知の `settings.ovallsp.diagnostics.severities` へ渡す。
+Core は mode と正規化済み map を凍結した `Diagnostics::Configuration` を保持する。
+Engine が出力の格下げ・抑制と budget を適用し、Server は LSP enum への変換だけを担う。
+公開順序と client lifecycle の最終検証は Task 064 の W2〜W4 に記録する。
 
 ## 8. Workspace Trust
 

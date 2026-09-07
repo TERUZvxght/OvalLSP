@@ -103,6 +103,70 @@
           },
           "default": null,
           "description": "Command used by 'OvalLSP: Run Tests with Type Observation', e.g. [\"bundle\", \"exec\", \"rspec\"]. Defaults to the Core Server's own default (bundle exec rspec)."
+        },
+        "ovallsp.diagnostics.severities": {
+          "type": "object",
+          "scope": "resource",
+          "default": {},
+          "additionalProperties": false,
+          "properties": {
+            "syntax-error": {
+              "type": "string",
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "none"
+              ]
+            },
+            "unknown-method": {
+              "type": "string",
+              "enum": [
+                "warning",
+                "information",
+                "hint",
+                "none"
+              ]
+            },
+            "unknown-route-helper": {
+              "type": "string",
+              "enum": [
+                "warning",
+                "information",
+                "hint",
+                "none"
+              ]
+            },
+            "argument-count": {
+              "type": "string",
+              "enum": [
+                "warning",
+                "information",
+                "hint",
+                "none"
+              ]
+            },
+            "argument-type": {
+              "type": "string",
+              "enum": [
+                "warning",
+                "information",
+                "hint",
+                "none"
+              ]
+            },
+            "unassigned-ivar": {
+              "type": "string",
+              "enum": [
+                "warning",
+                "information",
+                "hint",
+                "none"
+              ]
+            }
+          },
+          "description": "Demote or suppress existing diagnostics. Warning checks cannot be promoted to error. Unresolved constants cannot be enabled. Remove an entry to restore its default severity."
         }
       }
     },

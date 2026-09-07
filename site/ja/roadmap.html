@@ -838,15 +838,15 @@
           <ul class="feature-list">
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>チェックごとの重大度設定。</strong> 納得できないチェックを警告ではなくヒントにしたり、無効にしたりできます。</span>
+              <span><strong>チェックごとの重大度設定。</strong> safe の既定動作を維持し、有効な検査を格下げ・抑制します。設定変更で open / closed の両方を更新します。</span>
             </li>
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong><code>require</code> の自動挿入。</strong></span>
+              <span><strong><code>require</code> の自動挿入。</strong> 限定した plain Ruby の JSON・URI・Pathname に診断なしでも対応します。Rails・未確認環境では辞退し、編集後は提案を再取得してください。</span>
             </li>
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>シグネチャヘルプが、カーソルのある引数をハイライトします。</strong></span>
+              <span><strong>シグネチャヘルプが対応する引数をハイライトします。</strong> キーワードは名前で対応し、過剰・未知・曖昧な引数には強調範囲を返しません。</span>
             </li>
           </ul>
         </article>

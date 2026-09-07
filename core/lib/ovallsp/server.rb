@@ -25,6 +25,7 @@ require_relative "semantic/query_service"
 require_relative "semantic/reference_index"
 require_relative "semantic/reference_resolver"
 require_relative "diagnostics/engine"
+require_relative "code_actions/require_insertion"
 require_relative "rename/planner"
 require_relative "signatures/environment"
 
@@ -116,7 +117,11 @@ module Ovallsp
       )
       @workspace_diagnostics = WorkspaceDiagnostics.new(
         analyze: method(:workspace_findings_for),
-        publish: method(:publish_findings),
+        # The pass carries the analysis payload unchanged, including the
+        # configuration of an empty answer. Unpack it only at publication.
+        publish: ->(uri, (findings, configuration), **options) {
+          publish_findings(uri, findings, configuration: configuration, **options)
+        },
         # Read before each file is opened, so a result is dated by what
         # was known when its content was read (`024.345`).
         generation: -> { @workspace_index.generation },
@@ -137,7 +142,7 @@ module Ovallsp
         model_registry: @model_registry, route_registry: @route_registry
       )
       @diagnostics_engine = Diagnostics::Engine.new
-      @diagnostics_mode = :safe
+      @diagnostics_configuration = Diagnostics::Configuration.new
       @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index,
                                             hierarchy_index: @hierarchy_index)
       @observation_runner = Observation::Runner.new(logger: @logger)
@@ -356,7 +361,10 @@ module Ovallsp
       case method
       when "initialize"
         adopt_client_workspace_root(message[:params])
-        @diagnostics_mode = diagnostics_mode_from(message[:params])
+        @versioned_document_edits = message.dig(:params, :capabilities, :workspace, :workspaceEdit, :documentChanges) == true
+        @publish_state_mutex.synchronize do
+          @diagnostics_configuration = diagnostics_configuration_from(message[:params])
+        end
         @observation_test_command = observation_test_command_from(message[:params])
         # Kept, not merely consulted. Until 0.2.5 trust was read out of
         # these params at `maybe_start_agent` and nowhere else, so every
@@ -391,6 +399,8 @@ module Ovallsp
         respond(id, with_index_snapshot { workspace_symbol_result(message[:params]) })
       when "workspace/didChangeWatchedFiles"
         handle_did_change_watched_files(message[:params])
+      when "workspace/didChangeConfiguration"
+        update_configuration(message[:params])
       when "ovallsp/explainType"
         respond(id, with_index_snapshot { explain_type_result(message[:params]) })
       when "textDocument/completion"
@@ -573,16 +583,18 @@ module Ovallsp
       # deferring is only right when an answer can actually arrive.
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
       ensure_gem_index
+      configuration = @publish_state_mutex.synchronize { @diagnostics_configuration }
       findings = with_index_snapshot do
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
-        @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
+        @diagnostics_engine.analyze(document: document, semantic_context: context, configuration: configuration)
       end
       # A call the caret is still inside is not a call the user wrote --
       # `Diagnostics::MidEditCall`, `024.41`. Filtered here rather than in
       # the engine because the caret is a fact about the *buffer*, which
       # the engine is deliberately not given: it analyses text, and the
       # same text opened from disk must still say what Ruby says.
-      publish_findings(document.uri, Diagnostics::MidEditCall.filter(findings, document), document: document)
+      publish_findings(document.uri, Diagnostics::MidEditCall.filter(findings, document),
+                       document: document, configuration: configuration)
     rescue StandardError => e
       @logger.error("failed to compute diagnostics for #{document.uri}: #{e.class}: #{e.message}")
     ensure
@@ -667,8 +679,12 @@ module Ovallsp
     # is the answer that most needs ordering**: "this file is clean now"
     # carries no `Finding#generation` to be dated by, and it was the one
     # thing a stale warning could land on top of (`024.342`).
-    def publish_findings(uri, findings, document: nil, generation: nil)
+    def publish_findings(uri, findings, document: nil, generation: nil, configuration: nil)
       @publish_state_mutex.synchronize do
+        # A settings change need not move the document or index. Compare
+        # the actual snapshot, including for empty results and A -> B -> A.
+        return false if configuration && !configuration.equal?(@diagnostics_configuration)
+
         open_document = @document_store.fetch(uri: uri)
         version = document&.version
         if version
@@ -800,6 +816,7 @@ module Ovallsp
     def workspace_findings_for(document)
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
       ensure_gem_index
+      configuration = @publish_state_mutex.synchronize { @diagnostics_configuration }
       with_index_snapshot do
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         # **The generation travels with the findings, and not inside
@@ -808,8 +825,8 @@ module Ovallsp
         # stale warning could most easily land on top of. Read from the
         # context that computed it, inside the same snapshot, so the two
         # cannot describe different moments (`024.342`).
-        [@diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode),
-         context.generation]
+        findings = @diagnostics_engine.analyze(document: document, semantic_context: context, configuration: configuration)
+        [[findings, configuration], context.generation]
       end
     ensure
       # `analyze` *records* the ancestries it had to defer on; something
@@ -1254,10 +1271,34 @@ module Ovallsp
       )
     end
 
-    def diagnostics_mode_from(params)
-      options = params && params[:initializationOptions]
-      mode = options.is_a?(Hash) ? options[:diagnosticsMode] : nil
-      Diagnostics::Engine::MODES.include?(mode&.to_sym) ? mode.to_sym : :safe
+    def diagnostics_configuration_from(params)
+      options = params.is_a?(Hash) && params[:initializationOptions]
+      options = {} unless options.is_a?(Hash)
+      mode = options[:diagnosticsMode]
+      mode = mode.to_sym if mode.is_a?(String)
+      mode = :safe unless Diagnostics::Configuration::MODES.include?(mode)
+      Diagnostics::Configuration.new(mode: mode, severities: options[:diagnosticSeverities])
+    end
+
+    def update_configuration(params)
+      settings = params.is_a?(Hash) && params[:settings]
+      return unless settings.is_a?(Hash)
+
+      options = settings[:ovallsp]
+      return unless options.is_a?(Hash)
+
+      diagnostics = options[:diagnostics]
+      return unless diagnostics.is_a?(Hash)
+
+      @publish_state_mutex.synchronize do
+        current = @diagnostics_configuration
+        replacement = Diagnostics::Configuration.new(mode: current.mode, severities: diagnostics[:severities])
+        return if replacement == current
+
+        @diagnostics_configuration = replacement
+      end
+      @document_store.open_documents.each { |document| note_analysis_needed(document.uri) }
+      start_workspace_diagnostics
     end
 
     DEFAULT_OBSERVATION_TEST_COMMAND = %w[bundle exec rspec].freeze
@@ -1492,6 +1533,7 @@ module Ovallsp
       cache_store = build_cache_store
       existing_disk_uris = workspace_index.uris_by_source(:disk)
 
+      @cold_index_complete = false
       @cold_indexing = true
       @background_tasks.track_thread(Thread.new do
         ColdIndexer.new(root: root, parser_service: parser_service, workspace_index: workspace_index,
@@ -1507,7 +1549,10 @@ module Ovallsp
                           # whole pass away -- a doubled O(workspace)
                           # rebuild on exactly the "just cold-indexed a
                           # large repo" path.
-                          @index_mutation_mutex.synchronize { mark_reference_index_dirty }
+                          @index_mutation_mutex.synchronize do
+                            @cold_index_complete = result.complete
+                            mark_reference_index_dirty
+                          end
                           # Now, not earlier: a file analyzed before the
                           # rest of the workspace is indexed resolves
                           # against a half-built index and reports
@@ -2889,22 +2934,15 @@ module Ovallsp
       []
     end
 
-    # `textDocument/codeAction` -- a fix for a diagnostic this engine
-    # published.
-    #
-    # 0.3.0, and `045` calls it "the diagnostics that already exist". Three
-    # codes have an action; the rest do not, and that is the design rather
-    # than a gap. **A quick fix is applied with one click and its reasoning
-    # is never seen**, so it is offered only where the edit it would make is
-    # defined by the diagnostic itself. Section 0's "a wrong answer is worse
-    # than no answer" is at its sharpest on a surface that edits the file.
+    # Diagnostic fixes plus explicit stdlib imports (Task 064, ADR-0007).
+    # Imports must also be reachable without diagnostics in safe mode.
     def code_action_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return [] unless document && summary
 
-      Array(params.dig(:context, :diagnostics)).flat_map do |diagnostic|
+      actions = Array(params.dig(:context, :diagnostics)).flat_map do |diagnostic|
         # Ours, or nothing. The two `find`-on-range checks below are a
         # second line of defence and were serving as the first.
         next [] unless diagnostic[:source] == DIAGNOSTIC_SOURCE
@@ -2916,6 +2954,104 @@ module Ovallsp
         else []
         end
       end.compact
+      actions + auto_require_actions(document, summary, params)
+    end
+
+    AUTO_REQUIRE_PATHS = { "JSON" => "json", "URI" => "uri", "Pathname" => "pathname" }.freeze
+    private_constant :AUTO_REQUIRE_PATHS
+
+    def auto_require_actions(document, summary, params)
+      return [] unless @versioned_document_edits && @cold_index_complete && !@cold_indexing
+      return [] unless document.language_id == "ruby" && !erb_view?(document.uri) && document.version.is_a?(Integer)
+      return [] unless summary.buffer_id == document.buffer_id && summary.document_version == document.version
+      return [] unless auto_require_plain_workspace?(document)
+
+      only = params.dig(:context, :only)
+      return [] if only && !only.empty? && !only.any? { |kind| ["", "quickfix"].include?(kind) }
+
+      ranges = [params[:range]] + Array(params.dig(:context, :diagnostics)).filter_map do |diagnostic|
+        diagnostic[:range] if diagnostic[:source] == DIAGNOSTIC_SOURCE && diagnostic[:code] == "unresolved-constant"
+      end
+      paths = summary.reference_candidates.filter_map do |candidate|
+        next unless candidate.kind == :constant
+        name = candidate.name.delete_prefix("::")
+        next unless AUTO_REQUIRE_PATHS.key?(name)
+        next unless candidate.name.start_with?("::") || (candidate.owner.nil? && candidate.lexical_nesting.empty?)
+        next unless ranges.any? do |range|
+          range && (position_in?(range, candidate.location[:start]) || position_in?(candidate.location, range[:start]))
+        end
+        # Simple-name matches veto a proposal; they never establish identity.
+        next unless @workspace_index.find_by_simple_name(name).empty?
+
+        AUTO_REQUIRE_PATHS.fetch(name)
+      end.uniq
+      return [] if paths.empty?
+
+      parsed = Prism.parse(document.text)
+      return [] unless parsed.success?
+
+      statements = parsed.value.statements.body
+      leading_requires = statements.take_while { |node| static_require_path(node) }
+      nodes = [parsed.value]
+      until nodes.empty?
+        node = nodes.pop
+        return [] if node.is_a?(Prism::PreExecutionNode)
+
+        if node.is_a?(Prism::CallNode) && %i[require require_relative autoload load].include?(node.name)
+          return [] unless leading_requires.include?(node)
+        end
+        nodes.concat(node.compact_child_nodes)
+      end
+      existing = leading_requires.map { |node| static_require_path(node) }
+      first_execution = statements[leading_requires.length]&.location&.start_offset || document.text.bytesize
+      paths.filter_map do |path|
+        next if existing.include?(path)
+
+        edit = CodeActions::RequireInsertion.build(document.text, path)
+        next unless edit
+
+        offset = document.position_to_byte_offset(edit[:range][:start])
+        # The insertion module preserves headers and groups. Syntax still
+        # has to prove its chosen line is outside a statement, before code.
+        next if offset > first_execution || statements.any? do |node|
+          node.location.start_offset < offset && offset < node.location.end_offset
+        end
+
+        { title: "Add require '#{path}'", kind: "quickfix",
+          edit: { documentChanges: [{ textDocument: { uri: document.uri, version: document.version },
+                                     edits: [{ range: edit.fetch(:range), newText: edit.fetch(:new_text) }] }] } }
+      end
+    end
+
+    def static_require_path(node)
+      return unless node.is_a?(Prism::CallNode) && node.name == :require && node.receiver.nil? && node.block.nil?
+
+      arguments = node.arguments&.arguments
+      return unless arguments&.length == 1 && arguments.first.is_a?(Prism::StringNode)
+
+      arguments.first.unescaped
+    end
+
+    def auto_require_plain_workspace?(document)
+      # No existing Rails snapshot proves an absent entry is unloaded.
+      # Decline all Rails states, including partial markers and stale Agents.
+      return false if @agent_manager || @agent_bootstrap_pending
+      return false unless File.directory?(@workspace_root)
+
+      path = UriUtil.to_path(document.uri)
+      return false unless path && File.expand_path(path).start_with?(File.join(File.expand_path(@workspace_root), ""))
+
+      directory = File.dirname(path)
+      loop do
+        return false if %w[bin/rails config/environment.rb Gemfile gems.rb .ruby-version .tool-versions mise.toml].any? do |marker|
+          File.exist?(File.join(directory, marker))
+        end
+        parent = File.dirname(directory)
+        break if parent == directory
+
+        directory = parent
+      end
+      true
     end
 
     # Insert `def name; end` into the class the call was made on -- which is
@@ -3574,14 +3710,39 @@ module Ovallsp
       help = route_signature_help(method_name) || method_signature_help(document, position, method_name)
       return help if help.fetch(:signatures).empty?
 
-      active_param = active_parameter_index(document, position, name_range)
       signatures = help.fetch(:signatures)
-      active_sig = signatures.find_index { |s| (s[:parameters]&.length || 0) > active_param } || 0
+      indices = signatures.map { |signature| active_parameter_index(document, position, name_range, signature) }
+      active_sig = indices.find_index { |index| !index.nil? } || 0
+      if indices.fetch(active_sig).nil?
+        # The client defaults a nonnumeric activeParameter to zero. Keep
+        # the signature text, but give it no parameter range to highlight.
+        # The converter's behaviour is recorded in CLIENT_BEHAVIOUR.
+        signatures = signatures.dup
+        signatures[active_sig] = signatures.fetch(active_sig).merge(parameters: [])
+      end
 
       help.merge(
+        signatures: signatures,
         activeSignature: active_sig,
-        activeParameter: active_param
+        activeParameter: indices.fetch(active_sig)
       )
+    end
+
+    def parameter_index_for(signature, argument_index, keyword: nil)
+      labels = Array(signature[:parameters]).map do |parameter|
+        label = parameter[:label]
+        label.is_a?(Array) ? signature[:label][label[0]...label[1]] : label
+      end
+      return labels.find_index { |label| label.match?(/\A\??#{Regexp.escape(keyword)}:/) } if keyword
+
+      positionals = labels.each_index.reject { |i| labels[i].match?(/\A(?:\??[[:alpha:]_][[:alnum:]_]*:|\*\*|&)/) }
+      rest = positionals.find_index { |i| labels[i] == "..." || labels[i].start_with?("*") }
+      if rest && argument_index >= rest
+        # A trailing positional needs the completed argument list to locate
+        # it. While typing, neither that slot nor the rest is certain.
+        return rest == positionals.length - 1 ? positionals[rest] : nil
+      end
+      positionals[argument_index]
     end
 
     def route_signature_help(method_name)
@@ -3633,10 +3794,11 @@ module Ovallsp
       { signatures: signatures }
     end
 
-    def active_parameter_index(document, position, name_range)
+    def active_parameter_index(document, position, name_range, signature)
       tokens = structural_tokens(document)
       cursor = document.position_to_char_offset(position)
       open_paren_offset = name_range.end
+      argument_start = open_paren_offset + 1
 
       param_index = 0
       depth = 0
@@ -3650,10 +3812,16 @@ module Ovallsp
         when :paren_close, :nest_close
           depth -= 1 if depth.positive?
         when :comma
-          param_index += 1 if depth.zero?
+          if depth.zero?
+            param_index += 1
+            argument_start = offset + 1
+          end
         end
       end
-      param_index
+      # Read the current argument's label even when the caret is inside
+      # that label. Braced hashes and strings do not start with a keyword.
+      keyword = document.text[argument_start..][/\A(?:\s|\#[^\n]*\n)*([[:alpha:]_][[:alnum:]_]*):(?!=|:)/, 1]
+      parameter_index_for(signature, param_index, keyword: keyword)
     end
 
     def enclosing_call_name(document, position)

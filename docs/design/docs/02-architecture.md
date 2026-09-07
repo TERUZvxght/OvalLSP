@@ -248,6 +248,11 @@ workspace pass、changed-files batch）。`document_store.rb` はこの節を自
 | ancestry question worker | 静的に判定できない祖先について Agent へ問い合わせる |
 | cache prune | 起動時のキャッシュ世代掃除 |
 
+Task 064 の auto-require は cold index の未完了を「同名宣言なし」と扱わない。
+`@cold_index_complete` は走査開始時に false へ戻し、cold index の完了 callback が
+`@index_mutation_mutex` 内で `ColdIndexer::Result.complete` を保存する。
+CodeAction は同じ mutex 内でこの結果を読み、走査中・不完全な走査では辞退する。
+
 **共有状態に触るものは、以下の順序でロックを取ります。** どこにも書かれて
 いませんでした（順序の逆転は発見されていません — 真実の情報源が2つある状態
 であって、生きた deadlock ではありません）。`Server` が持つ9つと、各 store

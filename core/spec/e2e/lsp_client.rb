@@ -44,9 +44,9 @@ module E2E
       Thread.new { @stderr.read }
     end
 
-    def initialize!(trusted: true)
+    def initialize!(trusted: true, capabilities: {})
       request("initialize", {
-                processId: nil, rootUri: "file://#{@root}", capabilities: {},
+                processId: nil, rootUri: "file://#{@root}", capabilities: capabilities,
                 initializationOptions: { workspaceTrusted: trusted }
               })
       notify("initialized", {})
