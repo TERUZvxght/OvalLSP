@@ -69,7 +69,9 @@ The runner writes `core/tmp/tests/<tier>.json`; `--report` selects another
 output file. A skipped example is still an example. Full compares exact example IDs with an independent dry-run
 census, checks documented counts centrally, and rejects missing/duplicate
 examples, load errors, failed workers, failures and pending examples.
-There are currently no approved pending example/reason pairs; a `NOT YET`
+The runner's `PERMITTED_PENDINGS` allows the four exact example/reason
+pairs for 024.19, 024.47, 024.13 and 024.224. These remain known limitations,
+not passing checks; an altered reason, any other example or a `NOT YET`
 substring alone grants no permission. A later run invalidates older
 reports of that tier, even if its census fails. Verification also refuses
 changed source or runtime/lock inputs. A focused report is labelled with

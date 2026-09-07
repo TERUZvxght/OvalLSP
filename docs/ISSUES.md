@@ -136,8 +136,12 @@ because a number is a claim that the thing exists.
   - found by: 0.3.5 plan review (C2); core/lib/ovallsp/server.rb
   - Reading the current tree finds dispatch, publish_diagnostics/publish_findings, apply_file_summary, ensure_reference_index_current, reload_signatures and maybe_start_agent managing shared Server state in the same class. This is a responsibility and ownership concern, not a demonstrated new wrong answer or a request for mechanical file splitting. Before promotion, map callers, mutable fields and lock ownership at a fixed revision; drive the existing callee/caller invalidation intake with a control, and identify the smallest independently owned boundary. Reuse 024.45 for latency and 024.39 for inferencer request state rather than duplicating them. The 0.3.5 plan limits changes to boundaries needed by a reproduced repair; broader restructuring needs its own disposition after the drive.
   - unverified: not yet driven against the tree
+- **CodeAction conversion drops the document version in a versioned edit**
+  - found by: Task 064 W5a: vscode-languageclient protocolConverter.js asCodeAction/asWorkspaceEdit
+  - A TextDocumentEdit is converted with result.replace(uri, range, newText), without retaining textDocument.version. The version check in client.js belongs to workspace/applyEdit, not this CodeAction path. W7 must drive obtaining an action, changing the buffer, then applying that old action in the real extension host before P3 stale-edit protection is claimed; server identity and serialized version tests do not prove it.
+  - unverified: not yet driven against the tree
 
-**Eleven items above; the rest was emptied deliberately.** The twenty-one items that had
+**Twelve items above; the rest was emptied deliberately.** The twenty-one items that had
 accumulated by 0.3.1 were driven and dispositioned in one pass:
 fourteen became `024.306` through `024.319`, and seven left without a
 number. The seven, and why:
@@ -165,7 +169,7 @@ edit the register and run the script.*
 
 ### Open, by the release they are assigned to
 
-**0.4.0 — 46**
+**1.0.0 — 50**
 
 | # | kind | user-visible | published | what |
 |---|---|---|---|---|
@@ -187,6 +191,9 @@ edit the register and run the script.*
 | [`024.76`](design/tasks/024-deferred-review-findings.md#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | defect | yes | yes | Fifty-four `unknown-method` reports over real gem source, and all of them false |
 | [`024.83`](design/tasks/024-deferred-review-findings.md#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | defect | yes | yes | The undefined-method check is loudest exactly where no Runtime Agent can answer |
 | [`024.88`](design/tasks/024-deferred-review-findings.md#02488-completion-unions-a-unions-members-the-diagnostic-intersects-them) | defect | yes | yes | Completion unions a union's members; the diagnostic intersects them |
+| [`024.R1`](design/tasks/024-deferred-review-findings.md#024r1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-100) | roadmap |  | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
+| [`024.R3`](design/tasks/024-deferred-review-findings.md#024r3-feature-parity-roadmap-measured-against-pylance) | roadmap |  | — | Feature parity roadmap, measured against Pylance |
+| [`024.R4`](design/tasks/024-deferred-review-findings.md#024r4-only-one-platform-is-published-or-verified-roadmap-100) | roadmap |  | — | Only one platform is published or verified (roadmap, 1.0.0) |
 | [`024.100`](design/tasks/024-deferred-review-findings.md#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | defect | yes | yes | The four features answer from different code paths and disagree at one position |
 | [`024.106`](design/tasks/024-deferred-review-findings.md#024106-a-modules-singleton-calls-go-unchecked-modulefunction-and-extend-self-producing-nothing-is-withdrawn) | defect | yes | yes | A module's singleton calls go unchecked — `module_function` and `extend self` producing nothing is withdrawn |
 | [`024.121`](design/tasks/024-deferred-review-findings.md#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | defect | no | — | Nothing measures how much of this tree no test would notice changing |
@@ -215,14 +222,6 @@ edit the register and run the script.*
 | [`024.320`](design/tasks/024-deferred-review-findings.md#024320-no-check-knows-which-lock-guards-what) | friction | no | — | No check knows which lock guards what |
 | [`024.321`](design/tasks/024-deferred-review-findings.md#024321-a-stdlib-class-can-be-answered-about-but-not-judged-against-the-half-040-left) | defect | yes | yes | A stdlib class can be answered about but not judged against — the half 0.4.0 left |
 | [`024.322`](design/tasks/024-deferred-review-findings.md#024322-the-server-never-passes-bundlecontext-so-gem-rbs-is-never-loaded----while-the-cache-fingerprint-hashes-the-lockfile-that-decides-it) | defect | yes | yes | The server never passes bundle_context, so gem RBS is never loaded -- while the cache fingerprint hashes the lockfile that decides it |
-
-**1.0.0 — 4**
-
-| # | kind | user-visible | published | what |
-|---|---|---|---|---|
-| [`024.R1`](design/tasks/024-deferred-review-findings.md#024r1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-100) | roadmap |  | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
-| [`024.R3`](design/tasks/024-deferred-review-findings.md#024r3-feature-parity-roadmap-measured-against-pylance) | roadmap |  | — | Feature parity roadmap, measured against Pylance |
-| [`024.R4`](design/tasks/024-deferred-review-findings.md#024r4-only-one-platform-is-published-or-verified-roadmap-100) | roadmap |  | — | Only one platform is published or verified (roadmap, 1.0.0) |
 | [`024.R10`](design/tasks/024-deferred-review-findings.md#024r10-the-repository-is-closed-to-external-contributions-until-100-roadmap-100) | roadmap |  | — | The repository is closed to external contributions until 1.0.0 (roadmap, 1.0.0) |
 
 ### Open, user-visible, and not published

@@ -39,7 +39,9 @@ describe('workspace trust: untrusted workspaces cannot choose what we execute', 
   // Safe only because it cannot name anything to run: a boolean whose
   // only effect is to switch the extension off. Adding to this list is a
   // deliberate act that has to argue the key cannot influence execution.
-  const SAFE_IN_UNTRUSTED = new Set(['ovallsp.enabled']);
+  // Severity only demotes/suppresses existing checks in Core; it cannot
+  // select a mode, executable, command, or Runtime Agent operation.
+  const SAFE_IN_UNTRUSTED = new Set(['ovallsp.enabled', 'ovallsp.diagnostics.severities']);
 
   it('declares limited support, which is what makes restrictedConfigurations load-bearing', () => {
     assert.strictEqual(untrusted?.supported, 'limited');

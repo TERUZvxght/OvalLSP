@@ -127,6 +127,13 @@ channel that it is doing so (see [Ruby resolution](#ruby-resolution) and
 | `ovallsp.rubyExecutablePath` | Explicit Ruby interpreter, skipping auto-detection |
 | `ovallsp.server.path` | Explicit Core Server entrypoint (advanced; see [Custom Core Server paths](#custom-core-server-paths)) |
 | `ovallsp.observation.testCommand` | Command used by runtime type observation (default: `bundle exec rspec`) |
+| `ovallsp.diagnostics.severities` | Per-check demotion or suppression (0.4.0 development; default: `{}`) |
+
+For 0.4.0, `syntax-error` accepts `error`, `warning`, `information`, `hint`, or
+`none`. `unknown-method`, `unknown-route-helper`, `argument-count`,
+`argument-type`, and `unassigned-ivar` accept `warning`, `information`, `hint`,
+or `none`. Remove an entry to restore its default. These settings cannot enable
+unresolved-constant diagnostics or switch diagnostic modes.
 
 ## Rails projects
 

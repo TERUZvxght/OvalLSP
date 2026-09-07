@@ -123,6 +123,13 @@ Outputチャンネルで伝えます([Ruby解決](#ruby解決)と
 | `ovallsp.rubyExecutablePath` | 明示的なRuby実行系パス(自動検出をスキップ) |
 | `ovallsp.server.path` | Core Serverのentrypointを明示指定(上級者向け、[カスタムCore Serverパス](#カスタムcore-serverパス)参照) |
 | `ovallsp.observation.testCommand` | runtime型観測で使うコマンド(既定: `bundle exec rspec`) |
+| `ovallsp.diagnostics.severities` | 検査ごとの格下げ・抑制(0.4.0 開発中、既定: `{}`) |
+
+0.4.0 では `syntax-error` に `error`、`warning`、`information`、`hint`、`none`
+を指定できます。`unknown-method`、`unknown-route-helper`、`argument-count`、
+`argument-type`、`unassigned-ivar` は `warning`、`information`、`hint`、`none`
+を受け付けます。項目を削除すると既定に戻ります。この設定から未解決定数の
+診断を有効化したり、診断モードを切り替えたりすることはできません。
 
 ## Railsプロジェクトでの利用
 

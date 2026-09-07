@@ -7,6 +7,14 @@ Marketplace Pre-Release, as distinct from bugs. See
 [docs/SUPPORT_MATRIX.md](SUPPORT_MATRIX.md) for the exact,
 evidence-based supported/unsupported table this summarizes.
 
+## 0.4.0 refinements: supported scope
+
+Diagnostic severity overrides only downgrade or suppress an enabled check. They do not enable unresolved-constant, add a public diagnostics mode, or increase severity. Signature highlighting matches named keywords, but declines when an argument cannot be mapped, including excess arguments and rest followed by trailing positional parameters.
+
+Auto-require is limited to JSON, URI and Pathname in verified plain Ruby cases. Rails always declines, including loaded constants, a missing or starting Agent, and stale snapshots. Bundle/Ruby selector files, workspace name conflicts, incomplete indexing and uncertain syntax or insertion positions also cause refusal. The request executes no workspace Ruby and performs no autoload or gem discovery.
+
+Obtain a fresh quick fix after editing the file. Although Core sends the document version, the current client does not preserve that version when converting CodeAction edits; refusal of an old edit is not guaranteed. The client evidence is in [CLIENT_BEHAVIOUR](CLIENT_BEHAVIOUR.md), and the exact scope is in [S4, G20 and Q4](EXTENSION_CAPABILITIES.md).
+
 ## What 0.3.0's new answers do not cover yet
 
 Eight things arrived in 0.3.0, and a review before release drove each of

@@ -28,7 +28,8 @@ import {
   ClientLifecycleManager,
   CoreStartRejectedError,
   KeyedTransitionQueue,
-  ShutdownBarrier
+  ShutdownBarrier,
+  shouldNotifyRunningClient
 } from './clientLifecycle';
 import { notificationLevelFor } from './clientErrorNotifications';
 import { SpawnedCoreProcess } from './coreProcess';
@@ -109,9 +110,22 @@ const versionDiagnostics = new Map<string, VersionDiagnostic>();
  */
 const handshakes: Array<{ folder: string; compatible: boolean }> = [];
 
+/**
+ * Every `workspace/didChangeConfiguration` notification this session
+ * actually sent for `ovallsp.diagnostics.severities`, in order.
+ *
+ * Exists for the same reason `handshakes` does: nothing in
+ * `src/test/unit` can import this file, so the integration suite is the
+ * only place that can observe *which* folder's client received *which*
+ * value -- including that a folder's own `getConfiguration(..., folder.uri)`
+ * reading, not some other folder's, is what reaches it.
+ */
+const diagnosticsNotifications: Array<{ folder: string; severities: Record<string, string> }> = [];
+
 /** What `activate()` returns, for the integration suite to read. */
 export interface OvallspApi {
   readonly handshakes: ReadonlyArray<{ folder: string; compatible: boolean }>;
+  readonly diagnosticsNotifications: ReadonlyArray<{ folder: string; severities: Record<string, string> }>;
 }
 // Every folder's stop->start replacement is serialized through this
 // chain. Without it, two Restart Server commands can interleave so the
@@ -142,6 +156,45 @@ function resolveRubyForFolder(folder: vscode.WorkspaceFolder): { command: string
     existsSync: fs.existsSync
   });
   return { command: resolution.executable, resolution };
+}
+
+// P2's public contract: `ovallsp.diagnostics.severities` only, read with
+// `getConfiguration(..., resource)` so a multi-root A/B workspace reads
+// each folder's own value rather than the window-scoped default. The
+// initialization wire (`diagnosticSeverities`) and the change notification
+// (`settings.ovallsp.diagnostics.severities`) both call this, so neither
+// path can drift into reading a different resource or a different key.
+function currentDiagnosticSeverities(resource: vscode.Uri): Record<string, string> {
+  return vscode.workspace
+    .getConfiguration('ovallsp.diagnostics', resource)
+    .get<Record<string, string>>('severities', {});
+}
+
+// Sends the current snapshot as a `workspace/didChangeConfiguration`
+// notification and records it on `diagnosticsNotifications` for the
+// integration suite. Callers are responsible for only calling this on a
+// client `shouldNotifyRunningClient` allows (see that function's own
+// docs for why a starting client cannot safely receive this).
+function sendDiagnosticSeverities(
+  client: LanguageClient,
+  folder: vscode.WorkspaceFolder,
+  outputChannel: vscode.OutputChannel
+): void {
+  const severities = currentDiagnosticSeverities(folder.uri);
+  diagnosticsNotifications.push({ folder: folder.name, severities });
+  void client
+    .sendNotification('workspace/didChangeConfiguration', {
+      settings: {
+        ovallsp: {
+          diagnostics: {
+            severities
+          }
+        }
+      }
+    })
+    .catch((error: unknown) => {
+      outputChannel.appendLine(`Failed to update diagnostic settings: ${error instanceof Error ? error.message : String(error)}`);
+    });
 }
 
 function startClientForFolder(
@@ -233,6 +286,7 @@ function startClientForFolder(
     // instead of needing every already-shipped Extension to add it later.
     initializationOptions: {
       workspaceTrusted: vscode.workspace.isTrusted,
+      diagnosticSeverities: currentDiagnosticSeverities(folder.uri),
       ovallspClient: {
         extensionVersion: context.extension.packageJSON.version,
         protocolVersion: CLIENT_PROTOCOL_VERSION
@@ -427,6 +481,16 @@ function startClientForFolder(
           await stopSupersededClient(client, key, generation, lifecycle);
           return;
         }
+        // Whatever `ovallsp.diagnostics.severities` was at the moment
+        // `initializationOptions` was built above may already be stale --
+        // `checkBundledCoreCompatibility`/`queryRubyConfigPaths` and the
+        // spawn itself all ran since then. Sending the current snapshot
+        // the instant the client is actually running is what makes a
+        // change during that window arrive rather than get lost (a
+        // `didChangeConfiguration` fired during it is deliberately not
+        // forwarded here -- see `shouldNotifyRunningClient` -- so this is
+        // the one place responsible for it).
+        sendDiagnosticSeverities(client, folder, outputChannel);
         runVersionHandshake(folder, client, context, classification, outputChannel);
       }, async (err) => {
         await lifecycle.terminateProcess(key, generation).then(() => {
@@ -804,6 +868,7 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
   // ask to spawn Core.
   shutdownBarrier.reset();
   handshakes.length = 0;
+  diagnosticsNotifications.length = 0;
   // Module state survives `deactivate()` in a live host, and the commands
   // this flag guards are pushed to a *new* context's subscriptions.
   featuresRegistered = false;
@@ -835,6 +900,33 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
         for (const key of Array.from(clients.keys())) {
           void queueClientTransition(key, () => Promise.resolve(stopClient(key)));
         }
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (!event.affectsConfiguration('ovallsp.diagnostics')) {
+        return;
+      }
+      for (const [folderUri, client] of clients) {
+        // A `pending`/`starting` client has not called `client.start()`
+        // yet, and `sendNotification` would do that itself -- see
+        // `shouldNotifyRunningClient`'s own docs for the race that opens.
+        // That client's own `startClientForFolder` continuation sends the
+        // current snapshot the moment it reaches `running`, so a change
+        // that lands here first is deferred, not dropped. A folder that
+        // has stopped, is restarting, or was removed is not in `clients`
+        // at all by the time this runs -- `stopClient` deletes it
+        // synchronously before its own teardown ever awaits anything.
+        if (!shouldNotifyRunningClient(lifecycle.getState(folderUri))) {
+          continue;
+        }
+        const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(folderUri));
+        if (!folder) {
+          continue;
+        }
+        sendDiagnosticSeverities(client, folder, outputChannel);
       }
     })
   );
@@ -895,13 +987,13 @@ export function activate(context: vscode.ExtensionContext): OvallspApi {
   );
 
   if (!enabled) {
-    return { handshakes };
+    return { handshakes, diagnosticsNotifications };
   }
 
   activateFeatures(context, outputChannel);
   startClientsForOpenFolders(context, outputChannel);
 
-  return { handshakes };
+  return { handshakes, diagnosticsNotifications };
 }
 
 export async function deactivate(): Promise<void> {

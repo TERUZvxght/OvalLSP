@@ -6,6 +6,17 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.4.0 — unreleased
+
+- Highlight the active signature parameter, matching keyword arguments by name and keeping excess or ambiguous arguments unhighlighted.
+- Add `ovallsp.diagnostics.severities`: downgrade an enabled check or suppress it with `none`; keep safe defaults and refresh open and closed files when settings change.
+- Offer explicit `Add require` quick fixes for JSON, URI and Pathname in verified plain Ruby cases, without requiring an unresolved-constant diagnostic. Decline in Rails and unverified environments.
+- Triage deferred findings with explicit retreat decisions; retain the four approved pending examples as known limitations, rather than reporting deferred fixes as shipped.
+
+### Details
+
+This release adds no public diagnostics-mode or unresolved-constant opt-in. Diagnostic overrides cannot enable an inactive check or raise its severity. Auto-require uses a finite mapping, checks syntax and name conflicts, and emits a versioned edit without executing workspace Ruby or discovering gems. The current client discards CodeAction document versions during conversion; stale-edit protection is not claimed. See the capability and known-limitation documents for the supported scope. Findings moved to 1.0.0 are not fixes in this release.
+
 ## 0.3.5 — unreleased
 
 - Add isolated test preparation and explicit Core test tiers, with lightweight Unit loading and verified parallel reports; preflight executes each example once.

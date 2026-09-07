@@ -44,9 +44,9 @@ module E2E
       Thread.new { @stderr.read }
     end
 
-    def initialize!(trusted: true)
+    def initialize!(trusted: true, capabilities: {})
       request("initialize", {
-                processId: nil, rootUri: "file://#{@root}", capabilities: {},
+                processId: nil, rootUri: "file://#{@root}", capabilities: capabilities,
                 initializationOptions: { workspaceTrusted: trusted }
               })
       notify("initialized", {})
@@ -125,6 +125,10 @@ module E2E
 
     def definitions(uri, line, character)
       Array(request("textDocument/definition", { textDocument: { uri: uri }, position: { line: line, character: character } }))
+    end
+
+    def signature_help(uri, line, character)
+      request("textDocument/signatureHelp", { textDocument: { uri: uri }, position: { line: line, character: character } })
     end
 
     def signature_labels(uri, line, character)

@@ -399,3 +399,255 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
     end
   end
 end
+
+# Task 064's P2, the state half: a *configuration* change moves the
+# answer without the buffer moving at all. Every ordering rule the funnel
+# already has is about a version or a generation, and neither of them
+# changes when `ovallsp.diagnostics.severities` does -- so an answer
+# computed under the previous setting carries a version and a generation
+# that make it look current, and lands on top of the one computed under
+# the new setting.
+#
+# The publish that is *not* a keystroke's is the one this is about:
+# `update_configuration` marks every open buffer for analysis, and the six
+# `republish_open_diagnostics` sites and the workspace pass reach the same
+# funnel from their own threads. So "an answer already in flight when the
+# setting changed" is the ordinary case, not a contrived one.
+#
+# **The stop point is an existing collaborator, not an added hook.**
+# `publish_diagnostics` reads the configuration once, analyses under the
+# index lock, and then calls `Diagnostics::MidEditCall.filter` before
+# handing the findings to the funnel. Parking inside that call holds a
+# thread in exactly the window the defect lives in -- after the analysis,
+# with the index lock already released, so the configuration change and
+# the re-analysis it asks for can both complete while it waits. Nothing
+# here waits for a duration or names a lock: each example is fixed by the
+# queue the parked thread posts to and by the notifications the client
+# received.
+RSpec.describe "Ovallsp::Server publish ordering across a configuration change (064 P2)" do
+  let(:output) { StringIO.new }
+  let(:logger) { instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil) }
+  let(:server) { Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger) }
+  let(:store) { server.instance_variable_get(:@document_store) }
+  let(:uri) { "file:///worker.rb" }
+  # `baz` is a call to a method the enclosing class does not declare, on a
+  # receiver whose ancestry is entirely in the workspace -- the plainest
+  # thing `unknown-method` reports, and a check the published settings may
+  # reduce to `hint` or switch off. Nothing here is about which check it
+  # is; it is about which *configuration* the reported answer was computed
+  # under.
+  let(:source) { "class Bar\n  def run\n    baz\n  end\nend\n" }
+
+  after { server.instance_variable_get(:@background_tasks).shutdown }
+
+  def notifications
+    output.rewind
+    reader = Ovallsp::IO::FramedReader.new(output)
+    messages = []
+    begin
+      loop { messages << reader.read_message }
+    rescue Ovallsp::IO::FramedReader::EOF
+      nil
+    end
+    messages.select { |m| m[:method] == "textDocument/publishDiagnostics" && m[:params][:uri] == uri }
+  end
+
+  # What the client is holding, in the order it arrived: each publish as
+  # its version and the `[code, severity]` of every diagnostic in it. The
+  # severity is included because `hint` and `warning` are the same finding
+  # reported under two settings, and an example about which setting won
+  # cannot tell them apart without it.
+  def reported
+    notifications.map { |m| [m[:params][:version], m[:params][:diagnostics].map { |d| [d[:code], d[:severity]] }] }
+  end
+
+  def warning
+    [["unknown-method", 2]]
+  end
+
+  def hint
+    [["unknown-method", 4]]
+  end
+
+  # `didOpen` rather than `DocumentStore#open`: the declaration has to
+  # reach the index for the call to be judged at all, and the point of
+  # every example here is that a real answer -- not a hand-built `Finding`
+  # -- is the thing being ordered.
+  def open_buffer(version: 1)
+    server.send(:handle_did_open,
+                { textDocument: { uri: uri, text: source, version: version, languageId: "ruby" } })
+  end
+
+  def analyse_and_publish
+    server.send(:publish_diagnostics, store.fetch(uri: uri))
+  end
+
+  # The production entry for `workspace/didChangeConfiguration`, followed
+  # by the drain the run loop performs once the input is quiet. Together
+  # they are "the setting changed and nothing else did".
+  def configure(severities)
+    server.send(:update_configuration, { settings: { ovallsp: { diagnostics: { severities: severities } } } })
+    server.send(:drain_settled_analyses)
+  end
+
+  # Parks the *first* answer to reach the filter and lets every later one
+  # through. The caller launches the thread it wants parked and waits on
+  # `arrived` before doing anything else, so which answer is held is
+  # decided by the order the example starts them in, not by scheduling.
+  def park_the_next_answer
+    arrived = Queue.new
+    release = Queue.new
+    parked = false
+    allow(Ovallsp::Diagnostics::MidEditCall).to receive(:filter).and_wrap_original do |original, *args|
+      unless parked
+        parked = true
+        arrived << :parked
+        release.pop
+      end
+      original.call(*args)
+    end
+    [arrived, release]
+  end
+
+  def in_flight_answer
+    arrived, release = park_the_next_answer
+    document = store.fetch(uri: uri)
+    thread = Thread.new { server.send(:publish_diagnostics, document) }
+    arrived.pop
+    [thread, release]
+  end
+
+  # **The control the three race examples rest on.** They all assert that
+  # some publish did *not* happen, and a funnel that refused every second
+  # answer at a version it has already published would satisfy all of
+  # them. This is the case that must still get through: the setting
+  # changed, nothing else did, and the buffer's answer is re-sent at the
+  # version it already published at.
+  it "publishes the new answer for a buffer nobody edited when only the setting changed" do
+    open_buffer
+    analyse_and_publish
+
+    configure({ "unknown-method" => "hint" })
+
+    expect(reported).to eq([[1, warning], [1, hint]])
+  end
+
+  # **The race, in the direction that reports something the setting says
+  # not to report.** Before the fix the client is left holding the
+  # `unknown-method` warning for a check the user has just switched off:
+  # the answer computed under the previous setting is at the same version
+  # and the same generation as the empty one, and the funnel lets an equal
+  # version through on purpose -- a later pass usually knows more.
+  #
+  # Reverting the guard reports `[[1, warning], [1, []], [1, warning]]`:
+  # the empty answer arrives, and the switched-off warning comes back
+  # after it.
+  it "refuses an answer computed under a configuration that has since been replaced" do
+    open_buffer
+    analyse_and_publish
+    expect(reported).to eq([[1, warning]]) # the check really does report, before anything is switched off
+
+    thread, release = in_flight_answer
+    configure({ "unknown-method" => "none" })
+    expect(reported.last).to eq([1, []]) # the answer under the new setting reached the client first
+
+    release << :go
+    thread.join
+
+    expect(reported).to eq([[1, warning], [1, []]])
+  end
+
+  # **The same race in the direction that hides something.** The
+  # switched-off answer is the one in flight, and the setting is put back
+  # before it lands -- so the client ends up with an empty Problems panel
+  # for a file that has a finding under the setting now in force, and
+  # nothing corrects it until the file is edited.
+  #
+  # Reverting the guard reports a fourth publish, `[1, []]`, after the
+  # restored warning.
+  it "does not let an answer computed while a check was off erase the answer after it is back on" do
+    open_buffer
+    analyse_and_publish
+    configure({ "unknown-method" => "none" })
+
+    thread, release = in_flight_answer # computed with the check off
+    configure({})                      # and the user puts it back
+    expect(reported.last).to eq([1, warning])
+
+    release << :go
+    thread.join
+
+    expect(reported).to eq([[1, warning], [1, []], [1, warning]])
+  end
+
+  # **A → B → A.** The value the user ends on is the value they started
+  # from, so a guard that compares configuration *values* admits the
+  # answer computed before B and calls it current. P2 requires the
+  # comparison to be on the snapshot the analysis actually held: the
+  # server exchanges one reference, and the answer in flight belongs to
+  # the reference that was replaced.
+  #
+  # The payload of the refused publish is identical to the one before it,
+  # which is exactly why the count is what this example reads -- there is
+  # nothing else to see. It distinguishes a value comparison from an
+  # identity comparison and nothing else, and that is the decision P2
+  # states.
+  it "refuses an answer from the replaced configuration even when the current value is equal to it" do
+    open_buffer
+    analyse_and_publish
+
+    thread, release = in_flight_answer         # computed under the first A
+    configure({ "unknown-method" => "none" })  # B
+    configure({})                              # A again, a new snapshot with the same value
+    expect(reported).to eq([[1, warning], [1, []], [1, warning]])
+
+    release << :go
+    thread.join
+
+    expect(reported).to eq([[1, warning], [1, []], [1, warning]])
+  end
+
+  # Closing a buffer clears its diagnostics; it does not clear the
+  # setting. Reopening the file has to produce the answer the *current*
+  # setting asks for -- not the one published before the close, and not
+  # the default -- and putting the setting back has to bring the finding
+  # back for the reopened buffer.
+  it "keeps the configuration across a close and reopen, and regenerates on reset" do
+    open_buffer
+    analyse_and_publish
+    configure({ "unknown-method" => "none" })
+
+    server.send(:handle_did_close, { textDocument: { uri: uri } })
+    open_buffer
+    analyse_and_publish
+
+    expect(reported).to eq([[1, warning], [1, []], [nil, []], [1, []]])
+
+    configure({})
+
+    expect(reported.last).to eq([1, warning])
+  end
+
+  # The close and the configuration change together. The answer in flight
+  # belongs to the buffer that was closed, and the reopened buffer is a
+  # different one at the same version -- so neither the version nor the
+  # generation separates them, and without the buffer identity rule the
+  # pre-close warning lands on a buffer whose setting says nothing should
+  # be reported. The rule is already there (`037` C3); what this pins is
+  # that a configuration change in the gap does not reopen the door.
+  it "refuses an answer from the buffer that was closed while the setting changed" do
+    open_buffer
+    analyse_and_publish
+
+    thread, release = in_flight_answer
+    server.send(:handle_did_close, { textDocument: { uri: uri } })
+    configure({ "unknown-method" => "none" })
+    open_buffer
+    analyse_and_publish
+
+    release << :go
+    thread.join
+
+    expect(reported).to eq([[1, warning], [nil, []], [1, []]])
+  end
+end

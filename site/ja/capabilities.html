@@ -179,10 +179,11 @@
             <tr data-status="verified"><td>ドキュメントハイライト（ファイル内の出現箇所）</td><td class="col-status"><span class="mark mark--yes">検証済み</span></td><td class="col-status"><span class="mark mark--warn">未検証</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="verified"><td><code>@</code> を打った時点でのインスタンス変数名の補完</td><td class="col-status"><span class="mark mark--yes">検証済み</span></td><td class="col-status"><span class="mark mark--warn">未検証</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="planned"><td>チェックごとの診断重大度設定</td><td class="col-status"><span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">1.0.0</span></td></tr>
-            <tr data-status="planned"><td><code>require</code> の自動挿入</td><td class="col-status"><span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">1.0.0</span></td></tr>
+            <tr data-status="planned"><td><code>require</code> の自動挿入</td><td class="col-status"><span class="mark mark--none">—</span></td><td class="col-status"><span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="planned"><td>シグネチャヘルプでの現在引数のハイライト</td><td class="col-status"><span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">未検証</span> <span class="mark mark--plan">1.0.0</span></td></tr>
           </tbody>
         </table>
+          <p>0.4.0: severity 設定は有効な検査の格下げ・抑制だけを行い、open / closed の診断を更新します。safe モードは維持します。auto-require は診断なしの要求を含め、限定した plain Ruby の JSON・URI・Pathname に対応します。Rails、bundle / Ruby 選択、名前衝突、不確実な状態では辞退します。現在の client は古い CodeAction の適用を防がないため、編集後は提案を再取得してください。signature help はキーワード名を照合し、過剰・曖昧な引数には強調範囲を返しません。</p>
       </div>
       <p class="result-count" data-matrix-count data-template="全 {total} 項目中 {n} 件を表示">全 42 項目中 42 件を表示</p>
     </div>

@@ -26,7 +26,7 @@ RSpec.describe "Extension capabilities", :e2e do
     skip "rails/sqlite3 not installed locally; capability suite needs a real Rails app" unless self.class.available?
 
     @client = E2E::LspClient.new(self.class.workspace)
-    @client.initialize!
+    @client.initialize!(capabilities: { workspace: { workspaceEdit: { documentChanges: true } } })
     @state = @client.wait_until_ready(agent: true)
     @posts_controller = @client.open(File.join(self.class.workspace, "app/controllers/posts_controller.rb"))
   end
@@ -124,6 +124,70 @@ end
     it "B1/B2: reaches a ready state against a real Rails app" do
       expect(@state).to eq("ready-rails")
     end
+  end
+
+  it "G20: updates open and closed diagnostics after severity changes without an edit" do
+    root = example_tmpdir("ovallsp-severity-e2e")
+    path = File.join(root, "closed.rb")
+    source = "class SeverityProbe\n  def run; absent_severity_method; end\nend\n"
+    File.write(path, source)
+    client = E2E::LspClient.new(root)
+    client.initialize!(trusted: false)
+    client.wait_until_ready(agent: false)
+    closed_uri = Ovallsp::UriUtil.from_path(path)
+    open_uri = client.open(File.join(root, "open.rb"), text: source.sub("SeverityProbe", "OpenSeverityProbe"))
+    [closed_uri, open_uri].each do |uri|
+      expect(client.published_diagnostics(uri).map { |d| [d[:code], d[:severity]] }).to eq([["unknown-method", 2]])
+    end
+    [["hint", 4], ["none", nil], [nil, 2]].each do |severity, expected|
+      client.send(:notify, "workspace/didChangeConfiguration", {
+        settings: { ovallsp: { diagnostics: { severities: severity ? { "unknown-method" => severity } : {} } } }
+      })
+      Timeout.timeout(15) do
+        loop do
+          break if [closed_uri, open_uri].all? do |uri|
+            client.diagnostics_by_uri[uri].map { |d| [d[:code], d[:severity]] } == (expected ? [["unknown-method", expected]] : [])
+          end
+          sleep 0.02
+        end
+      end
+    end
+  ensure
+    client&.stop
+  end
+
+  it "Q4: offers finite stdlib imports without diagnostics in plain Ruby and declines in Rails" do
+    root = example_tmpdir("ovallsp-require-e2e")
+    client = E2E::LspClient.new(root)
+    client.raw_request("initialize", { rootUri: Ovallsp::UriUtil.from_path(root),
+      capabilities: { workspace: { workspaceEdit: { documentChanges: true } } },
+      initializationOptions: { workspaceTrusted: false } })
+    client.wait_until_ready(agent: false)
+    { "json" => ['JSON.generate(1)', "1\n"], "uri" => ['URI.parse("https://example.test").host', "example.test\n"],
+      "pathname" => ['Pathname.new("a").to_s', "a\n"] }.each do |path, (expression, expected)|
+      source = "puts #{expression}\n"
+      uri = client.open(File.join(root, "#{path}_probe.rb"), text: source)
+      params = { textDocument: { uri: uri }, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 100 } },
+                 context: { diagnostics: [], only: ["quickfix"] } }
+      actions = client.raw_request("textDocument/codeAction", params)
+      expect(actions.map { |action| action[:title] }).to eq(["Add require '#{path}'"])
+      change = actions.first.fetch(:edit).fetch(:documentChanges).fetch(0)
+      expect(change.fetch(:textDocument)).to eq(uri: uri, version: 1)
+      fixed = apply_edits(source, change.fetch(:edits))
+      output, error, status = Open3.capture3(TestEnvironment.clean_env, RbConfig.ruby, "-e", fixed, chdir: root)
+      expect(status.success?).to be(true), error
+      expect(output).to eq(expected)
+      client.send(:notify, "textDocument/didChange", { textDocument: { uri: uri, version: 2 }, contentChanges: [{ text: fixed }] })
+      expect(client.raw_request("textDocument/codeAction", params)).to eq([])
+    end
+    with_file("app/models/require_decline_probe.rb", "JSON\n") do |uri|
+      expect(@client.raw_request("textDocument/codeAction", {
+        textDocument: { uri: uri }, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 4 } },
+        context: { diagnostics: [] }
+      })).to eq([])
+    end
+  ensure
+    client&.stop
   end
 
   # Runs its own Core rather than the shared one: this is about what
@@ -1800,6 +1864,43 @@ end
       RUBY
         expect(@client.signature_labels(uri, 2, 14).join(" ")).to include("post_path")
       end
+    end
+
+    it "S4: highlights the argument the cursor is in" do
+      with_file("app/models/active_param_probe.rb", <<~RUBY) do |uri|
+        class ActiveParamProbe
+          def greet(first, second, third); end
+          def gather(first, *rest); end
+
+          def run
+            greet(1, 2, 3)
+            gather(1, 2, 3)
+          end
+        end
+      RUBY
+        help1 = @client.signature_help(uri, 5, 10)
+        expect(help1[:activeParameter]).to eq(0)
+
+        help2 = @client.signature_help(uri, 5, 13)
+        expect(help2[:activeParameter]).to eq(1)
+
+        help3 = @client.signature_help(uri, 5, 16)
+        expect(help3[:activeParameter]).to eq(2)
+
+        # `gather(1, 2, |3)` is the rest's second element: the highlight stays
+        # on `*rest` rather than pointing past the label's end.
+        help4 = @client.signature_help(uri, 6, 17)
+        expect(help4[:activeParameter]).to eq(1)
+      end
+    end
+  end
+
+  it "S4: matches reordered keyword arguments and leaves unmatched arguments unhighlighted" do
+    source = "class KeywordParameterProbe\n  def render(body:, status:); end\n  def run\n    render(status: 200, body: 'x')\n    render(unknown: 1)\n  end\nend\n"
+    with_file("app/models/keyword_parameter_probe.rb", source) do |uri|
+      expect(@client.signature_help(uri, 3, source.lines[3].index("200"))[:activeParameter]).to eq(1)
+      expect(@client.signature_help(uri, 3, source.lines[3].index("'x'"))[:activeParameter]).to eq(0)
+      expect(@client.signature_help(uri, 4, source.lines[4].index("1"))[:activeParameter]).to be_nil
     end
   end
 

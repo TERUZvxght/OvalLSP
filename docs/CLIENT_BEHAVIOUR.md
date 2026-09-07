@@ -51,6 +51,20 @@ says it — those rows are marked **checked**.
 
 | what we rely on | shown by | |
 |---|---|---|
+| Text positions use UTF-16 code units by default; a non-BMP character occupies two units. | `vscode/node_modules/vscode-languageserver-types/lib/umd/main.d.ts`, `Position` | |
+| The signature-help converter replaces a nonnumeric `activeParameter`, including null, with zero. For an unmatched argument the Server therefore sends null and an empty parameter-range list on the selected signature, retaining its label. | `vscode/node_modules/vscode-languageclient/lib/common/protocolConverter.js`, `asSignatureHelp` / `asSignatureInformation` | |
+
+Task 064 P3 の CodeAction は versioned `WorkspaceEdit.documentChanges` を返す。
+プロトコルと実 client の保証は以下のように分ける。
+
+| what we rely on | shown by | |
+|---|---|---|
+| `workspace.workspaceEdit.documentChanges` advertises support for edits targeting a document version; `TextDocumentEdit.textDocument.version` carries that version. | `vscode/node_modules/vscode-languageserver-types/lib/umd/main.d.ts`, `WorkspaceEdit` and `OptionalVersionedTextDocumentIdentifier` | |
+| A CodeAction includes the request range and context even without diagnostics. | `vscode/node_modules/vscode-languageclient/lib/common/codeAction.js`, `provideCodeActions` | |
+| The current CodeAction conversion calls `asWorkspaceEdit`, which converts a `TextDocumentEdit` to `WorkspaceEdit.replace` without carrying `textDocument.version`. Advertising the capability alone therefore does **not** prove stale CodeAction edits are refused. The version comparison in `client.js` belongs to the separate `workspace/applyEdit` handler. | `vscode/node_modules/vscode-languageclient/lib/common/protocolConverter.js`, `asCodeAction` / `asWorkspaceEdit`; `client.js`, `handleApplyWorkspaceEdit` | |
+
+| what we rely on | shown by | |
+|---|---|---|
 | `didChange` arrives once per keystroke, with the version incremented each time. Nothing coalesces on the client side. | LSP specification; measured directly in 0.2.7's drive round at 22 publishes for 22 keystrokes | |
 | Closing and reopening a file gives a **new document at version 1**, not a continuation of the old numbering. This is what made a stale publish from the closed buffer look newer than everything the reopened one could produce (`037`). | **VS Code behaviour, not a protocol guarantee.** The specification defines `TextDocumentItem.version` as increasing per change and says nothing about a reopen restarting it. Cited as the spec until a review round checked — in the one document whose contract is that each row names what shows it, and on the row the funnel's newest rule rests on. Driven directly: `core/spec/e2e/` opens, closes and reopens a file and the reopened `didOpen` carries version 1. | |
 | A `didChange` may carry several changes, applied in order. | LSP specification | |
@@ -61,6 +75,9 @@ says it — those rows are marked **checked**.
 |---|---|---|
 | **Workspace Trust is a VS Code concept with no LSP field.** The extension passes it through `initializationOptions`, and Core treats anything but a literal `true` as untrusted. | `vscode/package.json`'s `capabilities.untrustedWorkspaces`; `core/lib/ovallsp/server.rb`'s `#workspace_trusted?` | |
 | `restrictedConfigurations` is what stops an untrusted workspace choosing which binary the extension runs. Settings not listed there are readable from an untrusted folder. | `vscode/package.json`; `vscode/src/test/unit/workspaceTrust.test.ts` checks every setting naming a binary is listed | checked |
+| `workspace.getConfiguration(section, folder.uri)` requests configuration scoped to that resource. The diagnostic settings initialization and notification must use the same folder URI. | Installed `vscode/node_modules/@types/vscode/index.d.ts`, `workspace.getConfiguration` and its `ConfigurationScope` parameter; `vscode/src/test/integration/diagnosticsSettings.spec.ts` drives a live change, a `none` override and a reset to a real, already-running client (single folder). | API checked; single-folder host-validated |
+| `LanguageClient#sendNotification` awaits its own internal start, and calls `client.start()` itself for a client never started at all — sending to a client whose pre-start compatibility probe has not resolved yet starts it early, outside the extension's own start gate. | `vscode/node_modules/vscode-languageclient/lib/common/client.js`, `sendNotification`/`$start`, read 2026-09-07. `vscode/src/clientLifecycle.ts`'s `shouldNotifyRunningClient` is the guard; `vscode/src/test/unit/clientLifecycle.test.ts` pins it. | checked |
+| **`vscode.workspace.updateWorkspaceFolders` converting a single-folder Extension Development Host into multi-root triggers a full extension-host reload** in VS Code 1.136.1 — every integration spec in the process ran a second time, and the reload raced a second `updateWorkspaceFolders` call to failure. A same-process A/B-folder host test needs a dedicated multi-root fixture opened as such from process launch (a `.code-workspace` file plus its own `runTest.ts` entry point), not a folder added at runtime. Task 064 W3 tried the runtime approach, found this, and left the two-folder host test as open shared-test-infrastructure work rather than building it unreviewed. | Reproduced directly: `vscode/src/test/integration/` run against this VS Code build, 2026-09-07. | |
 | **On Windows, libuv searches the cwd before `PATH`.** A bare command name spawned with the workspace folder as cwd would run a binary the workspace supplied. POSIX `execvp` does not search the cwd. | Node/libuv process spawning; `vscode/src/platformCompatibility.ts`'s `spawnCwd` is the guard | |
 | `code --uninstall-extension` does not call `deactivate()` in an already-running window. | VS Code's own extension lifecycle — recorded in `docs/RELEASE_CHECKLIST.md` #7 | |
 
