@@ -35,3 +35,13 @@ asterisks in README's matrix instead:
 Until then, every ✅ in README's matrix means "verified on macOS Apple
 Silicon, in a Rails project, with the bundled Core" — and nothing else is
 promised.
+
+### Intermediate trajectory toward 1.0.0 (the 0.4.x patch line)
+
+Per [`PUBLISHING.md`](PUBLISHING.md), enhancements to performance, concurrency, and existing correctness guarantees do not introduce new capabilities and are delivered incrementally as patch releases rather than accumulated on an unreleased omnibus branch. The path to 1.0.0 proceeds in four focused steps:
+
+1. **0.4.1 (Performance, Concurrency & Test Isolation)**: Resolving keystroke re-analysis latency on large files (024.45), eliminating environment deep copying in `scope_at` (024.38), narrowing index search lock contention (024.137), and isolating the mutable Rails test fixture to unblock suite parallelization (024.71).
+2. **0.4.2 (Permitted Pendings & Core Type Model)**: Resolving the four permitted pendings (024.19 argument type evaluation, 024.47 namespaced core class shadowing, 024.13 reopened core classes, 024.224 RBS-only types) to achieve zero skipped specs.
+3. **0.4.3 (Diagnostics Precision & Feature Path Unification)**: Eliminating false positive undefined-method reports over real gem source (024.76, 024.83), unifying internal query paths across hover, completion, and diagnostics (024.100), aligning union member diagnostics (024.88), and wiring gem RBS with stdlib types (024.321, 024.322).
+4. **1.0.0 (Platform & Environment Guarantees)**: Automating multi-platform packaging and CI verification across Windows, Linux, and Intel Mac (024.R4), and verifying full workspace guarantees for plain Ruby projects (024.R1).
+

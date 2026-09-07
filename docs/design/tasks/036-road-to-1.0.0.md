@@ -389,22 +389,51 @@ was Linux while what is published is `darwin-arm64`.
 **The 0.3 line is closed**: no open register entry targets any 0.3.x,
 and `docs/ROADMAP.md` has only 0.4.0 and 1.0.0 sections left.
 
-### Before 1.0.0 — the environment half *(axis A, and PUBLISHING.md)*
+### 0.3.3 through 0.3.5 — workflow and source completion streamlining *(axis B)* — **shipped**
 
-- published, verified artifacts for the targets beyond `darwin-arm64`
-  (`024.R4`, still open at 1.0.0). What 0.3.2 closed is the adjacent
-  entry, not this one: `024.283`, the packaged Core being driven only on
-  Linux while what is published is `darwin-arm64`;
-- a plain Ruby project guaranteed, not only a Rails one (`024.R1`, open
-  at 1.0.0);
-- ~~`024.69` — the two suites that drive a real editor run only on the
-  maintainer's machine; before 1.0.0 they run somewhere else too~~ —
-  **done**: `024.69` is fixed, in 0.2.12;
-- `024.71` — the shared Rails fixture blocks parallelisation, which is
-  what makes the above affordable. Still open, and retargeted to 0.4.0
-  in 0.3.2: driven, the two real-Rails suites already run concurrently
-  with the fixture byte-identical, so the reason to expect breakage is
-  weaker than when this was written.
+Streamlined source member completion (`U0`: eliminating AST double traversal via `CompletionCandidate`), unified bare name delegation with `SymbolId.bare_name`, implemented tiered parallel test execution (`scripts/test_runner.rb`), added title-verified promotion guards (`scripts/issues.rb`), and compressed operational guides. Shipped on `release/0.3.5`.
+
+### 0.4.0 — severity configuration, auto-require, and activeParameter *(axis B)* — **shipped, on `release/0.4.0`**
+
+Delivered the three primary 0.4.0 commitments:
+1. `ovallsp.diagnostics.severities` configuration per check, with immutable configuration objects and request identity matching;
+2. Auto-require code actions (ADR-0007) for unreferenced standard constants with ambiguity declining;
+3. Signature help `activeParameter` tracking argument positions, keywords by name, rest parameters, and multi-byte surrogate pairs;
+4. Retargeted non-critical debt findings to 1.0.0 and enforced strict pending reason matching on the 4 permitted pendings. Shipped on `release/0.4.0` with all 17 preflight checks passed.
+
+### 0.4.1 — performance, concurrency, and test isolation *(axis B)* — **next**
+
+Patch release focusing on execution latency, thread safety, and test parallelization:
+- `024.45`: Keystroke re-analysis latency on large files (currently seconds against stated 300 ms).
+- `024.38`: Eliminate whole-environment deep copies on each descent step in `scope_at`.
+- `024.137`: Narrow `WorkspaceIndex#search` lock granularity to avoid blocking the main server thread.
+- `024.71`: Isolate the shared mutable Rails fixture to unblock full test suite process parallelization.
+- `024.39` & `024.62`: Eliminate per-request state in `LocalInferencer` and consolidate duplicated file stores.
+
+### 0.4.2 — the four permitted pendings and core type model consolidation *(axis B)*
+
+Patch release resolving the 4 remaining `PERMITTED_PENDINGS` to reach 0 skipped tests:
+- `024.19`: Prevent argument-type check judging against a class the receiver is not (subtyping/inheritance alignment).
+- `024.47`: Resolve shadowed core-class names in namespaces (e.g. `MyModule::String`) and literal resolution agreement.
+- `024.13`: Recognize reopened core classes as open across files.
+- `024.224`: Eliminate self-incompatibility diagnostics for types declared only in RBS `sig/`.
+
+### 0.4.3 — diagnostics precision and feature path unification *(axis B)*
+
+Patch release aligning diagnostics accuracy and LSP feature consensus:
+- `024.76` & `024.83`: Eliminate false positive unknown-method reports over real gem sources, especially when the Runtime Agent is inactive.
+- `024.100`: Unify internal query paths across hover, completion, definition, and diagnostics to guarantee identical answers.
+- `024.88`: Align union member diagnostics (intersection) with union member completions.
+- `024.321` & `024.322`: Wire stdlib type judgements and bundle_context gem RBS loading.
+- `024.129`: Enable reliable undefined-method reporting on core library receivers.
+
+### 1.0.0 — guarantees, verified across platforms and environments *(axis A & B)*
+
+The major milestone removing the two README qualifications:
+- `024.R4`: Automated cross-platform packaging and CI verification for `win32-x64`, `linux-x64`, and `darwin-x64`.
+- `024.R1`: Plain Ruby project guarantee: complete workspace static analysis verified without requiring Rails or Runtime Agent.
+- `024.R3`: Feature parity verification against Pylance.
+- `024.R10`: Reopening repository to external contributions, restoring bilingual community guides and Issue tracker.
 
 ## 4. What decides that 1.0.0 has arrived
 
@@ -417,7 +446,7 @@ Three things, all measurable, and none of them "the backlog is empty":
    a namespaced model, a concern-shaped `include` — hover, completion,
    definition and diagnostics all answer, and answer the same thing.
 3. **The environment half of `PUBLISHING.md` holds**, verified rather
-   than asserted.
+   than asserted across all four target platforms and in plain Ruby workspaces.
 
 Section 0.4 governs the whole list: **a wrong answer is worse than no
 answer, but letting 1.0.0 recede forever in pursuit of accuracy is worse
@@ -429,10 +458,7 @@ ships.
 
 Not a schedule, and not a promise about content beyond what has shipped.
 This sentence read "beyond 0.2.6 — 0.2.7 and 0.3.0 are named so the
-direction is visible" and was never updated; the file itself was last
-touched at `41555b1` ("0.2.13, and 0.3.0 scoped"), and **eight releases
-shipped past it before 0.3.3's record pass** — 0.2.14 through 0.3.2.
-§3's sections now run to 0.3.2, and everything after them — the
-environment half, and whatever 0.4.0 turns out to be — is named so the
-direction is visible and will be re-argued from measurement when it
-opens. It is deleted when 1.0.0 ships.
+direction is visible" and was never updated; the file was updated through
+0.4.0, and §3 outlines the sequential 0.4.x patch releases that close the
+foundation before 1.0.0. It is deleted when 1.0.0 ships.
+
