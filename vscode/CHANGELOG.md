@@ -6,6 +6,18 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.4.1 — unreleased
+
+- Reuse parsed trees and receiver types across diagnostic checks. In a fixed warmed analysis fixture, whole-source Prism parses fell from four to two with identical findings.
+- Retain type-resolution and ancestor memos on body edits whose relevant inputs are unchanged, while preserving generation updates and invalidation for changed inputs.
+- Let workspace symbol searches bypass the Server's outer index lock; the WorkspaceIndex mutex still protects the search and can delay index writers.
+- Materialize a scope result once and centralize inference request initialization. Per-statement environment copies and shared inferencer state remain.
+- Isolate the mutable minimal Rails fixture per example and allow the real Rails integration file to run in parallel. CI uses the verified runner with one worker; other serial files remain.
+
+### Details
+
+These are partial performance and isolation improvements, not new capabilities. The review relayed a typing-run hover median of 54ms with 10/10 responses; that is a hover observation, not an edit-to-diagnostics p95, a before/after speedup, or a guarantee during background analysis. The measurement scope, independently reproduced parse counts, and remaining work are recorded in [task 065](../docs/design/tasks/065-0.4.1-what-this-release-is-for.md). The 300ms re-analysis target remains unverified. Cooperative cancellation and its starvation bound were not implemented; long foreground analyses still occupy dispatch, and hover can still wait behind a background pass. The six issues remain open for their residual work.
+
 ## 0.4.0 — unreleased
 
 - Highlight the active signature parameter, matching keyword arguments by name and keeping excess or ambiguous arguments unhighlighted.

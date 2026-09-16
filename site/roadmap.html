@@ -860,6 +860,17 @@
           </ul>
         </article>
 
+        <article class="tl-item tl-item--future" id="v041">
+          <div class="tl-version"><span class="v">0.4.1</span><span class="mark">unreleased</span></div>
+          <h3>Performance, concurrency and test isolation</h3>
+          <ul class="feature-list">
+            <li><span>Reuse syntax trees and receiver types across diagnostic checks; retain index memos for body edits with unchanged inputs.</span></li>
+            <li><span>Remove the outer-lock wait for workspace/symbol. Inner-lock contention and search cost remain.</span></li>
+            <li><span>Isolate minimal Rails fixtures per example. The real Rails integration file can run in parallel; CI retains one worker.</span></li>
+          </ul>
+          <p class="tl-note">Unreleased partial improvements. The 300ms re-analysis target, fully isolated inference state and cooperative cancellation remain unverified or unimplemented.</p>
+        </article>
+
         <article class="tl-item tl-item--far" id="v100">
           <div class="tl-version"><span class="v">1.0.0</span></div>
           <h3>Guarantees, not features</h3>

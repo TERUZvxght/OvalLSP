@@ -454,34 +454,20 @@ and completion stopped answering for such a class as of 0.2.1. That
 described an arrangement built and rolled back *inside* 0.2.1's review
 loop; what 0.2.1 actually shipped is the silence described above.)
 
-## "Go to Symbol in Workspace" is slowest at the moment you open it
+## Workspace symbol search still has costs on large indexes
 
-A `workspace/symbol` request may carry an empty query, which the protocol
-defines as "all symbols", and an empty query matches every symbol in your
-workspace by definition. So the picker's opening state, and to a lesser
-extent the first character you type, stay proportional to how big the
-workspace is — measured at about 17ms and 11ms on a 15,000-symbol
-workspace, and growing from there. While that request is running it also
-holds the lock indexing needs, so opening the picker on a large workspace
-can briefly delay indexing that is running at the same time.
+In 0.4.1, `workspace/symbol` does not acquire the Server's outer
+`@index_mutation_mutex`. A background pass holding that lock no longer
+prevents the search from proceeding to its internal lock. However,
+`WorkspaceIndex#search` still holds its own `@mutex` throughout scanning
+and ranking, so contention with index updates remains. Empty and
+one-character queries process many candidates; cost still depends on
+workspace size.
 
-Typing more characters is faster, but not because anything switches on:
-0.2.16 replaced a full scan with an index keyed on the names being
-matched, and that index is read for **every** query including the empty
-one. What a longer query changes is how much the index removes. Measured
-over 1,037 files and 14,942 symbols, a two-character query went from
-10.4ms to 4.0ms — about 2.6 times — while the empty query is bounded by
-the number of results rather than by the query.
-
-Symbol search *within* a file, and go to definition, use a different path
-and are unaffected. <!-- documents: 024.137 -->
-
-(Until this was re-measured, this section said the picker "sends an empty
-query when it opens" — a claim about the client that nothing in
-`docs/CLIENT_BEHAVIOUR.md` showed — and that "once you have typed two
-characters or more the picker uses an index", which describes a switch
-that does not exist, at "roughly four times" where the measurement says
-2.6.)
+This change does not interrupt foreground analysis on the same dispatch
+thread. Previously published search timings describe older versions and
+are not repeated as 0.4.1 measurements. Document symbol search and go to
+definition do not receive this outer-lock exception. <!-- documents: 024.137 -->
 
 ## The packaged extension is driven fully on Linux, and on macOS through the publish gate's own test
 
@@ -527,40 +513,32 @@ what does not match.
 
 ## How long an edit takes to re-analyse
 
-**Seconds, on a file of a couple of thousand lines.** One full
-re-analysis on a warm server, median of five, with the one-off signature
-load excluded: `uri/generic.rb` (1,592 lines) 3.9 s, `net/http.rb` (2,574
-lines) 2.7 s, `rubygems/specification.rb` (2,594 lines) 4.7 s. It grows
-faster than the file does. The Core answers one request at a time, so
-hover, completion and signature help wait behind it.
+**0.4.1 makes partial improvements; the 300ms re-analysis p95 target has
+not been demonstrated.** Diagnostic checks share parsed trees and receiver
+types. Body edits retain type-resolution and ancestor memos when their
+relevant inputs are unchanged. Changes to declarations, ancestor facts
+and other dependencies still require recomputation; SymbolId construction,
+index traversal and file-level analysis costs remain.
 
-*These numbers replace lower ones published from 0.2.1 to 0.2.17. Those
-were taken as the difference between a session with five `didChange`
-notifications and one with none — and since 0.2.10 five edits with no
-read between them coalesce into a single analysis, while the baseline
-already performs one on `didOpen`, so the difference between them was
-close to zero whatever an analysis cost. It measured the coalescing. The
-figures above are one analysis, timed directly.*
+The relayed review reported a typing-run hover median of 54ms with 10/10
+responses. This is neither an edit-to-diagnostics p95 nor a before/after
+speedup. It does not establish a separate guarantee for hover during a
+background pass. The source and limits of the evidence are recorded in
+`docs/design/tasks/065-0.4.1-what-this-release-is-for.md`. The previously
+published multi-second figures were direct-analysis measurements of older
+versions, not current latency measurements.
 
-The design document states 300 ms for this, so it is not a matter of
-taste — it is a requirement the product misses by an order of magnitude,
-and it had no entry here until 0.2.1 (024.45). It is not new in this
-release; 0.2.0 measures the same. Files of a few hundred lines, which is
-most application code, re-analyse in well under a tenth of a second. <!-- documents: 024.45 -->
+Foreground analysis still runs synchronously on the dispatch thread,
+delaying hover, completion and signature help while it executes.
+Background diagnostics also retain the outer lock and can delay these
+requests. The existing coalescing of already queued input remains, but
+cooperative cancellation of a running analysis and its starvation bound
+are not implemented.
 
-**Deferring the report until you stop typing was tried in 0.2.2, rolled
-back, and built again in 0.2.10 in a different shape.** The first attempt
-was a timed debounce with waiter threads; it produced two races, could
-not bound how many analyses of one file run at once, and each of four
-consecutive review rounds found another defect in it. What ships now is
-not a debounce: there is no interval, no waiter thread, and the question
-is only whether anything else is waiting to be read. A burst of edits
-faster than one analysis produces a few answers rather than one per
-keystroke, and — the part you feel — a hover asked while you are typing
-is answered before the pending analysis runs, in about 0.04 s instead of
-1.4. What is still per-keystroke is a burst slower than the analysis: an
-edit that settles is always analysed, which is the property that matters
-more.
+Scope results are materialized once at exit, but environments are still
+copied per statement. Quadratic copying for many locals remains, and
+centralized inference initialization does not provide independent state
+for concurrent requests. <!-- documents: 024.45 -->
 
 ## What the undefined-method check gets wrong on real code
 

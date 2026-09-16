@@ -35,3 +35,32 @@ module RealRailsFixture
     @available = true
   end
 end
+
+# The minimal fixture has no Gemfile/Bundler graph of its own -- it's a
+# hand-written fake_routing.rb/fake_active_record.rb double, not real
+# Rails -- so unlike RealRailsFixture it needs no lock/`bundle check` step,
+# just a private copy of its handful of files.
+#
+# Every user gets that private copy, not just the one example that flips
+# `config/.disable_archived_route` (Task 006's reload test): the source
+# tree is shared across every process running specs, so a writer in one
+# process and a reader in another previously raced on the same file.
+# `example_tmpdir` (core/spec/test_hygiene.rb) gives a fresh copy per
+# example and reclaims it in an `after` hook even on failure, which also
+# means a flag one example sets can never leak into a sibling example
+# reusing the same process.
+module MinimalRailsFixture
+  SOURCE = File.expand_path("../fixtures/rails_minimal", __dir__)
+
+  def minimal_rails_fixture
+    @minimal_rails_fixture ||= begin
+      destination = example_tmpdir("ovallsp-rails-minimal")
+      Dir.children(SOURCE).sort.each { |name| FileUtils.cp_r(File.join(SOURCE, name), destination) }
+      # Defensive against a stray flag left in the source tree (e.g. by
+      # code predating this isolation): every fresh copy starts with the
+      # archived route present, regardless of source state.
+      FileUtils.rm_f(File.join(destination, "config", ".disable_archived_route"))
+      File.realpath(destination)
+    end
+  end
+end

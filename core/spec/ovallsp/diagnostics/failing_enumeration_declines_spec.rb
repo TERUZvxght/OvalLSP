@@ -15,14 +15,21 @@
 RSpec.describe "Ovallsp::Diagnostics::Engine when it cannot enumerate" do
   let(:engine) { Ovallsp::Diagnostics::Engine.new }
 
+  # The check reads the tree out of the session one `#analyze` shares
+  # (065's P3) rather than parsing the document itself, so the session is
+  # what these hand it. The failure is the same one either way: the parse
+  # is where the document is read, and a document that cannot be read
+  # raises there.
   describe "the ivars a file is defensive about" do
+    def session_for(document) = Ovallsp::Diagnostics::Engine::AnalysisSession.new(document: document)
+
     it "answers the names when it can look" do
       document = Ovallsp::TextDocument.new(
         uri: "file:///a.rb", version: 1, language_id: "ruby",
         text: "class A\n  def go\n    @x if defined?(@x)\n  end\nend\n"
       )
 
-      expect(engine.send(:ivar_names_tested_for_existence, document)).to eq(["@x"])
+      expect(engine.send(:ivar_names_tested_for_existence, session_for(document))).to eq(["@x"])
     end
 
     # The distinguishing half: `[]` is the answer for a file that tests
@@ -31,7 +38,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine when it cannot enumerate" do
       broken = instance_double(Ovallsp::TextDocument)
       allow(broken).to receive(:text).and_raise(IOError, "gone")
 
-      expect(engine.send(:ivar_names_tested_for_existence, broken)).to be_nil
+      expect(engine.send(:ivar_names_tested_for_existence, session_for(broken))).to be_nil
     end
   end
 

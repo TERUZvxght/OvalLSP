@@ -49,6 +49,7 @@ module Ovallsp
         # a String and its own methods were reported missing. Extraction
         # preserves line and column layout, so no range needs remapping.
         document = analysis_document(document)
+        session = AnalysisSession.new(document: document)
         resolver = build_resolver(semantic_context)
         resolved = resolver.resolve(document, summary.reference_candidates, uri: document.uri,
                                                                              generation: semantic_context.generation)
@@ -66,16 +67,70 @@ module Ovallsp
         # cannot assert about a node nobody wrote.
         return configuration.apply(findings, budget: budget) unless findings.empty?
 
-        findings.concat(unknown_method_findings(document, summary, resolved_locations, semantic_context))
+        findings.concat(unknown_method_findings(session, summary, resolved_locations, semantic_context))
         if MODE_RANK.fetch(configuration.mode) >= MODE_RANK.fetch(:standard)
           findings.concat(unresolved_constant_findings(summary, semantic_context))
         end
         findings.concat(unknown_route_helper_findings(summary, resolved_locations, semantic_context))
-        findings.concat(argument_count_findings(document, summary, semantic_context))
-        findings.concat(argument_type_findings(document, summary, semantic_context))
-        findings.concat(unassigned_ivar_findings(document, summary, semantic_context))
+        findings.concat(argument_count_findings(session, summary, semantic_context))
+        findings.concat(argument_type_findings(session, summary, semantic_context))
+        findings.concat(unassigned_ivar_findings(session, summary, semantic_context))
 
         configuration.apply(findings, budget: budget)
+      end
+
+      # **What one `#analyze` shares, and nothing outlives it.**
+      #
+      # The checks below ask the same two questions repeatedly: for a tree
+      # of the whole analysis source (three checks wanted one, and each
+      # parsed it again), and for a candidate's receiver type (three
+      # checks wanted one, and the same candidate was resolved by each).
+      # Both answers are decided by the document and the semantic context,
+      # neither of which moves during a call, so both are the same answer
+      # every time -- `024.45` measures a single analysis at seconds where
+      # the requirement is 300ms.
+      #
+      # Held on a value the call creates and drops rather than on the
+      # engine: `Engine` has no instance state, `Server` keeps one of
+      # them, and 0.2.0 put `analyze` on a background thread. A memo on
+      # the engine would be a second document's answers waiting for the
+      # first (`024.39`'s shape, in the other file).
+      #
+      # The tree is not written into `FileSummary` or the disk cache and
+      # is not keyed by URI or version: it lives for this call and is
+      # collected with it.
+      class AnalysisSession
+        attr_reader :document
+
+        def initialize(document:)
+          @document = document
+          @receiver_types = {}
+        end
+
+        # The whole analysis source, parsed once.
+        #
+        # Not memoised through a nil-able variable: `Prism.parse` answers
+        # a result or raises, and each caller below turns a raise into its
+        # own decline. Leaving a failure unmemoised is what keeps those
+        # three decisions separate rather than making the first caller's
+        # failure the answer for the rest.
+        def parse_result
+          @parse_result ||= Prism.parse(@document.text)
+        end
+
+        # Keyed by the candidate rather than by its position: a position
+        # is one of the things a candidate is made of, and two checks
+        # asking about "the call at 6:4" are only asking the same question
+        # because it is the same candidate, out of the same summary.
+        #
+        # `nil` and `Unknown` are answers and are kept. A receiver nothing
+        # can name is exactly what the checks below are asked about most
+        # often, and re-deriving it each time is the case worth sharing.
+        def receiver_type(candidate)
+          return @receiver_types[candidate] if @receiver_types.key?(candidate)
+
+          @receiver_types[candidate] = yield
+        end
       end
 
       private
@@ -104,7 +159,7 @@ module Ovallsp
         end
       end
 
-      def unknown_method_findings(document, summary, resolved_locations, context)
+      def unknown_method_findings(session, summary, resolved_locations, context)
         # Without a loaded RBS environment there's no way to distinguish
         # "genuinely undefined method" from "an untracked Kernel/Object
         # builtin" (see #rbs_resolves?) -- rather than risk flagging
@@ -117,7 +172,7 @@ module Ovallsp
         # name rather than by position: a file defensive about a name is
         # defensive about it, and the typo this check exists for appears
         # in no `respond_to?`.
-        guards = names_guarded_by_respond_to(document)
+        guards = names_guarded_by_respond_to(session)
         return [] if guards.nil?
 
         summary.reference_candidates.filter_map do |candidate|
@@ -142,7 +197,7 @@ module Ovallsp
           # unknown. That trade is the wrong way round for this check,
           # whose whole policy is that a false report is worse than a
           # missed one. See 024.13.
-          receiver_type = receiver_type_for(document, candidate, context)
+          receiver_type = receiver_type_for(session, candidate, context)
           # A Union is asked branch by branch rather than discarded.
           # `Relation[T]#first` and `CollectionProxy[T]#first` infer
           # `T | nil`, so `Order.recent.first.missing` was reported by
@@ -212,13 +267,13 @@ module Ovallsp
       # Anything outside that says nothing rather than guessing. A false
       # "wrong number of arguments" on code that runs is worse than no
       # arity checking at all, which is what shipped until now.
-      def argument_count_findings(document, summary, context)
+      def argument_count_findings(session, summary, context)
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call
           next unless (shape = candidate.arguments)
           next if shape[:splat]
 
-          declaration = sole_source_declaration(document, candidate, context)
+          declaration = sole_source_declaration(session, candidate, context)
           next unless declaration
 
           parameters = declaration.parameters || []
@@ -261,13 +316,13 @@ module Ovallsp
       # and reporting every `@ivar` in a file nobody established a context
       # for is exactly the wrong report. An *empty* set is a real answer
       # (an action that assigns nothing) and is checked.
-      def unassigned_ivar_findings(document, summary, context)
+      def unassigned_ivar_findings(session, summary, context)
         assigned = context.assigned_ivars
         return [] unless assigned
 
         # A name the document assigns itself is assigned, whatever its
         # caller does or does not hand it.
-        local = ivar_writes(document)
+        local = ivar_writes(session)
 
         return [] if local.nil?
 
@@ -280,7 +335,7 @@ module Ovallsp
         # file is defensive about nothing" and turns every `defined?(@x)`
         # into a report. Enumerating is what decides whether to assert,
         # so a failure to enumerate has to decline (`024.122`).
-        tested = ivar_names_tested_for_existence(document)
+        tested = ivar_names_tested_for_existence(session)
         return [] if tested.nil?
 
         summary.reference_candidates.filter_map do |candidate|
@@ -302,9 +357,9 @@ module Ovallsp
       # Nil, not `[]`, when it cannot look: see the caller. `[]` is the
       # answer for a file that tests nothing, and the two must not be the
       # same value.
-      def ivar_names_tested_for_existence(document)
+      def ivar_names_tested_for_existence(session)
         collector = DefinedIvarCollector.new
-        Prism.parse(document.text).value.accept(collector)
+        session.parse_result.value.accept(collector)
         collector.names
       rescue StandardError
         nil
@@ -321,9 +376,9 @@ module Ovallsp
       # `nil` on any failure, which every caller turns into "do not
       # assert": enumerating is what decides whether to speak, so a
       # failure to enumerate has to decline (`024.122`).
-      def names_guarded_by_respond_to(document)
+      def names_guarded_by_respond_to(session)
         collector = RespondToGuardCollector.new
-        Prism.parse(document.text).value.accept(collector)
+        session.parse_result.value.accept(collector)
         collector.guards
       rescue StandardError
         nil
@@ -528,8 +583,8 @@ module Ovallsp
       # kind -- rename and references both want them together -- so the
       # writes are recovered here instead. This is what makes
       # `<% @total = 1 %><%= @total %>` in a view not a mistake.
-      def ivar_writes(document)
-        result = Prism.parse(document.text)
+      def ivar_writes(session)
+        result = session.parse_result
         # A document that will not parse has already been reported as a
         # syntax error, and Prism still hands back whatever it could make
         # of it -- so the assignments below the break are simply missing
@@ -590,7 +645,7 @@ module Ovallsp
       # Converted RBS names that look like Ruby constants and are not.
       NOT_A_RUBY_CLASS = %w[Boolean].freeze
 
-      def argument_type_findings(document, summary, context)
+      def argument_type_findings(session, summary, context)
         return [] unless context.signatures
 
         summary.reference_candidates.flat_map do |candidate|
@@ -606,14 +661,14 @@ module Ovallsp
           # gets the same care here, where the two meet.
           next [] unless candidate.name.to_s.match?(IDENTIFIER_METHOD_NAME)
 
-          overload = sole_declared_overload(document, candidate, context)
+          overload = sole_declared_overload(session, candidate, context)
           next [] unless overload
 
-          mismatched_arguments(document, shape, overload, candidate, context)
+          mismatched_arguments(session, shape, overload, candidate, context)
         end
       end
 
-      def mismatched_arguments(document, shape, overload, candidate, context)
+      def mismatched_arguments(session, shape, overload, candidate, context)
         locations = shape[:positional_locations] || []
         expected_types = expected_positional_types(overload, locations.size)
         return [] unless expected_types
@@ -660,12 +715,12 @@ module Ovallsp
           # carrying the argument *node* here rather than a range. Until
           # it does, an expression is a shape this check declines rather
           # than one it guesses at.
-          next if operator_expression?(document, range)
+          next if operator_expression?(session.document, range)
 
           # The argument's *node*, not an offset inside it. See
           # `LocalInferencer#infer_span` for what the end offset
           # answered about a paren-less call argument (`024.20`).
-          actual = context.local_inferencer.infer_span(document, range)
+          actual = context.local_inferencer.infer_span(session.document, range)
           next unless actual.is_a?(Types::Nominal)
           # The same rule as the declared side above, and it was applied
           # only there: `Boolean` is what the converter calls RBS's
@@ -884,8 +939,8 @@ module Ovallsp
       # nil when the answer is not singular. Deliberately mirrors
       # #sole_source_declaration's shape: same receiver rule, same refusal
       # to choose between candidates.
-      def sole_declared_overload(document, candidate, context)
-        receiver_type = receiver_type_for(document, candidate, context)
+      def sole_declared_overload(session, candidate, context)
+        receiver_type = receiver_type_for(session, candidate, context)
         return nil unless receiver_type.is_a?(Types::Nominal)
 
         signature = declared_signature_for(receiver_type, candidate, context, binding_only: true)
@@ -931,10 +986,10 @@ module Ovallsp
       # answer is not singular: no candidate, a conditional (Union
       # receiver) candidate, or several declarations for the same name
       # (a reopened class, an override) whose parameter lists may differ.
-      def sole_source_declaration(document, candidate, context)
+      def sole_source_declaration(session, candidate, context)
         # Same as #unknown_method_findings: a container receiver is kept out
         # of this check rather than admitted (024.13).
-        receiver_type = receiver_type_for(document, candidate, context)
+        receiver_type = receiver_type_for(session, candidate, context)
         return nil unless receiver_type.is_a?(Types::Nominal)
 
         candidates = context.method_resolver.resolve(
@@ -1155,8 +1210,16 @@ module Ovallsp
       # `WorkspaceIndex#guessed_type_name?`. Refused here, once, rather
       # than at each of the three call sites: this file has twice had a
       # rule stated in several places and wrong in one of them.
-      def receiver_type_for(document, candidate, context)
-        resolved = Semantic::ReceiverResolution.receiver_type_for(context.workspace_index, document, candidate,
+      def receiver_type_for(session, candidate, context)
+        session.receiver_type(candidate) { resolved_receiver_type(session, candidate, context) }
+      end
+
+      # The rule itself, asked once per candidate. Split from the memo so
+      # that what is shared is a *result*, not a decision: the declines
+      # below are the diagnostics' own, and nothing outside this file
+      # reads them.
+      def resolved_receiver_type(session, candidate, context)
+        resolved = Semantic::ReceiverResolution.receiver_type_for(context.workspace_index, session.document, candidate,
                                                                   context.local_inferencer)
         # A written `self`. Its type comes from the enclosing class body, so
         # it is an upper bound on the receiver rather than its class --

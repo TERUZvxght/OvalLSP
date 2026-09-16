@@ -3,8 +3,10 @@
 require "rbconfig"
 
 RSpec.describe Ovallsp::AgentProcessManager do
+  include MinimalRailsFixture
+
   let(:core_root) { File.expand_path("../..", __dir__) }
-  let(:fixture_root) { File.join(core_root, "spec/fixtures/rails_minimal") }
+  let(:fixture_root) { minimal_rails_fixture }
   let(:boot_script) { File.join(core_root, "lib/ovallsp/runtime_agent/boot.rb") }
   let(:environment_file) { File.join(fixture_root, "config/environment.rb") }
   let(:logger) { instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil) }

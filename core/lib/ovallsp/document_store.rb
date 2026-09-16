@@ -17,6 +17,9 @@ module Ovallsp
   # thread while HEAD had been committing from background threads under a
   # mutex for several releases. Both were corrected together in 0.2.7,
   # and `docs/DOCUMENTATION_MAP.md` gained the row that pairs them.
+  # The current ownership and index-lock exceptions are documented in
+  # docs/design/docs/02-architecture.md section 8. The workspace-symbol
+  # exception does not change this store's dispatch-only writer contract.
   class DocumentStore
     class UnknownDocumentError < StandardError
       def initialize(uri)

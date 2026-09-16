@@ -1467,13 +1467,13 @@
   example: "refuses when the other end is a workspace Object"
 - why: "The ancestor chain is memoised for one generation and cleared by every mutation: without the clear a caller reads a chain from a shape that has changed."
   file: core/lib/ovallsp/semantic/hierarchy_index.rb
-  from: "          @generation += 1\n          @ancestors_memo.clear\n        end\n      end\n\n      def remove_file(uri)"
+  from: "          @generation += 1\n          @ancestors_memo.clear unless facts_unchanged && previous[:types] == types\n        end\n      end\n\n      def remove_file(uri)"
   to: "          @generation += 1\n        end\n      end\n\n      def remove_file(uri)"
   spec: spec/ovallsp/semantic/hierarchy_index_spec.rb
   example: "reflects a file's ancestors being replaced"
 - why: "The type resolution is memoised for one generation and cleared by every mutation: without the clear a name keeps whatever it resolved to before the file that declares it was indexed."
   file: core/lib/ovallsp/workspace_index.rb
-  from: "        @generation += 1\n        @type_resolution_memo.clear\n"
+  from: "        @generation += 1\n        @type_resolution_memo.clear unless types_unchanged\n"
   to: "        @generation += 1\n"
   spec: spec/ovallsp/workspace_index_spec.rb
   example: "resolves a class declared after the first question was asked"

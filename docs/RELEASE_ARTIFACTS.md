@@ -37,6 +37,7 @@ published one do match for every version below that was built that way.
 
 | Version | SHA-256 | Channel |
 |---|---|---|
+| 0.4.1 | `254c5b2593f6f4517b779f1b1046687b6b241a4a0392d84b834e0bdf17c28908` | Pre-Release |
 | 0.4.0 | `e43190cf9b2a07fad8dbf82902339532ad0845a181b9730954b3e234e005f973` | Pre-Release |
 | 0.3.5 | `0fde47f9dc07b8d39f538cfe2824822af0d41e141b52dede17c43ca4791f2acf` | Pre-Release |
 | 0.3.4 | `9bad3f34a316346bd4079a660cc7670392dc6e16faea7d46cdad385e6f3f03cf` | Pre-Release |

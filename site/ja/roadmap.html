@@ -851,6 +851,17 @@
           </ul>
         </article>
 
+        <article class="tl-item tl-item--future" id="v041">
+          <div class="tl-version"><span class="v">0.4.1</span><span class="mark">unreleased</span></div>
+          <h3>性能・並行性・テスト隔離の部分改善</h3>
+          <ul class="feature-list">
+            <li><span>診断チェック間で構文木と receiver 型を再利用し、入力が変わらない本文編集では索引の memo を保持します。</span></li>
+            <li><span>workspace/symbol の外側ロック待ちを除きます。内側ロックの競合と検索費用は残ります。</span></li>
+            <li><span>minimal Rails フィクスチャを例ごとに隔離します。実 Rails 統合テストは並列実行可能になり、CI は1 workerを維持します。</span></li>
+          </ul>
+          <p class="tl-note">未公開の部分改善です。再解析300ms目標、完全な推論状態分離、協調的中断は未達・未実装のままです。</p>
+        </article>
+
         <article class="tl-item tl-item--far" id="v100">
           <div class="tl-version"><span class="v">1.0.0</span></div>
           <h3>機能ではなく、保証</h3>

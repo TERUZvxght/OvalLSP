@@ -359,7 +359,6 @@ RSpec.describe Ovallsp::Server do
       "textDocument/hover" => :hover_result,
       "textDocument/documentSymbol" => :document_symbol_result,
       "textDocument/definition" => :definition_result,
-      "workspace/symbol" => :workspace_symbol_result,
       "ovallsp/explainType" => :explain_type_result,
       "textDocument/completion" => :completion_result,
       "textDocument/signatureHelp" => :signature_help_result,
@@ -386,6 +385,25 @@ RSpec.describe Ovallsp::Server do
 
         expect(held).to be(true)
       end
+    end
+
+    it "does not hold the outer mutation lock during workspace/symbol (024.137)" do
+      input =
+        frame(
+          jsonrpc: "2.0", id: 1, method: "workspace/symbol",
+          params: { query: "" }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+      server = build_server(input)
+      held = nil
+      allow(server).to receive(:workspace_symbol_result) do |*|
+        held = server.instance_variable_get(:@index_mutation_mutex).owned?
+        []
+      end
+
+      server.run
+
+      expect(held).to be(false)
     end
   end
 

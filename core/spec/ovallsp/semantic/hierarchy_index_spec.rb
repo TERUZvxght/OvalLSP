@@ -284,5 +284,134 @@ RSpec.describe Ovallsp::Semantic::HierarchyIndex do
 
       expect(index.ancestors("Widget").map(&:name_or_nil)).not_to include("::Base")
     end
+
+    # **`024.45`: a body-only edit is the edit, and it paid for the whole
+    # memo.** Every keystroke inside a method body re-summarises the file
+    # with the same ancestor facts, the same aliases and the same declared
+    # types -- every input this file feeds a chain, value-identical,
+    # locations included -- and the unconditional clear then rebuilt the
+    # same few chains from scratch. When all three are provably equal the
+    # replace keeps the memo; the generation still moves, because memo
+    # freshness and publish ordering are separate contracts.
+    it "keeps a memoised chain across a body-only edit" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      index = described_class.new(workspace_index: workspace)
+      summary = summarize("module Mixin\nend\nclass Widget\n  include Mixin\n  def go\n    1\n  end\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to include("::Mixin")
+
+      edited = summarize("module Mixin\nend\nclass Widget\n  include Mixin\n  def go\n    2\n  end\nend\n", "file:///a.rb")
+      workspace.replace_file(edited)
+      expect { index.replace_file(edited) }.to change(index, :generation).by(1)
+
+      expect(workspace).not_to receive(:resolve_type_name)
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to include("::Mixin")
+    end
+
+    # **Why the retained replace skips the remove-and-re-add instead of
+    # replaying it.** Re-adding appends the file's facts at the end of
+    # each owner bucket, so a replayed swap moves this file's `include`
+    # behind another file's in a class both reopen -- the chain order
+    # then changes on a body edit, and a kept memo would disagree with
+    # what the index itself computes once anything clears it. Both are
+    # asserted: the chain a body edit answers is the chain from before
+    # it, and it is still that chain after an unrelated clear forces a
+    # fresh compute from the same state.
+    it "keeps the chain order stable across a body-only edit of one of two files reopening a class" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      index = described_class.new(workspace_index: workspace)
+      first = summarize("module M1\nend\nclass Widget\n  include M1\n  def a\n    1\n  end\nend\n", "file:///one.rb")
+      second = summarize("module M2\nend\nclass Widget\n  include M2\nend\n", "file:///two.rb")
+      [first, second].each do |summary|
+        workspace.replace_file(summary)
+        index.replace_file(summary)
+      end
+      chain_before = index.ancestors("Widget").map(&:name_or_nil)
+      expect(chain_before).to eq(%w[::Widget ::M2 ::M1 Object Kernel BasicObject])
+
+      edited = summarize("module M1\nend\nclass Widget\n  include M1\n  def a\n    2\n  end\nend\n", "file:///one.rb")
+      workspace.replace_file(edited)
+      index.replace_file(edited)
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to eq(chain_before)
+
+      index.signatures_reloaded
+      expect(index.ancestors("Widget").map(&:name_or_nil)).to eq(chain_before)
+    end
+
+    # **Equal facts are not enough, and this is the example that says
+    # why.** A chain's inputs include what the workspace *declares*:
+    # `class Widget` gaining a sibling `module Helper` writes no ancestor
+    # fact at all, yet it changes what the bare name resolves to and what
+    # kind it has. Kept on facts alone, the memo keeps answering that
+    # `Helper` is a name nothing declares (065 P4: no retention on
+    # `ancestor_facts == old` alone).
+    it "reflects a type declared by an edit that changes no ancestor fact" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      index = described_class.new(workspace_index: workspace)
+      summary = summarize("class Widget\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      expect(index.ancestors("Helper").map(&:name_or_nil)).to eq(["Helper"])
+
+      added = summarize("class Widget\nend\nmodule Helper\nend\n", "file:///a.rb")
+      workspace.replace_file(added)
+      index.replace_file(added)
+
+      expect(index.ancestors("Helper").map(&:name_or_nil)).to eq(["::Helper"])
+    end
+
+    # **An alias is part of the file's contribution too.** The retained
+    # replace skips the remove-and-re-add, so it may only be taken when
+    # the alias facts also match -- an alias whose own line moved must
+    # come back with its new location, exactly as a fresh index would
+    # answer it. Compared against one, so the example needs no line
+    # numbers of its own (065 P4: no retention on a shape that omits
+    # location).
+    it "reflects an alias whose line moved under an edit above it" do
+      workspace = Ovallsp::WorkspaceIndex.new
+      index = described_class.new(workspace_index: workspace)
+      summary = summarize("class Widget\n  def a\n  end\n  alias_method :b, :a\nend\n", "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      index.ancestors("Widget")
+
+      moved = summarize("class Widget\n  def a\n  end\n\n  alias_method :b, :a\nend\n", "file:///a.rb")
+      workspace.replace_file(moved)
+      index.replace_file(moved)
+
+      fresh_workspace = Ovallsp::WorkspaceIndex.new
+      fresh = described_class.new(workspace_index: fresh_workspace)
+      fresh_workspace.replace_file(moved)
+      fresh.replace_file(moved)
+      expect(index.aliases("Widget")).to eq(fresh.aliases("Widget"))
+    end
+
+    # The same rule for an ancestor fact's own location: an ambiguous
+    # `include` is answered as a nameless entry carrying the fact's range,
+    # so the range is part of the returned chain and a moved line is a
+    # changed input, not a body edit.
+    it "reflects an ambiguous include whose line moved under an edit above it" do
+      source = ->(gap) do
+        "module A\n  module Helper\n  end\nend\nmodule B\n  module Helper\n  end\nend\n" \
+          "class Widget\n#{gap}  include Helper\nend\n"
+      end
+      workspace = Ovallsp::WorkspaceIndex.new
+      index = described_class.new(workspace_index: workspace)
+      summary = summarize(source.call(""), "file:///a.rb")
+      workspace.replace_file(summary)
+      index.replace_file(summary)
+      expect(index.ancestors("Widget").reject(&:identified?)).not_to be_empty
+
+      moved = summarize(source.call("\n"), "file:///a.rb")
+      workspace.replace_file(moved)
+      index.replace_file(moved)
+
+      fresh_workspace = Ovallsp::WorkspaceIndex.new
+      fresh = described_class.new(workspace_index: fresh_workspace)
+      fresh_workspace.replace_file(moved)
+      fresh.replace_file(moved)
+      expect(index.ancestors("Widget")).to eq(fresh.ancestors("Widget"))
+    end
   end
 end

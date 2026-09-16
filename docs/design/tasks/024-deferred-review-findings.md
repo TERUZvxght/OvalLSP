@@ -1869,6 +1869,10 @@ entries it could finish.
 
 
 **Retargeted to 1.0.0.** scope_at の環境複製コストは実測 0.02ms と極小であり日常的支障がないため、1.0.0 の AST 走査最適化で扱う。
+
+**Retargeted to 0.4.1.** ROADMAP.md and Task 036 phase 0.4.1 for scope_at environment copying.
+
+**Retargeted to 1.0.0.** 0.4.1 partial improvement: scope_at now materializes locals/ivars and Scope only on exit, including the budget-abort path, while capture_scope still copies env per statement. The quadratic environment-copy cost remains; reducing it without changing partial-scope answers is carried to 1.0.0. Task 065 records the implementation and validation limits.
 ## 024.39 `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread
 
 ```yaml
@@ -1949,6 +1953,10 @@ with a corpus on both sides. Moved to 0.4.0 alongside `024.38`.
 
 
 **Retargeted to 1.0.0.** LocalInferencer の並行性・リクエスト別状態管理は、日常的誤答が非再現であり、1.0.0 のスレッドモデル再構築で扱う。
+
+**Retargeted to 0.4.1.** ROADMAP.md and Task 036 phase 0.4.1 for LocalInferencer per-request state and concurrency.
+
+**Retargeted to 1.0.0.** 0.4.1 partial improvement: begin_request centralizes initialization, including scope entry before offset/parse failure. LocalInferencer still owns mutable request instance variables; no independent request context or general thread-safety guarantee was added. The outer Server lock remains for semantic requests. Full state isolation is carried to 1.0.0; see task 065.
 ## 024.42 A signature label leaks the method's own type variable
 
 ```yaml
@@ -2392,6 +2400,10 @@ shipped as a patch.
 **Retargeted to 0.4.0.** Re-measured twice on a quiet machine, and the number is far worse than the entry carried: 10 keystrokes into a 4,662-line file take 525.9s to go quiet (521.6s on the first run, with a stray process pinning a core -- so that was not the cause), 51 publishes for 10 edits, hover median 0.124s and max 16.1s. The entry's own profile says why a patch cannot hold it: roughly half the time is constructing and hashing Index::SymbolId across the two indexes, with no single hotspot to remove, and the direction it names -- an identity computed once rather than per query -- is 024.230's neighbourhood and a release of its own. docs/PUBLISHING.md puts a change of that size outside the patch line. Moved with the measurement rather than with an estimate.
 
 **Retargeted to 1.0.0.** 解析の正答性に関わる誤答ではなく性能課題であり、インデックス差分更新と非同期ワーカー再設計を行う 1.0.0 で扱う。
+
+**Retargeted to 0.4.1.** ROADMAP.md and Task 036 phase 0.4.1 for re-analysis latency on large files.
+
+**Retargeted to 1.0.0.** 0.4.1 partial improvement: Engine checks share an analysis-local parse/receiver memo; WorkspaceIndex and HierarchyIndex retain memos on replacements with unchanged relevant inputs. SymbolId construction, file-level analysis and synchronous dispatch remain. Cooperative cancellation and the starvation rule were not implemented. The relayed hover observation is not an edit-to-publish p95; the 300ms target is unverified and remains open toward 1.0.0. Task 065 records the bounded parse-count reproduction and measurement limits.
 ## 024.47 A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal
 
 ```yaml
@@ -2785,6 +2797,10 @@ is the wrong place to take them on. Moved to 0.4.0.
 
 
 **Retargeted to 1.0.0.** ユーザー向けの機能誤答ではなく内部データ構造のクリーンアップ負債であるため、1.0.0 のアーキテクチャ整理で扱う。
+
+**Retargeted to 0.4.1.** ROADMAP.md and Task 036 phase 0.4.1 for file store update boundary coordination.
+
+**Retargeted to 1.0.0.** 0.4.1 partial improvement: ColdIndexer no longer conditionally writes HierarchyIndex or invokes on_indexed; production multi-store updates use the Server on_summary facade. The no-sink WorkspaceIndex-only path remains for benchmarks and walker specs. Store classes were not physically unified and a mandatory sink was not introduced. The remaining update-contract consolidation is carried to 1.0.0; see task 065.
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 
 ```yaml
@@ -2919,6 +2935,10 @@ from inside each root, or the paths are what is being compared.
 
 
 **Retargeted to 1.0.0.** 並列テストワーカーにおける Rails フィクスチャ共有問題は、1.0.0 の CI/テスト基盤分離で扱う。
+
+**Retargeted to 0.4.1.** ROADMAP.md and Task 036 phase 0.4.1 for Rails test fixture isolation and parallelization.
+
+**Retargeted to 1.0.0.** 0.4.1 partial improvement: minimal Rails fixtures are copied per example; the real Rails integration file is now parallel-enabled. RealRailsFixture already isolated its application and DB. Capabilities and minimal process suites retain serial metadata, and CI uses one worker. The resources labels do not implement resource scheduling; a full worker/seed performance matrix and remaining serial-resource verification are carried to 1.0.0. Task 065 records suite evidence separately from speedup claims.
 ## 024.76 Fifty-four `unknown-method` reports over real gem source, and all of them false
 
 ```yaml
@@ -3948,6 +3968,10 @@ an experiment to set up rather than a fix to write.
 
 
 **Retargeted to 1.0.0.** シンボル検索の並行性最適化であり誤答を生じるものではないため、1.0.0 のマルチスレッド・スナップショット再設計で扱う。
+
+**Retargeted to 0.4.1.** ROADMAP.md and Task 036 phase 0.4.1 for WorkspaceIndex#search lock granularity.
+
+**Retargeted to 1.0.0.** 0.4.1 partial improvement: workspace/symbol bypasses the Server index_mutation_mutex, so it can proceed while a background pass holds that outer lock. WorkspaceIndex#search still holds its internal mutex for scanning and ranking, contends with index writers and runs on dispatch. Large-index search cost and inner-lock contention remain for 1.0.0; both language limitations now describe this boundary.
 ## 024.151 A check can be disabled, and no check notices — closed on one instalment in 0.3.2, reopened
 
 ```yaml
