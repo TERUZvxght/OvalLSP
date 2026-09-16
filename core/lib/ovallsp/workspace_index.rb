@@ -113,6 +113,20 @@ module Ovallsp
         end
         next false if stale?(existing, summary)
 
+        # **`024.45`: a replace that changes no resolution input keeps
+        # the memo.** The memo's answers are computed from class/module
+        # SymbolIds alone (`#type_candidates_locked` filters to them),
+        # and a SymbolId carries no location — so the common edit, inside
+        # a method body, moves every declaration's range while leaving
+        # the type-declaration set identical, and used to pay for a full
+        # rebuild of the same handful of answers per keystroke. Compared
+        # as sets of SymbolIds: `:constant` rides along because the
+        # condition may be narrower than the true input set, never wider
+        # (065 P4), and this is the same notion `HierarchyIndex` keys its
+        # own retention on. The generation still bumps below either way:
+        # memo freshness and publish ordering are separate contracts.
+        types_unchanged = !existing.nil? &&
+                          type_declaration_ids(existing) == type_declaration_ids(summary)
         remove_file_locked(summary.uri)
         @summaries[summary.uri] = summary
         touched = []
@@ -148,7 +162,7 @@ module Ovallsp
         summary.module_function_names.each { |key| @module_function_names[key] += 1 }
         touched.uniq.each { |symbol_id| @by_symbol[symbol_id].sort_by!(&method(:entry_order)) }
         @generation += 1
-        @type_resolution_memo.clear
+        @type_resolution_memo.clear unless types_unchanged
         true
       end
     end
@@ -757,6 +771,18 @@ module Ovallsp
       true
     end
 
+    # The kinds whose SymbolIds decide what `#resolve_type_symbol_locked`
+    # answers — see the retention comment in `#replace_file` for why
+    # `:constant` is included although the resolver filters it out.
+    TYPE_DECLARATION_KINDS = %i[class module constant].freeze
+    private_constant :TYPE_DECLARATION_KINDS
+
+    def type_declaration_ids(summary)
+      summary.declarations.each_with_object(Set.new) do |decl, ids|
+        ids << decl.symbol_id if TYPE_DECLARATION_KINDS.include?(decl.symbol_id.kind)
+      end
+    end
+
     def simple_name(symbol_id)
       simple_name_of(symbol_id.name)
     end
@@ -847,13 +873,17 @@ module Ovallsp
     # that has since changed.
     #
     # **Cleared by every writer of the one input it reads**, which is
-    # `@by_simple_name` -- `#replace_file` and `#remove_file_locked`, and
-    # nothing else. Not "every mutation that bumps `@generation`", which
-    # is what this said until a cold review pointed out that
+    # the class/module/constant membership of `@by_simple_name` --
+    # `#replace_file` when the file's type-declaration set changed, and
+    # `#remove_file`. Not "every mutation that bumps `@generation`",
+    # which is what this said until a cold review pointed out that
     # `#promote_source_locked` bumps the generation, writes nothing this
     # memo reads, and cleared anyway: a line no example could fail on in
     # either direction. The input is the thing to enumerate, not the
-    # counter.
+    # counter -- and `024.45` narrowed the enumeration once more, to the
+    # *kinds* of that input the resolver actually filters to, so a body
+    # edit that only moves method declarations keeps the memo (see
+    # `#replace_file`).
     def resolve_type_symbol_locked(name)
       key = name.to_s
       return @type_resolution_memo[key] if @type_resolution_memo.key?(key)

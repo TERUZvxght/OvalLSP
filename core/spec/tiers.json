@@ -25,7 +25,7 @@
     "tier": "e2e",
     "resources": [
       "process",
-      "shared rails_minimal fixture"
+      "private rails_minimal fixture copy (per example, via example_tmpdir)"
     ],
     "parallel": false
   },
@@ -35,7 +35,7 @@
       "rails",
       "sqlite3"
     ],
-    "parallel": false
+    "parallel": true
   },
   "spec/integration/stdio_spec.rb": {
     "tier": "e2e",
@@ -433,7 +433,7 @@
     "tier": "e2e",
     "resources": [
       "process",
-      "shared rails_minimal fixture"
+      "private rails_minimal fixture copy (per example, via example_tmpdir)"
     ],
     "parallel": false
   },
@@ -1091,7 +1091,7 @@
     "tier": "e2e",
     "resources": [
       "process",
-      "shared rails_minimal fixture"
+      "private rails_minimal fixture copy (per example, via example_tmpdir)"
     ],
     "parallel": false
   },

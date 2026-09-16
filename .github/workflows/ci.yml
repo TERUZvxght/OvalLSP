@@ -106,8 +106,7 @@ jobs:
         run: find lib spec -name '*.rb' -print0 | xargs -0 -n1 ruby -c
 
       - name: Run full test suite
-        working-directory: core
-        run: bundle exec rspec --format documentation --format json --out tmp/rspec.json
+        run: ruby scripts/test_runner.rb run --tier full --workers 1 --report core/tmp/rspec.json
 
       # The documented-count checks skip when the run is not the whole
       # suite, which is correct for a subset run and wrong here: this is

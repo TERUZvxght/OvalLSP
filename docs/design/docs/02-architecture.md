@@ -270,17 +270,23 @@ publish_state は葉。外側へ入れ子にしません（FramedWriter の fram
 `workspace_pass` / `refresh_state` / `agent_retry` は短い状態更新のみを
 守り、他のロックを保持したまま取ることはありません。
 
-**内側のロックを短くしてもインデックス構築は待ちます。** 読み取り要求は
-`Server#with_index_snapshot`(= `index_mutation`)の下で*要求全体*が実行
-され、インデックスへの commit も同じ `index_mutation` の下で行われます
-(`#apply_file_summary`、cold index、changed-files batch)。`server_spec.rb`
-には読み取り要求ごとにこれを固定する例があり、意図的な取り決めです。
-したがって、`WorkspaceIndex` などの内側ロックの保持時間を縮めても、
-インデックス構築が待つ時間は変わりません — 待っているのは要求の**総時間**
-だからです。`024.137` はこれを取り違えて「内側の `@mutex` を握ったまま
-走査するせいでインデックス構築が止まる」と記録され、そこで提案された対策
-(キー集合をロック外へ写して絞り込む)は効果ゼロと実測されました。要求
-そのものを速くするのが、ここで唯一効く手段です。
+**複数 store を読む要求は外側ロックで整合性を保ちます。** hover、completion、
+definition 等は `Server#with_index_snapshot`（`index_mutation`）の下で要求全体を
+実行し、index commit も同じロックを使います。0.4.1 の `workspace/symbol` は例外で、
+WorkspaceIndex だけを読むため外側ロックを取得しません。`WorkspaceIndex#search` は
+走査・順位付け・結果の取り出しを内部 `@mutex` で保護し、Server は返された結果を
+LSP 形式へ変換します。`server_spec.rb` は複数 store の要求とこの例外を分けて検証します。
+
+この例外により workspace symbol は background pass の外側ロック解放を待たずに
+検索へ進めます。ただし index の更新とは内側ロックで競合し、空 query の走査・順位付け
+費用も残ります。foreground 解析は同じ dispatch thread を占有するため、その最中の
+要求受信を早める変更ではありません。024.137 の旧 snapshot 案や、内側ロックだけを
+短縮すればすべての要求が改善するという説明とは区別します。
+
+0.4.1 の Engine は解析ごとの AnalysisSession にチェック間の parse result と receiver
+memo を保持します。LocalInferencer は request 開始時の初期化を共通化しましたが、
+状態は依然インスタンス変数であり、独立した並行 request context ではありません。
+外側ロックの一般解除、協調的中断、強制完走の飢餓上限は未実装です。
 
 **この節が最初に書かれたとき、「27 箇所の `Mutex.new` が個別にこの順序を
 守っていた」と書いていました。** `core/lib` には現在 30 箇所あり <!-- measured: mutex-sites = 30 -->

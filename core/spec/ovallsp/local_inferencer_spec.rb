@@ -1879,6 +1879,57 @@ RSpec.describe Ovallsp::LocalInferencer do
 
       expect(scope.self_type).to be_nil
     end
+
+    # 024.38. The walk snapshots after every statement that ends before
+    # the cursor, and only the last of those is ever read -- but the
+    # earlier ones cannot simply be skipped: 0.2.16 tried exactly that,
+    # and a walk the budget ended part-way then answered with nothing
+    # where it used to answer with everything it had reached. Both hold
+    # if the *materialisation* is what moves: the snapshot is still
+    # taken per statement, and the locals/ivars split and the `Scope`
+    # are built once, where the answer leaves.
+    #
+    # Pinned by a count rather than a timing, as the entry's own earlier
+    # fix was: a threshold on a shared machine is a flake, and the count
+    # is the property that produced the timing.
+    it "materialises one scope however many statements precede the cursor" do
+      source = "#{(1..40).map { |n| "a#{n} = #{n}" }.join("\n")}\nHERE\n"
+      allow(Ovallsp::LocalInferencer::Scope).to receive(:new).and_call_original
+
+      scope = scope_for(source)
+
+      expect(scope.locals.size).to eq(40)
+      expect(Ovallsp::LocalInferencer::Scope).to have_received(:new).once
+    end
+
+    # The half of the same entry that 0.2.16 measured and withheld over.
+    # The budget is what makes the per-statement snapshot necessary, so
+    # the two examples belong together: one says the materialisation is
+    # once, this one says the snapshot is still per statement.
+    it "answers with the bindings reached when the budget ends the walk" do
+      source = "#{(1..200).map { |n| "a#{n} = #{n}" }.join("\n")}\n\n"
+
+      scope = inferencer.scope_at(document(source), { line: 200, character: 0 }, max_steps: 40)
+
+      expect(scope.locals.keys.first).to eq("a1")
+      expect(scope.locals.size).to be_between(1, 199)
+    end
+
+    # And it is the statement's own environment that is kept, not a
+    # reference to the one the walk keeps mutating: a local assigned
+    # after the cursor must not reach the answer however late the split
+    # happens. The existing "not after the cursor" example says this for
+    # a walk that finishes; this one says it for the deferred split, by
+    # putting statements on both sides of the cursor.
+    it "keeps each statement's own bindings when the split is deferred" do
+      scope = scope_for(<<~RUBY)
+        before = 1
+        HERE
+        after = 2
+      RUBY
+
+      expect(scope.locals.keys).to eq(["before"])
+    end
   end
 
   describe "#infer_at max_steps override (Task 013 review fix)" do
@@ -1913,20 +1964,28 @@ RSpec.describe Ovallsp::LocalInferencer do
   end
 
   # `scope_at` sets a flag that makes every descent step copy the whole
-  # environment, and `infer_at` never clears it -- while `Server` holds
+  # environment, and `infer_at` never cleared it -- while `Server` holds
   # one long-lived inferencer. Without the `ensure`, one bare-prefix
   # completion left every later `infer_at` paying that copy, on the
   # request path, holding the index lock. The existing example uses a
   # fresh inferencer, so it cannot see a flag a previous call left set.
-  it "clears the scope-capture flag for the next call on the same inferencer" do
+  #
+  # Asserted at the end of the scope query itself rather than after a
+  # following `infer_at`: every entry point now begins its own request
+  # state, so a later query would put the flag down whether or not this
+  # one did. What is left for the `ensure` to do is the same thing at the
+  # point the answer leaves -- and to drop the snapshot, which is a copy
+  # of the whole environment this would otherwise hold until the next
+  # scope query overwrote it.
+  it "puts the scope-capture flag down and releases the snapshot when the query ends" do
     inferencer = described_class.new
     document = Ovallsp::TextDocument.new(uri: "file:///a.rb", version: 1, language_id: "ruby",
                                          text: "def go\n  x = 1\n  x\nend\n")
 
     inferencer.scope_at(document, { line: 2, character: 2 })
-    inferencer.infer_at(document, { line: 2, character: 2 })
 
     expect(inferencer.instance_variable_get(:@capturing_scope)).to be(false)
+    expect(inferencer.instance_variable_get(:@scope_snapshot)).to be_nil
   end
 
   # Prism's `end_offset` is one past the node's last character, so an

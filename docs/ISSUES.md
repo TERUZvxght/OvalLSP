@@ -140,8 +140,12 @@ because a number is a claim that the thing exists.
   - found by: Task 064 W5a: vscode-languageclient protocolConverter.js asCodeAction/asWorkspaceEdit
   - A TextDocumentEdit is converted with result.replace(uri, range, newText), without retaining textDocument.version. The version check in client.js belongs to workspace/applyEdit, not this CodeAction path. W7 must drive obtaining an action, changing the buffer, then applying that old action in the real extension host before P3 stale-edit protection is claimed; server identity and serialized version tests do not prove it.
   - unverified: not yet driven against the tree
+- **HierarchyIndex#remove_file_locked Array#delete collides duplicate facts across identical files**
+  - found by: core/lib/ovallsp/semantic/hierarchy_index.rb:453
+  - Array#delete removes all matching elements by value equality; if two files contribute identical ancestor/alias facts, removing one file deletes the facts contributed by the other file too.
+  - unverified: not yet driven against the tree
 
-**Twelve items above; the rest was emptied deliberately.** The twenty-one items that had
+**Thirteen items above; the rest was emptied deliberately.** The twenty-one items that had
 accumulated by 0.3.1 were driven and dispositioned in one pass:
 fourteen became `024.306` through `024.319`, and seven left without a
 number. The seven, and why:

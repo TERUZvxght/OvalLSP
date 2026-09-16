@@ -34,22 +34,22 @@ module Ovallsp
     DEFAULT_EXCLUDED_DIRS = %w[.git node_modules vendor tmp log coverage storage].freeze
     DEFAULT_EXCLUDED_PATHS = ["vendor/bundle", "public/assets"].freeze
 
-    def initialize(root:, parser_service:, workspace_index:, document_store:, logger:, hierarchy_index: nil,
+    # `024.62`: The conditional direct update it fed is gone: every store beyond
+    # WorkspaceIndex is synchronised through the `on_summary` sink
+    # (Server#apply_cold_summary), which is the one owner of multi-store updates.
+    def initialize(root:, parser_service:, workspace_index:, document_store:, logger:,
                    cache_store: nil, excluded_dirs: DEFAULT_EXCLUDED_DIRS, excluded_paths: DEFAULT_EXCLUDED_PATHS,
-                   included_extensions: DEFAULT_INCLUDED_EXTENSIONS, on_indexed: nil, on_complete: nil,
-                   on_summary: nil)
+                   included_extensions: DEFAULT_INCLUDED_EXTENSIONS, on_complete: nil, on_summary: nil)
       @root = File.expand_path(root)
       @root_real = safe_realpath(@root) || @root
       @parser_service = parser_service
       @workspace_index = workspace_index
-      @hierarchy_index = hierarchy_index
       @document_store = document_store
       @logger = logger
       @cache_store = cache_store
       @excluded_dirs = excluded_dirs
       @excluded_paths = excluded_paths
       @included_extensions = included_extensions
-      @on_indexed = on_indexed
       @on_complete = on_complete
       @on_summary = on_summary
       @seen_uris = Set.new
@@ -178,11 +178,12 @@ module Ovallsp
         return
       end
 
-      previous_declarations = @workspace_index.declarations_for_uri(uri)
-      if @workspace_index.replace_file(summary)
-        @hierarchy_index&.replace_file(summary)
-        @on_indexed&.call(uri, document, summary, previous_declarations)
-      end
+      # No sink: the workspace index alone. This is the benchmark's and
+      # the walk-focused specs' path — production hands every summary to
+      # `on_summary` above, and the multi-store apply (hierarchy and the
+      # rest) lives behind it, in one place, rather than conditionally
+      # here as well (`024.62`).
+      @workspace_index.replace_file(summary)
     rescue StandardError => e
       @scan_complete = false
       @logger.error("cold index: failed to index #{path}: #{e.class}: #{e.message}")

@@ -4,6 +4,8 @@ require "open3"
 require "rbconfig"
 
 RSpec.describe "AgentProcessManager lifecycle (subprocess integration)" do
+  include MinimalRailsFixture
+
   let(:core_root) { File.expand_path("../..", __dir__) }
 
   # Spawns a throwaway "Core" process that starts a Runtime Agent and then
@@ -11,7 +13,7 @@ RSpec.describe "AgentProcessManager lifecycle (subprocess integration)" do
   # explicit #stop) — proving that when Core goes away, no Agent process
   # survives it (docs/design/tasks/005-runtime-agent-heartbeat.md).
   it "cleans up the Runtime Agent when the parent (Core) process exits normally" do
-    fixture_root = File.join(core_root, "spec/fixtures/rails_minimal")
+    fixture_root = minimal_rails_fixture
     boot_script = File.join(core_root, "lib/ovallsp/runtime_agent/boot.rb")
     environment_file = File.join(fixture_root, "config/environment.rb")
 

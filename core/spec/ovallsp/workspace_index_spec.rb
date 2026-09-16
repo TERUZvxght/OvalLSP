@@ -1225,5 +1225,45 @@ RSpec.describe Ovallsp::WorkspaceIndex do
 
       expect(index.resolve_type_name("Moved")).to eq("::Outer::Moved")
     end
+
+    # **`024.45`: the common edit never changes what a name resolves
+    # to.** The memo's answers are computed from the class/module/constant
+    # SymbolIds alone -- a SymbolId carries no location, so a body edit
+    # that moves every method declaration leaves the resolution inputs
+    # identical, and clearing then rebuilt the same handful of answers on
+    # each keystroke. A replace whose type-declaration set is unchanged
+    # keeps the memo; the generation still moves, because memo freshness
+    # and publish ordering are separate contracts (065 P4).
+    it "keeps a memoised resolution across a body-only edit" do
+      index = described_class.new
+      index.replace_file(summarize("class Widget\n  def go\n    1\n  end\nend\n", "file:///w.rb"))
+      expect(index.resolve_type_name("Widget")).to eq("::Widget")
+
+      edited = summarize("class Widget\n  def go\n    2\n  end\nend\n", "file:///w.rb")
+      expect { index.replace_file(edited) }.to change(index, :generation).by(1)
+
+      expect(index).not_to receive(:resolve_type_symbol_uncached)
+      expect(index.resolve_type_name("Widget")).to eq("::Widget")
+    end
+
+    it "resolves a class added by an edit to a file already indexed" do
+      index = described_class.new
+      index.replace_file(summarize("class Widget\nend\n", "file:///w.rb"))
+      expect(index.resolve_type_name("Extra")).to be_nil
+
+      index.replace_file(summarize("class Widget\nend\nclass Extra\nend\n", "file:///w.rb"))
+
+      expect(index.resolve_type_name("Extra")).to eq("::Extra")
+    end
+
+    it "stops resolving a class an edit removed while the file's other declarations stayed" do
+      index = described_class.new
+      index.replace_file(summarize("class Widget\nend\nclass Extra\nend\n", "file:///w.rb"))
+      expect(index.resolve_type_name("Extra")).to eq("::Extra")
+
+      index.replace_file(summarize("class Widget\nend\n", "file:///w.rb"))
+
+      expect(index.resolve_type_name("Extra")).to be_nil
+    end
   end
 end

@@ -396,7 +396,12 @@ module Ovallsp
       when "textDocument/definition"
         respond(id, with_index_snapshot { definition_result(message[:params]) })
       when "workspace/symbol"
-        respond(id, with_index_snapshot { workspace_symbol_result(message[:params]) })
+        # 024.137: WorkspaceIndex#search synchronises on its own internal
+        # @mutex, so this workspace-only request need not wait for a
+        # background pass holding @index_mutation_mutex. Search still
+        # contends with index writers on the inner mutex, and foreground
+        # analysis still occupies this same dispatch thread.
+        respond(id, workspace_symbol_result(message[:params]))
       when "workspace/didChangeWatchedFiles"
         handle_did_change_watched_files(message[:params])
       when "workspace/didChangeConfiguration"
@@ -1537,7 +1542,7 @@ module Ovallsp
       @cold_indexing = true
       @background_tasks.track_thread(Thread.new do
         ColdIndexer.new(root: root, parser_service: parser_service, workspace_index: workspace_index,
-                        hierarchy_index: hierarchy_index, document_store: document_store, logger: logger,
+                        document_store: document_store, logger: logger,
                         cache_store: cache_store, on_summary: method(:apply_cold_summary),
                         on_complete: lambda { |result|
                           sweep_deleted_cold_files(existing_disk_uris, result.seen_uris) if result.complete

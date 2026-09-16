@@ -212,7 +212,7 @@ module Ovallsp
         @mutex.synchronize { @generation }
       end
 
-      # Adds or replaces one file's contribution. Always a full swap for
+      # Adds or replaces one file's contribution. Normally a full swap for
       # that uri (remove-then-add), so ancestor/alias facts that
       # disappeared in a new version of the file (an `include` deleted,
       # a superclass changed) don't linger — the same generation-replace
@@ -221,14 +221,44 @@ module Ovallsp
       # staleness/version concept of their own; the caller — Server — is
       # expected to call this only when WorkspaceIndex#replace_file for
       # the same summary actually applied).
+      #
+      # **`024.45`: a replace that provably changes no chain input keeps
+      # the memo.** The common edit is inside a method body, and it used
+      # to pay for every chain the file asks about. What this file feeds
+      # a chain is three things, and retention needs all of them
+      # value-identical (fact equality is `Data#==`, so locations and
+      # nestings are compared, not just shapes — 065 P4 forbids keeping
+      # on `ancestor_facts == old` alone):
+      #
+      # - its ancestor facts and alias facts;
+      # - its class/module/constant SymbolIds, because `#canonical_name`
+      #   and `#kind_of` are answered by the workspace from declarations,
+      #   and `class Widget` gaining a sibling `module Helper` changes
+      #   both while writing no fact at all.
+      #
+      # When the facts match, the remove-and-re-add is skipped rather
+      # than replayed: re-adding appends this file's facts at the *end*
+      # of each owner bucket, so a replayed swap reorders a chain other
+      # files contribute to — the memo would then disagree with a fresh
+      # compute, which is exactly what retention must never do. The
+      # skipped swap leaves state identical, which is what makes the
+      # kept memo provable rather than probable.
       def replace_file(summary)
         @mutex.synchronize do
-          remove_file_locked(summary.uri)
-          @facts_by_uri[summary.uri] = { ancestor: summary.ancestor_facts, alias: summary.alias_facts }
-          summary.ancestor_facts.each { |fact| add_fact_locked(fact) }
-          summary.alias_facts.each { |fact| @aliases_by_owner[fact.owner] << fact }
+          previous = @facts_by_uri[summary.uri]
+          types = type_declaration_ids(summary)
+          facts_unchanged = !previous.nil? &&
+                            previous[:ancestor] == summary.ancestor_facts &&
+                            previous[:alias] == summary.alias_facts
+          unless facts_unchanged
+            remove_file_locked(summary.uri)
+            summary.ancestor_facts.each { |fact| add_fact_locked(fact) }
+            summary.alias_facts.each { |fact| @aliases_by_owner[fact.owner] << fact }
+          end
+          @facts_by_uri[summary.uri] = { ancestor: summary.ancestor_facts, alias: summary.alias_facts,
+                                         types: types }
           @generation += 1
-          @ancestors_memo.clear
+          @ancestors_memo.clear unless facts_unchanged && previous[:types] == types
         end
       end
 
@@ -291,8 +321,10 @@ module Ovallsp
       # `dedupe_named` pass over them. Measured on `uri/generic.rb` before
       # this was written.
       #
-      # Cleared by every mutation, under the same mutex as the compute, so
-      # no reader can be handed a chain from a shape that has changed. The
+      # Cleared by every mutation that can change a chain input, under
+      # the same mutex as the compute, so no reader can be handed a chain
+      # from a shape that has changed — `#replace_file` keeps it only for
+      # a replace whose every input is value-identical (see there). The
       # returned array is frozen: it is one object handed to every caller
       # now, and `#aliases` beside it already `dup`s for the same reason.
       def ancestors(type_name, singleton: false)
@@ -395,6 +427,26 @@ module Ovallsp
         return false unless @signatures
 
         @signatures.declares?(bare) == false
+      end
+
+      # The kinds whose SymbolIds feed name resolution, and so a chain.
+      # Strictly the workspace answers `#canonical_name`/`#kind_of` from
+      # class/module declarations alone; `:constant` is included because
+      # the retention condition may always be *narrower* than the true
+      # input set, never wider (065 P4), and one shared notion of "the
+      # type-declaration set" is what W3's two indexes agreed on.
+      TYPE_DECLARATION_KINDS = %i[class module constant].freeze
+      private_constant :TYPE_DECLARATION_KINDS
+
+      # A SymbolId carries no location, which is what makes this the
+      # right retention input: a body edit moves every declaration's
+      # range and changes no SymbolId, and no chain reads a
+      # declaration's range — the ranges a chain carries come from the
+      # facts, which are compared whole.
+      def type_declaration_ids(summary)
+        summary.declarations.each_with_object(Set.new) do |decl, ids|
+          ids << decl.symbol_id if TYPE_DECLARATION_KINDS.include?(decl.symbol_id.kind)
+        end
       end
 
       def remove_file_locked(uri)

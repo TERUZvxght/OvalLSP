@@ -1085,4 +1085,78 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
 
     expect(findings.size).to eq(1)
   end
+  # 024.45 / 065's P3. One `#analyze` asked the same two questions over
+  # and over: it parsed the whole analysis source once per check that
+  # wanted a tree of it, and it resolved the same candidate's receiver
+  # type once per check that wanted one. Both are shared through a
+  # session that lives exactly as long as the call, so nothing here can
+  # outlive the analysis or be read by the next one.
+  #
+  # Counted rather than timed: a threshold on a shared machine is a
+  # flake, and the count is the property that produced the timing
+  # The examples below count repeated work within the Engine checks.
+  describe "sharing inside one analysis (065 P3)" do
+    # The frame that *made* the call, rather than "engine.rb appears
+    # somewhere on the stack" -- `#analyze` is on the stack for every
+    # one of these, including the ones ReferenceResolver makes, so a
+    # plain `any?` cannot tell the two apart. RSpec's own frames are
+    # skipped by taking the first one inside `core/lib`.
+    def first_library_frame
+      caller_locations.find { |location| location.path.include?("/core/lib/ovallsp/") }
+    end
+
+    let(:source) do
+      "class Widget\n" \
+        "  def initialize(name)\n    @name = name\n  end\n" \
+        "  def show\n    bogus\n    accepts\n    @never_set\n    label(1, 2)\n    accepts(\"x\")\n  end\n" \
+        "  def accepts(one); end\n  def label(a); end\nend\n"
+    end
+
+    it "parses the whole source once across the Engine checks" do
+      document = index(source)
+      parsed = []
+      allow(Prism).to receive(:parse).and_wrap_original do |original, text, **rest|
+        frame = first_library_frame
+        parsed << text if frame&.path&.end_with?("diagnostics/engine.rb")
+        original.call(text, **rest)
+      end
+
+      engine.analyze(document: document, semantic_context: context(assigned_ivars: []), mode: :standard)
+
+      # The engine's other parse is of a *fragment* -- one argument's own
+      # text, for #operator_expression? -- which is a different source and
+      # stays its own call.
+      expect(parsed.count { |text| text == document.text }).to eq(1)
+    end
+
+    it "resolves each candidate's receiver type once across the Engine checks" do
+      document = index(source)
+      asked = []
+      allow(Ovallsp::Semantic::ReceiverResolution).to receive(:receiver_type_for).and_wrap_original do |original, *args|
+        frame = first_library_frame
+        asked << args[2] if frame&.path&.end_with?("diagnostics/engine.rb")
+        original.call(*args)
+      end
+
+      engine.analyze(document: document, semantic_context: context(assigned_ivars: []), mode: :standard)
+
+      # ReferenceResolver makes a pass of its own before these checks run.
+      # Sharing that one needs `semantic/reference_resolver.rb`, which
+      # this change does not own; 065's P3.3 keeps it open.
+      expect(asked).not_to be_empty
+      expect(asked.uniq.length).to eq(asked.length)
+    end
+
+    it "reports the same findings on separate Engine instances" do
+      document = index(source)
+
+      first = engine.analyze(document: document, semantic_context: context(assigned_ivars: []), mode: :standard)
+      second = described_class.new.analyze(document: document, semantic_context: context(assigned_ivars: []),
+                                           mode: :standard)
+
+      expect(first.map { |f| [f.code, f.message, f.range] })
+        .to eq(second.map { |f| [f.code, f.message, f.range] })
+      expect(first.map(&:code)).to include("unknown-method", "argument-count", "unassigned-ivar")
+    end
+  end
 end

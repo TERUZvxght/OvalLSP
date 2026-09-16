@@ -59,7 +59,6 @@ module Ovallsp
                    method_resolver: nil, method_analyzer: nil, signatures: nil, observation_store: nil,
                    workspace_index: nil, hierarchy_index: nil)
       @max_steps = max_steps
-      @constant_depth = 0
       @model_registry = model_registry
       @generic_rules = generic_rules || self.class.default_generic_rules
       # Both optional and nil-safe: a caller with no HierarchyIndex/
@@ -156,23 +155,24 @@ module Ovallsp
     # `@` answered nothing in a view while hovering the same name in the
     # same view answered its type.
     def scope_at(document, position, initial_env: {}, max_steps: nil)
+      # **Before the offset and the parse, not after them.** Both can
+      # raise, and the `rescue` below answers out of the request state --
+      # so a state the *previous* call left would be this call's answer,
+      # about another document.
+      begin_request(budget: max_steps || @max_steps, capturing_scope: true)
       offset = document.position_to_byte_offset(position)
       result = parse_cached(document)
-      @steps = 0
-      @step_budget = max_steps || @max_steps
-      @self_type_stack = []
-      @enclosing_class_bodies = []
-      @class_ivar_cache = {}
-      @scope_capture = nil
-      @capturing_scope = true
 
       locate(result.value.statements, offset, initial_env.dup)
-      @scope_capture || Scope.new(locals: {}, self_type: nil)
+      captured_scope
     rescue BudgetExceeded, StandardError
-      @scope_capture || Scope.new(locals: {}, self_type: nil)
+      captured_scope
     ensure
+      # The snapshot holds a copy of the whole environment. Released here
+      # rather than left on the inferencer until the next query overwrites
+      # it -- `Server` holds one of these for the life of the process.
       @capturing_scope = false
-      @scope_capture = nil
+      @scope_snapshot = nil
     end
 
     def infer_at(document, position, initial_env: {}, max_steps: nil)
@@ -180,16 +180,9 @@ module Ovallsp
       # offsets — using #position_to_char_offset here would select the
       # wrong node whenever a multibyte character appears anywhere before
       # the target position (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+      begin_request(budget: max_steps || @max_steps)
       offset = document.position_to_byte_offset(position)
       result = parse_cached(document)
-      @steps = 0
-      @step_budget = max_steps || @max_steps
-      @self_type_stack = []
-      @enclosing_class_bodies = []
-      @class_ivar_cache = {}
-      @lexical_nesting = []
-      @in_singleton_class = false
-      @target_span = nil
 
       locate(result.value.statements, offset, initial_env.dup)
     rescue BudgetExceeded, StandardError
@@ -222,23 +215,14 @@ module Ovallsp
       end_offset = document.position_to_byte_offset(range[:end])
       return Types::UNKNOWN unless start_offset && end_offset
 
+      begin_request(budget: max_steps || @max_steps, target_span: [start_offset, end_offset])
       result = parse_cached(document)
-      @steps = 0
-      @step_budget = max_steps || @max_steps
-      @self_type_stack = []
-      @enclosing_class_bodies = []
-      @class_ivar_cache = {}
-      @lexical_nesting = []
-      @in_singleton_class = false
-      @target_span = [start_offset, end_offset]
 
       locate(result.value.statements, end_offset, initial_env.dup)
     rescue BudgetExceeded, StandardError
       # **Contained** (`024.20`): `Types::UNKNOWN` is this engine's own
       # not-knowing, and the one caller declines to report on it.
       Types::UNKNOWN
-    ensure
-      @target_span = nil
     end
 
     def spans_target?(node)
@@ -272,9 +256,12 @@ module Ovallsp
       {}
     end
 
+    # Opens one request that the `#infer_ivars_for_method_node` calls
+    # following it share: `ControllerIvars` runs a controller's callback
+    # chain and then its action through the same budget, because the
+    # chain is one answer rather than several.
     def begin_ivar_inference
-      @steps = 0
-      @step_budget = @max_steps
+      begin_request(budget: @max_steps)
     end
 
     def before_action_operations(document, owner_name:, action_name:)
@@ -288,8 +275,7 @@ module Ovallsp
     def static_render_target_for_node(method_node)
       return nil unless method_node&.body
 
-      @steps = 0
-      @step_budget = @max_steps
+      begin_request(budget: @max_steps)
       RenderTargetFinder.new.tap { |finder| method_node.body.accept(finder) }.target
     rescue StandardError
       nil
@@ -361,6 +347,40 @@ module Ovallsp
 
     private
 
+    # **Everything one request owns, listed in one place.**
+    #
+    # The entry points used separate reset lists. Centralising them
+    # makes the initial lexical nesting, singleton flag and target span
+    # explicit for each request. Before this change infer_span cleared
+    # its target span in an ensure; scope_at did not inherit that span.
+    # This helper still writes instance variables: it does not make
+    # simultaneous or re-entrant calls on one inferencer independent.
+    # Server's outer index lock continues to serialize its callers.
+    #
+    # `budget` is the caller's, since `Semantic::QueryService` threads one
+    # request's budget down rather than taking the constructor's; a nested
+    # or re-entrant inference that means to *share* a budget does not come
+    # through here (see `#build_class_ivar_environment`).
+    def begin_request(budget:, capturing_scope: false, target_span: nil)
+      @steps = 0
+      @step_budget = budget
+      @self_type_stack = []
+      @enclosing_class_bodies = []
+      @class_ivar_cache = {}
+      @lexical_nesting = []
+      @in_singleton_class = false
+      # Per request rather than per instance: it was set in the
+      # constructor and balanced by an `ensure`, which is a property of
+      # `#assigned_constant_type` rather than of this list.
+      @constant_depth = 0
+      @target_span = target_span
+      @capturing_scope = capturing_scope
+      # `@scope_snapshot` is not reset here. It is acquired by
+      # `#capture_scope` and released by `#scope_at`'s own `ensure`, which
+      # is the pair that decides its lifetime; setting it a third time
+      # would be a line nothing could fail on.
+    end
+
     def ivars_from(env)
       env.select { |key, _| key.to_s.start_with?("@") }
     end
@@ -368,6 +388,14 @@ module Ovallsp
     def step!
       @steps += 1
       raise BudgetExceeded if @steps > @step_budget
+    end
+
+    ANONYMOUS_CLASS_FACTORIES = { "Struct" => %i[new], "Class" => %i[new], "Data" => %i[define] }.freeze
+
+    def anonymous_class_factory?(constant_type, node)
+      return false unless constant_type.is_a?(Types::Nominal)
+
+      ANONYMOUS_CLASS_FACTORIES.fetch(Index::SymbolId.bare_name(constant_type.name), []).include?(node.name)
     end
 
     # Recorded on every step of the descent, so the last write is the
@@ -380,32 +408,49 @@ module Ovallsp
     # so that "an ordinary #infer_at builds no snapshots" is a fact a test
     # can state directly. The saving is real: this copies the whole
     # environment, and `locate` runs once per step of the descent.
-    # Locals and instance variables live in the same environment and are
-    # told apart by the `@` their key carries. They are handed back
-    # *separately* because no caller wants both at once: a bare prefix can
-    # never be completed by an ivar, and a prefix that opens with `@` can
-    # never be completed by a local.
-
-    ANONYMOUS_CLASS_FACTORIES = { "Struct" => %i[new], "Class" => %i[new], "Data" => %i[define] }.freeze
-
-    def anonymous_class_factory?(constant_type, node)
-      return false unless constant_type.is_a?(Types::Nominal)
-
-      ANONYMOUS_CLASS_FACTORIES.fetch(Index::SymbolId.bare_name(constant_type.name), []).include?(node.name)
+    def capture_scope(env)
+      @scope_snapshot = [env.dup, @self_type_stack.last]
     end
 
+    # The one `Scope` a scope query builds, from the last snapshot the
+    # walk took -- however it ended.
+    #
+    # **Why the snapshot is per statement and the `Scope` is not.**
+    # 024.38 asked for the copy to happen once, and 0.2.16 got that by
+    # capturing only at the last pre-cursor statement; it was withheld
+    # because a walk the budget ends part-way had then captured nothing,
+    # and answered with no locals where it used to answer with every one
+    # it had reached. Splitting the two keeps both properties: `env` is
+    # still duplicated at each statement, because it is the caller's own
+    # Hash and the walk keeps mutating it, and the part that is per
+    # statement for no reason -- reading every key as a String to sort it
+    # into locals or ivars, and allocating a `Scope` nothing will read --
+    # happens once, here.
+    #
+    # Nothing is lost by deferring: the split is decided by the keys
+    # alone, `#capture_scope` fixes the key set and the values at exactly
+    # the moment it used to build the two Hashes, and the self type is
+    # taken there too, since the stack is popped on the way back out.
+    #
     # 024.86: the instance variables were dropped here rather than
-    # returned separately, so completion at `@` had nothing to offer
-    # even once the environment held them. Split rather than merged --
-    # see `Scope`.
-    def capture_scope(env)
+    # returned separately, so completion at `@` had nothing to offer even
+    # once the environment held them. Locals and instance variables live
+    # in the same environment and are told apart by the `@` their key
+    # carries; they are handed back *separately* because no caller wants
+    # both at once -- a bare prefix can never be completed by an ivar, and
+    # a prefix that opens with `@` can never be completed by a local. Split
+    # rather than merged -- see `Scope`.
+    def captured_scope
+      env, self_type = @scope_snapshot
+      return Scope.new(locals: {}, self_type: nil) unless env
+
       locals = {}
       ivars = {}
       env.each do |key, value|
         name = key.to_s
         (name.start_with?("@") ? ivars : locals)[name] = value
       end
-      @scope_capture = Scope.new(locals: locals, ivars: ivars, self_type: @self_type_stack.last)
+      Scope.new(locals: locals, ivars: ivars, self_type: self_type)
     end
 
     # Inclusive of `end_offset`, which is one past the node's last
